@@ -1,5 +1,5 @@
 {
-  "description": "agent-prism knowledge hooks (canonical layout: runtime/runner.js + hooks/*.mjs)",
+  "description": "AnyPlugin knowledge hooks (canonical layout: runtime/runner.js + hooks/*.mjs)",
   "hooks": {
     "SessionStart": [
       {

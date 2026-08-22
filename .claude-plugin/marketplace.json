@@ -1,15 +1,20 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "agent-prism",
-  "description": "Agent-agnostic plugin framework + OKF v0.2 knowledge layer. One plugin source, native installs for Claude Code, OpenCode, Codex CLI, and Google Antigravity.",
+  "name": "anyplugin",
+  "description": "AnyPlugin by Lab LaunchPad — agent-agnostic plugin development. One plugin source, native installs for Claude Code, OpenCode, Codex CLI, and Google Antigravity.",
   "owner": {
-    "name": "agent-prism"
+    "name": "Lab LaunchPad",
+    "url": "https://github.com/LabLaunchPad"
   },
   "plugins": [
     {
-      "name": "agent-prism-knowledge",
+      "name": "anyplugin-knowledge",
       "description": "OKF v0.2 knowledge layer for every coding agent — shared project knowledge bundle with reader skill, session capture hooks, curator subagent, and okf_index/okf_read/okf_search MCP tools.",
       "category": "productivity",
+      "author": {
+        "name": "Rahul Paul",
+        "url": "https://github.com/LabLaunchPad"
+      },
       "source": "./plugins/knowledge/plugin",
       "defaultEnabled": true
     }

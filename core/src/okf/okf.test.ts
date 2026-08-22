@@ -30,7 +30,7 @@ describe("parseDocument", () => {
   });
 
   it("keeps ISO timestamps as strings (YAML 1.2 core schema)", () => {
-    const doc = parseDocument('---\ntype: T\ngenerated:\n  by: agent-prism/core@0.1.0\n  at: 2026-08-22T09:30:00+00:00\n---\n');
+    const doc = parseDocument('---\ntype: T\ngenerated:\n  by: lablaunchpad/core@0.1.1\n  at: 2026-08-22T09:30:00+00:00\n---\n');
     expect((doc.frontmatter["generated"] as Record<string, unknown>)["at"]).toBe("2026-08-22T09:30:00+00:00");
   });
 });
@@ -57,7 +57,7 @@ describe("trust tiers", () => {
     expect(trustTier({ type: "T" })).toBe("unverified");
   });
   it("only non-human actors → machine-confirmed", () => {
-    expect(trustTier({ type: "T", verified: [{ by: "agent-prism/core@0.1.0", at: "2026-08-22T00:00:00+00:00" }] })).toBe("machine-confirmed");
+    expect(trustTier({ type: "T", verified: [{ by: "lablaunchpad/core@0.1.1", at: "2026-08-22T00:00:00+00:00" }] })).toBe("machine-confirmed");
   });
   it("bare verified mapping normalizes to one-element list (human-reviewed)", () => {
     const fm = { type: "T", verified: { by: "human:jsmith", at: "2026-08-22T00:00:00+00:00" } };

@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { emitOpencode } from "./index.js";
-import { loadPluginManifest } from "@agent-prism/core";
+import { loadPluginManifest } from "@lablaunchpad/core";
 
 let root: string;
 let plugin: Awaited<ReturnType<typeof loadPluginManifest>>;
@@ -14,7 +14,7 @@ beforeAll(async () => {
   await mkdir(join(root, "skills", "demo"), { recursive: true });
   await mkdir(join(root, "commands"), { recursive: true });
   await mkdir(join(root, "hooks"), { recursive: true });
-  await writeFile(join(root, "prism.plugin.yaml"), `name: demo-plugin
+  await writeFile(join(root, "anyplugin.plugin.yaml"), `name: demo-plugin
 version: 0.1.0
 description: Demo plugin for conformance tests
 skills: ["./skills/demo"]
@@ -47,7 +47,7 @@ describe("opencode adapter emit", () => {
     const shim = await readFile(join(out, "plugin.ts"), "utf8");
     expect(shim).toContain('"tool.execute.before": "guard-tool"');
     expect(shim).toContain('"chat.message": "on-chat"');
-    expect(shim).toContain('AGENT_PRISM_HOST');
+    expect(shim).toContain('ANYPLUGIN_HOST');
     expect(shim).toContain('"shell.env"');
     expect(shim).toContain('export default');
   });
@@ -68,7 +68,7 @@ describe("opencode adapter emit", () => {
     const emitted = await emitOpencode(plugin, { pluginRoot: root, outDir: join(root, "dist2"), runnerRelPath: "runner.js", runnerAbsPath: join(root, "hooks", "runner.js") });
     const mdAppend = emitted.install.actions.find((a) => a.kind === "md-append") as { content: string } | undefined;
     expect(mdAppend).toBeDefined();
-    expect(mdAppend!.content).toContain("agent-prism:demo-plugin begin");
-    expect(mdAppend!.content).toContain("agent-prism:demo-plugin end");
+    expect(mdAppend!.content).toContain("anyplugin:demo-plugin begin");
+    expect(mdAppend!.content).toContain("anyplugin:demo-plugin end");
   });
 });

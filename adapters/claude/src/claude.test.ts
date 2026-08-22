@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { emitClaude } from "./index.js";
-import { loadPluginManifest } from "@agent-prism/core";
+import { loadPluginManifest } from "@lablaunchpad/core";
 import { readFile } from "node:fs/promises";
 
 let root: string;
@@ -17,7 +17,7 @@ beforeAll(async () => {
   await mkdir(join(root, "agents"), { recursive: true });
   await mkdir(join(root, "hooks"), { recursive: true });
   await mkdir(join(root, "knowledge", "agents"), { recursive: true });
-  await writeFile(join(root, "prism.plugin.yaml"), `name: demo-plugin
+  await writeFile(join(root, "anyplugin.plugin.yaml"), `name: demo-plugin
 version: 0.1.0
 description: Demo plugin for conformance tests
 skills: ["./skills/demo"]

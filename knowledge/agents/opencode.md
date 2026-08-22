@@ -5,7 +5,7 @@ description: TypeScript plugin API of OpenCode (anomalyco/opencode, formerly sst
 tags: [opencode, typescript, plugin, hooks, config]
 status: stable
 generated:
-  by: agent-prism/research@0.1.0
+  by: anyplugin/research@0.1.1
   at: 2026-08-22T09:30:00+00:00
 sources:
   - resource: https://opencode.ai/docs/plugins/

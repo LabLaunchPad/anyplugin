@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 export async function run(payload) {
   const candidates = [
-    process.env["AGENT_PRISM_OKF_BUNDLE"],
+    process.env["ANYPLUGIN_OKF_BUNDLE"],
     join(payload.cwd ?? process.cwd(), "knowledge"),
   ].filter(Boolean);
   const dir = candidates.find((d) => existsSync(join(d, "log.md")));

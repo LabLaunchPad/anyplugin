@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { statSync } from "node:fs";
 import {
   buildAll,
   executeInstall,
@@ -9,30 +10,32 @@ import {
   detectAgent,
   detectInstalledAgents,
   detectEnvironment,
-  loadPluginManifest,
+  loadPluginSafe,
   validateBundle,
   regenerateIndexes,
 } from "./index.js";
-import type { AgentId } from "@agent-prism/core";
-import { ALL_AGENTS } from "@agent-prism/core";
+import type { AgentId } from "@lablaunchpad/core";
+import { ALL_AGENTS } from "@lablaunchpad/core";
 
-const HELP = `prism — agent-agnostic plugin builder for Claude Code, OpenCode, Codex, Antigravity
+const HELP = `anyplugin — agent-agnostic plugin development for Claude Code, OpenCode, Codex, Antigravity
+
+Every agent has plugin dev. AnyPlugin makes it agent-agnostic.
 
 commands:
-  prism detect                         show detected agent + environment + installed agents
-  prism build [--plugin DIR] [--out DIR] [--agents LIST]
-                                       emit native bundles per agent (default all four)
-  prism install [--plugin DIR] [--agents LIST] [--home DIR] [--project DIR] [--dry-run]
-                                       install emitted bundles into agent locations
-  prism uninstall [--plugin DIR] [--agents LIST] [--home DIR] [--project DIR]
+  anyplugin detect                   show detected agent + environment + installed agents
+  anyplugin build [--plugin DIR] [--out DIR] [--agents LIST]
+                                     emit native bundles per agent (default all four)
+  anyplugin install [--plugin DIR] [--agents LIST] [--home DIR] [--project DIR] [--dry-run]
+                                     install emitted bundles into agent locations
+  anyplugin uninstall [--plugin DIR] [--agents LIST] [--home DIR] [--project DIR]
                                        reverse an install
-  prism okf-validate [DIR]             validate an OKF v0.2 bundle (default ./knowledge)
-  prism okf-reindex [DIR]              regenerate bundle index.md files
-  prism help                           this help
+  anyplugin okf-validate [DIR]       validate an OKF v0.2 bundle (default ./knowledge)
+  anyplugin okf-reindex [DIR]        regenerate bundle index.md files
+  anyplugin help                     this help
 
 options:
-  --plugin DIR     canonical plugin root containing prism.plugin.yaml (default: .)
-  --out DIR        build output root (default: .prism-build)
+  --plugin DIR     canonical plugin root containing anyplugin.plugin.yaml (default: .)
+  --out DIR        build output root (default: .anyplugin-build)
   --agents LIST    comma subset of: claude-code,opencode,codex,antigravity
 `;
 
@@ -59,7 +62,7 @@ async function main(): Promise<void> {
 
   const home = values.home ?? homedir();
   const projectDir = resolve(values.project ?? process.cwd());
-  const pluginRoot = resolve(values.plugin ?? ".");
+  const pluginRoot = requireDir(resolve(values.plugin ?? "."), "--plugin");
   const agents = parseAgents(values.agents);
 
   if (command === "detect") {
@@ -73,7 +76,7 @@ async function main(): Promise<void> {
   }
 
   if (command === "okf-validate" || command === "okf-reindex") {
-    const dir = resolve(rest[0] ?? values.plugin ?? "./knowledge");
+    const dir = requireDir(resolve(rest[0] ?? values.plugin ?? "./knowledge"), "bundle dir");
     if (command === "okf-validate") {
       const issues = await validateBundle(dir);
       for (const issue of issues) {
@@ -90,8 +93,8 @@ async function main(): Promise<void> {
   }
 
   if (command === "build" || command === "install" || command === "uninstall") {
-    const manifest = await loadPluginManifest(pluginRoot);
-    const outRoot = resolve(values.out ?? join(pluginRoot, ".prism-build"));
+    const manifest = await loadPluginSafe(pluginRoot);
+    const outRoot = resolve(values.out ?? join(pluginRoot, ".anyplugin-build"));
     const runnerAbsPath = values.runner ?? defaultRunnerPath();
     const bundles = await buildAll({
       pluginRoot,
@@ -142,8 +145,22 @@ function parseAgents(list?: string): AgentId[] | undefined {
   return wanted as AgentId[];
 }
 
+/** Validate a user-supplied directory argument before any file access through it. */
+function requireDir(absPath: string, what: string): string {
+  let stat;
+  try {
+    stat = statSync(absPath);
+  } catch {
+    throw new Error(`${what}: directory not found: ${absPath}`);
+  }
+  if (!stat.isDirectory()) {
+    throw new Error(`${what}: not a directory: ${absPath}`);
+  }
+  return absPath;
+}
+
 function defaultRunnerPath(): string {
-  // Default: the agent-prism-knowledge plugin's self-contained runner.
+  // Default: the anyplugin-knowledge plugin's self-contained runner.
   return resolve(join(import.meta.dirname ?? ".", "..", "..", "plugins", "knowledge", "runtime", "runner.js"));
 }
 
@@ -156,6 +173,6 @@ async function detectInstalledAgentsSafe(home: string): Promise<string[]> {
 }
 
 main().catch((err: Error) => {
-  process.stderr.write(`prism: ${err.message}\n`);
+  process.stderr.write(`anyplugin: ${err.message}\n`);
   process.exitCode = 1;
 });

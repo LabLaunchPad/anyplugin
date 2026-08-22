@@ -1,21 +1,21 @@
 {
-  "name": "@agent-prism/cli",
-  "version": "0.1.0",
-  "description": "prism — detect agents, build universal plugins, install native artifacts into every coding agent",
+  "name": "@lablaunchpad/cli",
+  "version": "0.1.1",
+  "description": "anyplugin — agent-agnostic plugin development by Lab LaunchPad: detect agents, build one plugin, install it natively into every coding agent",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "prism": "./dist/bin.js"
+    "anyplugin": "./dist/bin.js"
   },
   "scripts": {
     "build": "tsc -b"
   },
   "dependencies": {
-    "@agent-prism/core": "workspace:*",
-    "@agent-prism/adapter-claude": "workspace:*",
-    "@agent-prism/adapter-opencode": "workspace:*",
-    "@agent-prism/adapter-codex": "workspace:*",
-    "@agent-prism/adapter-antigravity": "workspace:*"
+    "@lablaunchpad/core": "workspace:*",
+    "@lablaunchpad/adapter-claude": "workspace:*",
+    "@lablaunchpad/adapter-opencode": "workspace:*",
+    "@lablaunchpad/adapter-codex": "workspace:*",
+    "@lablaunchpad/adapter-antigravity": "workspace:*"
   }
 }

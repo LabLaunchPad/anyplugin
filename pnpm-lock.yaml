@@ -20,19 +20,19 @@ importers:
 
   adapters/antigravity:
     dependencies:
-      '@agent-prism/core':
+      '@lablaunchpad/core':
         specifier: workspace:*
         version: link:../../core
 
   adapters/claude:
     dependencies:
-      '@agent-prism/core':
+      '@lablaunchpad/core':
         specifier: workspace:*
         version: link:../../core
 
   adapters/codex:
     dependencies:
-      '@agent-prism/core':
+      '@lablaunchpad/core':
         specifier: workspace:*
         version: link:../../core
       smol-toml:
@@ -41,25 +41,25 @@ importers:
 
   adapters/opencode:
     dependencies:
-      '@agent-prism/core':
+      '@lablaunchpad/core':
         specifier: workspace:*
         version: link:../../core
 
   cli:
     dependencies:
-      '@agent-prism/adapter-antigravity':
+      '@lablaunchpad/adapter-antigravity':
         specifier: workspace:*
         version: link:../adapters/antigravity
-      '@agent-prism/adapter-claude':
+      '@lablaunchpad/adapter-claude':
         specifier: workspace:*
         version: link:../adapters/claude
-      '@agent-prism/adapter-codex':
+      '@lablaunchpad/adapter-codex':
         specifier: workspace:*
         version: link:../adapters/codex
-      '@agent-prism/adapter-opencode':
+      '@lablaunchpad/adapter-opencode':
         specifier: workspace:*
         version: link:../adapters/opencode
-      '@agent-prism/core':
+      '@lablaunchpad/core':
         specifier: workspace:*
         version: link:../core
 
@@ -74,7 +74,7 @@ importers:
 
   plugins/knowledge:
     dependencies:
-      '@agent-prism/core':
+      '@lablaunchpad/core':
         specifier: workspace:*
         version: link:../../core
 

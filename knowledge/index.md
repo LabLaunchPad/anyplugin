@@ -2,7 +2,7 @@
 okf_version: "0.2"
 ---
 
-# Agent-Prism Knowledge Index
+# AnyPlugin Knowledge Index
 
 Navigation map for this bundle. Concept identity = file path. Read on demand; do not crawl.
 

@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildAll, executeInstall, executeUninstall, stripBlock, deepMerge, validateRelPath, validatePluginName } from "./index.js";
-import { pathExists } from "@agent-prism/core";
+import { pathExists } from "@lablaunchpad/core";
 
 let root: string;
 let home: string;
@@ -18,7 +18,7 @@ beforeAll(async () => {
   await mkdir(join(root, "skills", "demo"), { recursive: true });
   await mkdir(join(root, "hooks"), { recursive: true });
   await mkdir(join(root, "knowledge"), { recursive: true });
-  await writeFile(join(root, "prism.plugin.yaml"), `name: demo-plugin
+  await writeFile(join(root, "anyplugin.plugin.yaml"), `name: demo-plugin
 version: 0.1.0
 description: CLI test plugin
 skills: ["./skills/demo"]
@@ -62,7 +62,7 @@ describe("executeInstall / executeUninstall", () => {
     expect(await pathExists(join(home, ".claude", "plugins", "demo-plugin", ".claude-plugin", "plugin.json"))).toBe(true);
     // codex config.toml got the marked mcp_servers block with absolute path substituted
     const codexToml = await readFile(join(home, ".codex", "config.toml"), "utf8");
-    expect(codexToml).toContain("# BEGIN agent-prism:demo-plugin");
+    expect(codexToml).toContain("# BEGIN anyplugin:demo-plugin");
     expect(codexToml).toContain("[mcp_servers.okf]");
     expect(codexToml).toContain(join(home, ".codex", "plugins", "demo-plugin"));
     // antigravity plugin + merged workspace mcp_config.json
@@ -81,7 +81,7 @@ describe("executeInstall / executeUninstall", () => {
     expect(ocJson["mcp"]["okf"]["command"][0]).toBe("node");
     // AGENTS.md marker block
     const agentsMd = await readFile(join(project, "AGENTS.md"), "utf8");
-    expect(agentsMd).toContain("agent-prism:demo-plugin begin");
+    expect(agentsMd).toContain("anyplugin:demo-plugin begin");
     // pre-existing AGENTS.md content preserved
     expect(agentsMd).toContain("Existing project instructions");
 
@@ -94,14 +94,14 @@ describe("executeInstall / executeUninstall", () => {
     expect(await pathExists(join(project, ".agents", "plugins", "demo-plugin"))).toBe(false);
     expect(await pathExists(join(project, ".opencode", "plugins", "demo-plugin"))).toBe(false);
     const codexAfter = await readFile(join(home, ".codex", "config.toml"), "utf8");
-    expect(codexAfter).not.toContain("agent-prism:demo-plugin");
+    expect(codexAfter).not.toContain("anyplugin:demo-plugin");
     const ocAfter = JSON.parse(await readFile(join(project, "opencode.json"), "utf8"));
     expect(ocAfter["skills"]).toBeUndefined();
     expect(ocAfter["mcp"]).toBeUndefined();
     const agMcpAfter = JSON.parse(await readFile(join(project, ".agents", "mcp_config.json"), "utf8"));
     expect(agMcpAfter["mcpServers"]).toBeUndefined();
     const agentsAfter = await readFile(join(project, "AGENTS.md"), "utf8");
-    expect(agentsAfter).not.toContain("agent-prism:");
+    expect(agentsAfter).not.toContain("anyplugin:");
     expect(agentsAfter).toContain("Existing project instructions");
   });
 });

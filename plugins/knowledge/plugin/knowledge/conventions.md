@@ -5,7 +5,7 @@ description: How concepts are structured, captured, and validated in this OKF v0
 tags: [okf, conventions]
 status: stable
 generated:
-  by: agent-prism/0.1.0
+  by: anyplugin/0.1.1
   at: 2026-08-22T12:00:00+00:00
 sources:
   - resource: https://github.com/GoogleCloudPlatform/open-knowledge-format
@@ -20,4 +20,4 @@ sources:
 - Actors: `<producer>/<version>`, `human:<id>`, or `process:<id>`.
 - `index.md` navigation only; `log.md` newest-first under `## YYYY-MM-DD`.
 - Unknown frontmatter keys must be preserved when editing.
-- Validate with `npx prism okf-validate <dir>`.
+- Validate with `npx anyplugin okf-validate <dir>`.

@@ -5,7 +5,7 @@ description: Extension surface of Google Antigravity 2.0 — .agents/ layout, ru
 tags: [antigravity, google, gemini, agents-dir, hooks, mcp]
 status: stable
 generated:
-  by: agent-prism/research@0.1.0
+  by: anyplugin/research@0.1.1
   at: 2026-08-22T09:30:00+00:00
 sources:
   - resource: https://antigravity.google/docs/

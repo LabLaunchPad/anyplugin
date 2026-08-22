@@ -5,7 +5,7 @@ description: Exact MCP server config schema per target agent — TOML vs JSON va
 tags: [mcp, model-context-protocol, config]
 status: stable
 generated:
-  by: agent-prism/research@0.1.0
+  by: anyplugin/research@0.1.1
   at: 2026-08-22T09:30:00+00:00
 sources:
   - resource: https://code.claude.com/docs/en/mcp

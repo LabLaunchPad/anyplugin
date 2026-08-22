@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 
-/** The four agents agent-prism adapts to. */
+/** The four agents AnyPlugin adapts to. */
 export type AgentId = "claude-code" | "opencode" | "codex" | "antigravity";
 
 export const ALL_AGENTS: readonly AgentId[] = ["claude-code", "opencode", "codex", "antigravity"];
@@ -28,9 +28,9 @@ export function detectAgent(env: EnvLike, home: string): Detection {
   const signals: string[] = [];
 
   // 0. Our own self-marker (injected by the opencode shell.env shim / claude hooks).
-  const host = env["AGENT_PRISM_HOST"];
+  const host = env["ANYPLUGIN_HOST"];
   if (host === "opencode" || host === "claude-code" || host === "codex" || host === "antigravity") {
-    return { agent: host, confidence: "marker", signals: ["AGENT_PRISM_HOST"] };
+    return { agent: host, confidence: "marker", signals: ["ANYPLUGIN_HOST"] };
   }
 
   // 1. Claude Code — CLAUDECODE=1 is set in ALL spawned subprocesses (documented).

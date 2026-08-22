@@ -1,23 +1,29 @@
-# Agent-Prism
+# AnyPlugin
 
-**One plugin source → native installs for Claude Code, OpenCode, Codex CLI, and Google Antigravity — with an OKF v0.2 knowledge layer and runtime environment detection.**
+**Every agent has plugin dev. AnyPlugin makes it agent-agnostic.**
 
-Agent-Prism is a TypeScript monorepo that lets you author a plugin once (`prism.plugin.yaml` + skills + hooks + MCP + an OKF knowledge bundle) and compile it into each coding agent's *native* extension format: a `.claude-plugin` bundle, an OpenCode TypeScript plugin + `.opencode/` artifacts, a `.codex-plugin` bundle with `config.toml` merge, and an Antigravity `.agents/plugins/` tree.
+AnyPlugin lets you write a plugin once — `anyplugin.plugin.yaml` + skills + hooks + MCP + an OKF knowledge bundle — and compile it into each coding agent's *native* extension format: a `.claude-plugin` bundle for Claude Code, a TypeScript plugin + `.opencode/` artifacts for OpenCode, a `.codex-plugin` bundle with `config.toml` merge for Codex CLI, and an `.agents/plugins/` tree for Google Antigravity.
 
-The research that drove every adapter decision lives in this repo as a conformant OKF v0.2 bundle: [`knowledge/`](knowledge/index.md) — audited against the official plugin repositories (anthropics/claude-plugins-official, openai/codex, anomalyco/opencode, google-antigravity SDK, GoogleCloudPlatform/open-knowledge-format, openai/skills).
+*By **Rahul Paul** on behalf of **[Lab LaunchPad](https://github.com/LabLaunchPad)** · MIT licensed.*
+
+## Why
+
+Each of the four major coding agents ships its own plugin system, manifest format, hook protocol, and config layout. Plugin authors pick one agent (shrinking their audience by 75%) or maintain four diverging codebases; project knowledge captured in one agent's memory is invisible to the others. AnyPlugin ends both forms of lock-in — capability and knowledge become portable.
+
+The platform intelligence behind every adapter decision lives in this repo as a conformant OKF v0.2 bundle: [`knowledge/`](knowledge/index.md) — audited (Aug 2026) against the official plugin sources: anthropics/claude-plugins-official, openai/codex, anomalyco/opencode, google-antigravity SDK, GoogleCloudPlatform/open-knowledge-format, openai/skills.
 
 ## Layout
 
 ```
-core/                   @agent-prism/core — detection, canonical schema, event mapping,
+core/                   @lablaunchpad/core — detection, canonical schema, event mapping,
                         OKF v0.2 parse/validate/regenerate library, emit helpers
-adapters/<agent>/       one pure emitter per agent: render native bundle + install plan
+adapters/<agent>/       one pure emitter per agent: native bundle + reversible install plan
 plugins/knowledge/      first-party plugin: OKF knowledge layer
   plugin/               canonical source (also natively Claude-installable)
   runtime/              self-contained hook runner + dependency-free MCP server
-cli/                    `prism` — detect / build / install / uninstall / okf-validate
+cli/                    `anyplugin` — detect / build / install / uninstall / okf-validate
 knowledge/              this repo's own OKF v0.2 bundle (backward-engineering findings)
-templates/starter/      canonical plugin template for `prism init`-style scaffolding
+templates/starter/      canonical plugin template for scaffolding new plugins
 ```
 
 ## Quick start
@@ -26,37 +32,39 @@ templates/starter/      canonical plugin template for `prism init`-style scaffol
 pnpm install && pnpm build && pnpm test
 
 # what is installed on this machine?
-npx prism detect
+npx anyplugin detect
 
 # build all four native bundles for the first-party knowledge plugin
-npx prism build --plugin plugins/knowledge/plugin \
+npx anyplugin build --plugin plugins/knowledge/plugin \
   --runner plugins/knowledge/runtime/runner.js \
   --mcp-runtime plugins/knowledge/runtime
 
 # install into every detected agent (home + project locations), then reverse cleanly
-npx prism install --plugin plugins/knowledge/plugin --project /path/to/repo
-npx prism uninstall --plugin plugins/knowledge/plugin --project /path/to/repo
+npx anyplugin install --plugin plugins/knowledge/plugin --project /path/to/repo
+npx anyplugin uninstall --plugin plugins/knowledge/plugin --project /path/to/repo
 
 # OKF conformance
-npx prism okf-validate knowledge      # → CONFORMANT with OKF v0.2
-npx prism okf-reindex knowledge       # regenerate per-dir index.md files
+npx anyplugin okf-validate knowledge      # → CONFORMANT with OKF v0.2
+npx anyplugin okf-reindex knowledge       # regenerate per-dir index.md files
 ```
 
-Claude Code users can also add this repo directly as a marketplace (the canonical
-plugin dir doubles as a native `.claude-plugin` bundle):
+Claude Code users can add this repo directly as a marketplace (the canonical plugin dir doubles as a native `.claude-plugin` bundle):
 
 ```
-/plugin marketplace add <this-repo>
-/plugin install agent-prism-knowledge@agent-prism
+/plugin marketplace add LabLaunchPad/anyplugin
+/plugin install anyplugin-knowledge@anyplugin
 ```
 
 ## The canonical manifest
 
 ```yaml
-# prism.plugin.yaml
+# anyplugin.plugin.yaml
 name: my-plugin                 # kebab-case
 version: 1.0.0
 description: What it does
+author:
+  name: Your Name
+  url: https://github.com/your-org
 skills: ["./skills/my-skill"]   # SKILL.md dirs (agentskills.io format)
 commands: ["./commands/foo.md"] # markdown commands
 agents: ["./agents/bar.md"]     # subagents (Claude-compatible frontmatter)
@@ -74,14 +82,7 @@ mcp:
 knowledge: ./knowledge          # OKF v0.2 bundle shipped with the plugin
 ```
 
-Canonical hook events: `session-start`, `before-tool-use`, `after-tool-use`,
-`prompt-submit`, `turn-stop`, `session-end`, `permission-request`. Handlers are
-executed by ONE process — `node runner.js <hook-id>` reading platform JSON on
-stdin — on every agent. Claude Code, Codex, and Antigravity call command hooks
-natively; the OpenCode adapter ships a TypeScript shim that spawns the same
-runner. Platform output translation (blocking exit codes, `hookSpecificOutput`,
-`permissionDecision`, Antigravity `injectSteps`) lives in the runner and in
-`@agent-prism/core`'s event layer.
+Canonical hook events: `session-start`, `before-tool-use`, `after-tool-use`, `prompt-submit`, `turn-stop`, `session-end`, `permission-request`. Handlers are executed by ONE process — `node runner.js <hook-id>` reading platform JSON on stdin — on every agent. Claude Code, Codex, and Antigravity call command hooks natively; the OpenCode adapter ships a TypeScript shim that spawns the same runner. Platform output translation (blocking exit codes, `hookSpecificOutput`, `permissionDecision`, Antigravity `injectSteps`) lives in the runner and in `@lablaunchpad/core`'s event layer.
 
 ## What each adapter emits
 
@@ -92,46 +93,27 @@ runner. Platform output translation (blocking exit codes, `hookSpecificOutput`,
 | Codex | `.codex-plugin/plugin.json`, `skills/`, `hooks/hooks.json` (hooks on by default; `CLAUDE_PLUGIN_ROOT` injected for plugin hooks), `config.append.toml` `[mcp_servers]`, `AGENTS.md` pointer | `~/.codex/plugins/<name>` + `config.toml` merge |
 | Antigravity | `plugins/<name>/{plugin.json, skills/, agents/, hooks.json (≤30s, camelCase), mcp_config.json (serverUrl for HTTP), knowledge/}` | `<project>/.agents/plugins/<name>` + `.agents/mcp_config.json` merge |
 
-Install/uninstall is fully reversible: copied directories are removed, TOML/AGENTS.md
-blocks are stripped via `agent-prism` markers, and JSON merges are key-reverted.
-All installer paths are constructed from a fixed whitelist of destination
-templates plus validated name segments (no token substitution into paths).
+Install/uninstall is fully reversible: copied directories are removed, TOML/AGENTS.md blocks are stripped via `anyplugin` markers, and JSON merges are key-reverted. All installer paths are constructed from a fixed whitelist of destination templates plus validated name segments (no token substitution into paths).
 
 ## OKF v0.2 knowledge layer
 
 The first-party plugin gives every agent the same project knowledge:
 
-- **Reader skill** (`okf-reader`) — progressive disclosure: read `index.md`, then only
-  relevant concepts; trust frontmatter (`status`, `stale_after`, `verified` tiers,
-  `sources[]` provenance) tells the agent how much to trust each file.
-- **Capture hooks** — `session-start` injects a bundle pointer; `turn-stop` maintains
-  a `log.md` heartbeat.
+- **Reader skill** (`okf-reader`) — progressive disclosure: read `index.md`, then only relevant concepts; trust frontmatter (`status`, `stale_after`, `verified` tiers, `sources[]` provenance) tells the agent how much to trust each file.
+- **Capture hooks** — `session-start` injects a bundle pointer; `turn-stop` maintains a `log.md` heartbeat.
 - **Curator subagent** — bulk capture/cleanup with strict OKF authoring rules.
-- **MCP server** (`okf_index` / `okf_read` / `okf_search`) — dependency-free stdio
-  JSON-RPC; works in all four agents.
-- **Validator** — implements the official conformance matrix (MUST-fail on missing
-  `type`/unparseable frontmatter; MUST-warn on malformed trust fields, legacy
-  v0.1 constructs; MUST tolerate unknown types/keys — preserved on round-trip).
-  This repo's own `knowledge/` bundle is validated in CI as a dogfood test.
+- **MCP server** (`okf_index` / `okf_read` / `okf_search`) — dependency-free stdio JSON-RPC; works in all four agents.
+- **Validator** — implements the official conformance matrix (MUST-fail on missing `type`/unparseable frontmatter; MUST-warn on malformed trust fields, legacy v0.1 constructs; MUST tolerate unknown types/keys — preserved on round-trip). This repo's own `knowledge/` bundle is validated in CI as a dogfood test.
 
 ## Platform intelligence (backward-engineered, 2026-08)
 
-Key verified facts baked into the adapters (full detail + provenance in
-[`knowledge/`](knowledge/index.md)):
+Key verified facts baked into the adapters (full detail + provenance in [`knowledge/`](knowledge/index.md)):
 
-- All four agents converged on **SKILL.md (agentskills.io)**, **MCP**, **JSON command
-  hooks**, and **AGENTS.md** — the universal compile target.
-- Claude Code: `CLAUDECODE=1` is the authoritative marker; 33 hook events; unknown
-  manifest fields ignored (we exploit this for cross-metadata).
-- Codex ~0.147: hooks **enabled by default**; plugin hook processes receive
-  `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` for Claude-plugin compat; AGENTS.md
-  32 KiB cap is combined across files; `codex plugin marketplace add` CLI.
-- OpenCode: **no runtime marker exists** (issue #34065) — detection via `OPENCODE_*`
-  env/config fingerprints; the dev-branch v2 core no longer wires v1 hooks, so the
-  adapter emits a v1 shim **and** v2-safe skills/config artifacts.
-- Antigravity: `.agents/` file layout is the IDE surface (the Python SDK is
-  code-only, no file config); 5 hook events with camelCase JSON; HTTP MCP must use
-  `serverUrl`; hook timeouts capped at 30s.
+- All four agents converged on **SKILL.md (agentskills.io)**, **MCP**, **JSON command hooks**, and **AGENTS.md** — the universal compile target.
+- Claude Code: `CLAUDECODE=1` is the authoritative marker; 33 hook events; unknown manifest fields ignored (exploited for cross-metadata).
+- Codex ~0.147: hooks **enabled by default**; plugin hook processes receive `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` for Claude-plugin compat; AGENTS.md 32 KiB cap is combined across files; `codex plugin marketplace add` CLI.
+- OpenCode: **no runtime marker exists** (issue #34065) — detection via `OPENCODE_*` env/config fingerprints; the dev-branch v2 core no longer wires v1 hooks, so the adapter emits a v1 shim **and** v2-safe skills/config artifacts.
+- Antigravity: `.agents/` file layout is the IDE surface (the Python SDK is code-only, no file config); 5 hook events with camelCase JSON; HTTP MCP must use `serverUrl`; hook timeouts capped at 30s.
 
 ## Development
 
@@ -140,13 +122,10 @@ pnpm build    # tsc -b (project references across all packages)
 pnpm test     # vitest — unit + per-adapter conformance + install/uninstall reversibility
 ```
 
-Note for Windows users with long repo paths: run tooling through a short junction
-(e.g. `C:\apr`) with `NODE_PRESERVE_SYMLINKS=1` for esbuild-based tools.
+Note for Windows users with long repo paths: run tooling through a short junction (e.g. `C:\apr`) with `NODE_PRESERVE_SYMLINKS=1` for esbuild-based tools.
 
-## Status
+## Status & roadmap
 
-Phases complete: scaffold, backward-engineering audits, core library, four adapters,
-first-party OKF knowledge plugin, CLI, end-to-end smoke (live runner on Claude Code +
-Antigravity payloads, MCP protocol round-trip, four-agent build/install/uninstall).
-Roadmap: toolkit plugins (git workflow, test orchestration) as additional templates,
-`prism init` scaffolding command, published packages.
+Complete: scaffold, backward-engineering audits, core library, four adapters, first-party OKF knowledge plugin, CLI, end-to-end smoke (live runner on Claude Code + Antigravity payloads, MCP protocol round-trip, four-agent build/install/uninstall). 53/53 tests.
+
+Roadmap: toolkit plugins (git workflow, test orchestration), `anyplugin init` scaffolding, npm publish (`anyplugin` + `@lablaunchpad/*`).

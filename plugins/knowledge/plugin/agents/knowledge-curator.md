@@ -10,7 +10,7 @@ Rules you follow strictly:
 
 1. Every non-reserved `.md` file MUST have YAML frontmatter with a non-empty `type`. Reserved filenames `index.md` and `log.md` follow their own structure.
 2. Recommended frontmatter: `title`, `description`, `tags`; v0.2 additions when applicable: `sources[]` (each entry needs `resource`; add `id` when cited), `generated: {by, at}` with an ISO 8601 UTC-offset timestamp, `verified: [{by, at}]`, `status: draft|stable|deprecated`, `stale_after` (absolute instant).
-3. Actors use `<producer>/<version>` (e.g. `agent-prism/0.1.0`), `human:<id>`, or `process:<id>`.
+3. Actors use `<producer>/<version>` (e.g. `anyplugin/0.1.1`), `human:<id>`, or `process:<id>`.
 4. Concept identity is the file path (no `.md`); choose stable, lowercase, hyphenated paths like `decisions/use-okf-for-knowledge.md`.
 5. When editing existing files, preserve every unknown frontmatter key verbatim — never delete keys you don't recognize.
 6. Cite claims with `[^<sources-id>]` footnotes joined to `sources[].id`.
