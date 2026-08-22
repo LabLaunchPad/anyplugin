@@ -35,10 +35,10 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 - **Systemic Guardrail**: *No Silent Failures* is now a test-enforced invariant — every destructive text transform either proves both markers present or throws; the transactional journal means destructive transforms are no longer the recovery mechanism.
 
 ### BUG-02 — `parseArgs` misuse: flags parsed as positionals · Severity: P1
-- **Status**: `[FIXED & ERADICATED]` (commits `223af46`, `abe73e2`)
+- **Status**: `[FIXED & ERADICATED]` (commits `223af46`, Phase-1 `feat: strict CLI contract`)
 - **Root Cause Analysis**: code destructured only `{ values }` and read raw `argv` slices for positionals, so `okf-validate --json` treated `--json` as the bundle directory.
-- **Fix + Evidence**: `positionals` from `parseArgs` used everywhere; E2E tests run `okf-validate --json` and `okf-validate --json knowledge` (flag before/without positional) against the built binary.
-- **Systemic Guardrail**: Phase 1 Pattern C (`strict-args.ts`, Zod schema per command) will delete ad-hoc parsing entirely; until then the mixed-args E2E suite blocks regression of the class.
+- **Fix + Evidence**: positional parsing fixed first (mixed-args E2E); Phase 1 replaced ALL raw parsing with `cli/src/strict-args.ts` — one strict Zod schema per command (flags AND positionals), unknown flags and command-inappropriate flags are hard errors, `bin.ts` no longer calls `parseArgs` at all.
+- **Systemic Guardrail**: the contract lives in one module — a new flag must be added to a command's schema or every use of it fails; 7-case suite covers typo'd flags, misplaced flags, missing required flags, and unknown commands.
 
 ### BUG-03 — (definition pending from source audit) · Severity: TBD
 - **Status**: `[UNMAPPED]`
@@ -102,5 +102,5 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 ## Phase-1 queue (executes only after founder approval of `CORE-INVARIANTS-V2.md`)
 
 1. ~~`feat: implement SafePath boundary [SEC-01/AP-002/AP-008 eradicated]`~~ — **DONE**: `core/src/fs/safe-path.ts`, 10k-input hostile corpus + symlink-escape tests, runner/MCP/installer/manifest-path validation unified on it.
-2. `feat: strict CLI contract [BUG-02 class eradicated]` — `cli/src/strict-args.ts`, per-command Zod schemas, delete raw parseArgs usage.
+2. ~~`feat: strict CLI contract [BUG-02 class eradicated]`~~ — **DONE**: `cli/src/strict-args.ts`, per-command Zod schemas, `bin.ts` no longer parses raw argv (zod added as a direct cli dependency — already in the graph via core).
 3. `feat: capability negotiation matrix [AP-004/AP-007 eradicated]` — `core/src/capabilities/matrix.ts`, OpenCode V2 rows with fail-closed UNKNOWN, UNSUPPORTED = build error. (V2-*native emission* stays `[OPEN]` — requires a dedicated OpenCode v2 plugin-API audit; the matrix already kills the silent-breakage class by failing builds loudly.)
