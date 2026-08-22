@@ -11,9 +11,8 @@
  *               systemMessage?, raw? }
  */
 import { readFileSync } from "node:fs";
-import { writeFile, mkdir, appendFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const RUNNER_DIR = dirname(fileURLToPath(import.meta.url));
 const hookId = process.argv[2];
@@ -79,8 +78,26 @@ const payload = {
 
 let result = {};
 try {
-  const handlerUrl = new URL(`./handlers/${hookId}.mjs`, `${import.meta.url}`);
-  const mod = await import(handlerUrl.href);
+  // Emitted bundles place handlers at ./handlers/<id>.mjs next to this runner;
+  // the canonical repo layout keeps the runner in plugins/<name>/runtime/ and
+  // handlers in plugins/<name>/plugin/hooks/.
+  const handlerNames = [
+    `./handlers/${hookId}.mjs`,
+    `../plugin/hooks/${hookId}.mjs`,
+    `${(pluginRoot ?? "").replace(/\\/g, "/")}/hooks/${hookId}.mjs`,
+  ];
+  let mod;
+  let lastError;
+  for (const name of handlerNames) {
+    try {
+      const href = /^[A-Za-z]:[\\/]/.test(name) ? pathToFileURL(name).href : new URL(name, `${import.meta.url}`).href;
+      mod = await import(href);
+      break;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (!mod) throw lastError ?? new Error("no handler found");
   const fn = mod.run ?? mod.default?.run ?? mod.default;
   if (typeof fn !== "function") {
     process.stderr.write(`agent-prism runner: handler ${hookId} exports no run()`);

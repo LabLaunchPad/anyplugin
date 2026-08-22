@@ -4,7 +4,7 @@
  * transcript parsing; the agent (via the okf-reader skill or curator) writes
  * rich concepts — this hook only maintains the heartbeat so staleness is visible.
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export async function run(payload) {

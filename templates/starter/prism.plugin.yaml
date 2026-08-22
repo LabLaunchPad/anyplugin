@@ -1,0 +1,10 @@
+name: my-plugin
+version: 0.1.0
+description: One-sentence description of what this plugin does for coding agents.
+keywords: [example]
+skills: ["./skills/hello"]
+hooks:
+  - id: my-before-tool
+    event: before-tool-use
+    handler: ./hooks/before-tool.mjs
+    match: ".*"

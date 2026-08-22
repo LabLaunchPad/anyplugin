@@ -1,0 +1,27 @@
+{
+  "description": "agent-prism knowledge hooks (canonical layout: runtime/runner.js + hooks/*.mjs)",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/runtime/runner.js\" okf-session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/runtime/runner.js\" okf-turn-stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

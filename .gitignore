@@ -7,3 +7,6 @@ research/reports/raw/
 .env
 .env.*
 *.log
+.mimosa/
+.zcode/
+.prism-build/

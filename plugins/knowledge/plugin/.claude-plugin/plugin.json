@@ -1,0 +1,12 @@
+{
+  "name": "agent-prism-knowledge",
+  "version": "0.1.0",
+  "description": "OKF v0.2 knowledge layer for every coding agent — read, capture, and validate a shared project knowledge bundle (okf_index/okf_read/okf_search via MCP, session hooks, curator subagent).",
+  "displayName": "Agent Prism Knowledge",
+  "author": {
+    "name": "agent-prism"
+  },
+  "license": "MIT",
+  "keywords": ["okf", "knowledge", "memory", "cross-agent", "agent-prism"],
+  "hooks": "./claude/hooks.json"
+}
