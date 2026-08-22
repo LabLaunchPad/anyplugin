@@ -97,6 +97,22 @@
       "type": "string",
       "description": "OKF v0.2 knowledge bundle directory shipped inside the plugin, relative to plugin root."
     },
+    "ladder": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "maxItems": 12,
+      "description": "Behavioral decision ladder injected into instructions — stop at the first rung that holds (ponytail pattern)."
+    },
+    "intensity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "conservative": { "type": "string" },
+        "balanced": { "type": "string" },
+        "aggressive": { "type": "string" }
+      },
+      "description": "Named intensity modes the plugin distinguishes at runtime; the active mode is read from .anyplugin-mode in the plugin root."
+    },
     "capabilities": {
       "type": "object",
       "description": "Free-form capability gates evaluated against detectEnvironment() by adapters.",

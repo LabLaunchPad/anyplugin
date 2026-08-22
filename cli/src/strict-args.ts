@@ -40,6 +40,7 @@ export const CommandArgs = {
       runner: dir.optional(),
       "mcp-runtime": dir.optional(),
       "dry-run": flag.optional(),
+      tier: z.enum(["native", "instruction"]).optional(),
       json: flag.optional(),
     })
     .strict(),
@@ -53,11 +54,21 @@ export const CommandArgs = {
       runner: dir.optional(),
       "mcp-runtime": dir.optional(),
       "dry-run": flag.optional(),
+      tier: z.enum(["native", "instruction"]).optional(),
       json: flag.optional(),
     })
     .strict(),
   "okf-validate": z.object({ plugin: dir.optional(), json: flag.optional() }).strict(),
   "okf-reindex": z.object({ plugin: dir.optional(), json: flag.optional() }).strict(),
+  intensity: z
+    .object({
+      mode: z.enum(["conservative", "balanced", "aggressive"], {
+        required_error: "intensity requires --mode conservative|balanced|aggressive",
+      }),
+      plugin: dir.optional(),
+      json: flag.optional(),
+    })
+    .strict(),
 } as const;
 
 export type CommandName = keyof typeof CommandArgs;
@@ -74,6 +85,8 @@ const ALL_OPTIONS = [
   "mcp-runtime",
   "name",
   "dir",
+  "mode",
+  "tier",
   "json",
 ] as const;
 

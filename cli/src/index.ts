@@ -22,6 +22,7 @@ import {
   supports,
   rationale,
   DEFAULT_VARIANTS,
+  generateInstructionTier,
 } from "@lablaunchpad/core";
 import { SecurityError } from "@lablaunchpad/core";
 import { emitClaude } from "@lablaunchpad/adapter-claude";
@@ -617,6 +618,91 @@ function removeKeys(target: Record<string, unknown>, patch: Record<string, unkno
 export async function loadPluginSafe(pluginRoot: string): Promise<{ name: string; version: string }> {
   const manifest = await loadPluginManifest(pluginRoot);
   return { name: manifest.name, version: manifest.version };
+}
+
+/**
+ * Instruction-Tier Fallback (ponytail pattern): install a plugin as a marked
+ * AGENTS.md section for agents with no plugin API. Uses the SAME journal
+ * machinery as native installs — byte-exact restore and conflict-abort on
+ * uninstall, no special cases.
+ */
+export async function installInstructions(opts: {
+  pluginRoot: string;
+  projectDir: string;
+  dryRun?: boolean;
+}): Promise<{ agentsMd: string; stateRoot: string; notes: string[] }> {
+  const plugin = await loadPluginManifest(opts.pluginRoot);
+  validatePluginName(plugin.name);
+  const agentsMd = join(opts.projectDir, "AGENTS.md");
+  const stateRoot = join(opts.projectDir, ".anyplugin", "instruction", plugin.name);
+  const notes: string[] = [];
+  if (opts.dryRun) {
+    notes.push(`would append instruction tier to ${agentsMd}`);
+    return { agentsMd, stateRoot, notes };
+  }
+  const begin = `<!-- anyplugin:${plugin.name} begin -->`;
+  const end = `<!-- anyplugin:${plugin.name} end -->`;
+  let text = "";
+  try {
+    text = await readText(agentsMd);
+  } catch {
+    text = "";
+  }
+  const stripped = text.includes(begin) ? stripBlock(text, begin, end) : text;
+  const section = `${begin}\n${generateInstructionTier(plugin).trimEnd()}\n${end}`;
+  const finalText = stripped.trimEnd() + "\n\n" + section + "\n";
+  await writeText(agentsMd, finalText);
+  await writeJournal(stateRoot, {
+    pluginId: plugin.name,
+    version: plugin.version,
+    agent: "instruction",
+    files: [markerEntry(agentsMd, stripped, finalText)],
+  });
+  notes.push(`state journal: ${join(stateRoot, ".anyplugin-state.json")}`);
+  return { agentsMd, stateRoot, notes };
+}
+
+/** Reverse an instruction-tier install using the journal (conflict-safe). */
+export async function uninstallInstructions(opts: {
+  pluginRoot: string;
+  projectDir: string;
+  dryRun?: boolean;
+}): Promise<string[]> {
+  const plugin = await loadPluginManifest(opts.pluginRoot);
+  validatePluginName(plugin.name);
+  const stateRoot = join(opts.projectDir, ".anyplugin", "instruction", plugin.name);
+  const journal = await readJournal(stateRoot);
+  if (!journal) return [];
+  const touched: string[] = [];
+  const statuses: { entry: JournalFileEntry; status: ReturnType<typeof classifyJournalEntry> }[] = [];
+  for (const entry of journal.files) {
+    statuses.push({ entry, status: classifyJournalEntry(entry, await readCurrent(entry.file)) });
+  }
+  const conflicts = statuses.filter((s) => s.status.action === "conflict");
+  if (conflicts.length > 0) {
+    if (opts.dryRun) {
+      for (const c of conflicts) touched.push(`CONFLICT: ${c.entry.file} was modified after install — uninstall would abort`);
+    } else {
+      throw new Error(
+        `uninstall aborted — ${plugin.name} instructions were modified after install: ${conflicts.map((c) => c.entry.file).join(", ")}. Review the edits or re-run install to refresh the journal, then uninstall again.`,
+      );
+    }
+  }
+  for (const { entry, status } of statuses) {
+    if (opts.dryRun) {
+      if (status.action === "restore") touched.push(`would restore ${entry.file} to pre-install content`);
+      else if (status.action === "delete") touched.push(`would delete ${entry.file} (created by install)`);
+    } else if (status.action !== "conflict" && (await applyJournalEntry(entry, status))) {
+      touched.push(entry.file);
+    }
+  }
+  if (!opts.dryRun) {
+    await removeTree(stateRoot);
+    touched.push(stateRoot);
+  } else {
+    touched.push(`would remove ${stateRoot}`);
+  }
+  return touched;
 }
 
 export { loadPluginManifest, detectAgent, detectInstalledAgents, detectEnvironment, validateBundle, regenerateIndexes };

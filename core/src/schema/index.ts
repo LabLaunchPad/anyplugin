@@ -66,6 +66,16 @@ export const AnyPluginManifestSchema = z.object({
   mcp: z.object({ servers: z.record(McpServerSchema) }).default({ servers: {} }),
   /** OKF v0.2 knowledge bundle directory shipped inside the plugin. */
   knowledge: z.string().optional(),
+  /** Behavioral decision ladder injected into instructions ("stop at the first rung that holds"). */
+  ladder: z.array(z.string().min(1)).max(12).optional(),
+  /** Named intensity modes the plugin distinguishes at runtime (ponytail pattern). */
+  intensity: z
+    .object({
+      conservative: z.string().optional(),
+      balanced: z.string().optional(),
+      aggressive: z.string().optional(),
+    })
+    .optional(),
   /** Free-form capability gates evaluated against detectEnvironment() by adapters. */
   capabilities: z.record(z.unknown()).optional(),
   /** Extra keys are preserved verbatim for adapter-specific needs (like OKF unknown-key preservation). */

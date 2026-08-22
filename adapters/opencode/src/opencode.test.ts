@@ -23,8 +23,8 @@ hooks:
   - id: guard-tool
     event: before-tool-use
     handler: ./hooks/guard.mjs
-  - id: on-chat
-    event: prompt-submit
+  - id: on-perm
+    event: permission-request
     handler: ./hooks/guard.mjs
 mcp:
   servers:
@@ -46,7 +46,8 @@ describe("opencode adapter emit", () => {
   it("renders a v1 plugin.ts shim bridging to the runner", async () => {
     const shim = await readFile(join(out, "plugin.ts"), "utf8");
     expect(shim).toContain('"tool.execute.before": "guard-tool"');
-    expect(shim).toContain('"chat.message": "on-chat"');
+    // official docs name is permission.asked (verified 2026-08)
+    expect(shim).toContain('"permission.asked": "on-perm"');
     expect(shim).toContain('ANYPLUGIN_HOST');
     expect(shim).toContain('"shell.env"');
     expect(shim).toContain('export default');

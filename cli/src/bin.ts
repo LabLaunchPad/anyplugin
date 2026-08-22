@@ -9,6 +9,8 @@ import {
   executeInstall,
   executeUninstall,
   scaffoldPlugin,
+  installInstructions,
+  uninstallInstructions,
   detectAgent,
   detectInstalledAgents,
   detectEnvironment,
@@ -19,6 +21,7 @@ import {
 import type { AgentId } from "@lablaunchpad/core";
 import { ALL_AGENTS, removeTree } from "@lablaunchpad/core";
 import { parseCliArgv, type CommandName } from "./strict-args.js";
+import { setIntensityMode, getActivePlugin } from "./state.js";
 
 const HELP = `anyplugin — agent-agnostic plugin development for Claude Code, OpenCode, Codex, Antigravity
 
@@ -60,6 +63,8 @@ interface ParsedFlags {
   "mcp-runtime"?: string;
   name?: string;
   dir?: string;
+  mode?: string;
+  tier?: string;
   json?: boolean;
 }
 
@@ -91,6 +96,21 @@ async function main(): Promise<void> {
       console.log(`scaffolded ${result.name} → ${result.dir} (${result.files.length} files)`);
       for (const f of result.files) console.log(`  ${f}`);
       console.log(`\nnext: implement hooks/, then run anyplugin build --plugin ${result.dir}`);
+    }
+    return;
+  }
+
+  if (command === "intensity") {
+    const pluginRoot = requireDir(resolve(values.plugin ?? "."), "--plugin");
+    const manifest = await loadPluginSafe(pluginRoot);
+    const mode = values.mode as "conservative" | "balanced" | "aggressive";
+    const file = await setIntensityMode(pluginRoot, mode, { pluginId: manifest.name, version: manifest.version });
+    if (values.json) {
+      console.log(JSON.stringify({ command: "intensity", plugin: manifest.name, mode, stateFile: file }, null, 2));
+    } else {
+      console.log(`${manifest.name}: intensity mode → ${mode} (${file})`);
+      const current = await getActivePlugin(pluginRoot);
+      if (current) console.log(`active: ${current.pluginId} v${current.version} mode=${current.mode}`);
     }
     return;
   }
@@ -135,6 +155,22 @@ async function main(): Promise<void> {
 
   if (command === "build" || command === "install" || command === "uninstall") {
     const pluginRoot = requireDir(resolve(values.plugin ?? "."), "--plugin");
+
+    // Instruction-tier installs bypass bundle emission entirely: the plugin's
+    // contract is injected as a marked AGENTS.md section (ponytail pattern).
+    if (values.tier === "instruction" && (command === "install" || command === "uninstall")) {
+      if (command === "install") {
+        const result = await installInstructions({ pluginRoot, projectDir, dryRun: values["dry-run"] === true });
+        console.log(`\n[instruction]\n  appended → ${result.agentsMd}`);
+        for (const n of result.notes) console.log(`  note: ${n}`);
+      } else {
+        const touched = await uninstallInstructions({ pluginRoot, projectDir, dryRun: values["dry-run"] === true });
+        console.log(`\n[instruction] ${values["dry-run"] === true ? "dry-run uninstall" : "uninstalled"}`);
+        for (const t of touched) console.log(`  ${values["dry-run"] === true ? "" : "cleaned "}${t}`);
+      }
+      return;
+    }
+
     const manifest = await loadPluginSafe(pluginRoot);
     const dryRun = values["dry-run"] === true;
     let outRoot = resolve(values.out ?? join(pluginRoot, ".anyplugin-build"));

@@ -62,11 +62,22 @@ const pluginRoot =
   env["PLUGIN_ROOT"] ||
   resolve(RUNNER_DIR, "..");
 
+// Runtime intensity mode (ponytail pattern): a tiny flag file inside the
+// plugin root; best-effort read so a missing/corrupt flag never breaks a hook.
+let intensityMode = null;
+try {
+  const flag = JSON.parse(readFileSync(join(pluginRoot, ".anyplugin-mode"), "utf8"));
+  if (flag && typeof flag.mode === "string") intensityMode = flag.mode;
+} catch {
+  /* no mode set — handlers treat null as the default/balanced behavior */
+}
+
 // --- execute handler -------------------------------------------------------
 const payload = {
   platform,
   hookId,
   pluginRoot,
+  intensityMode,
   sessionId: raw["session_id"] ?? raw["sessionId"],
   conversationId: raw["conversationId"],
   cwd: raw["cwd"] ?? process.cwd(),
