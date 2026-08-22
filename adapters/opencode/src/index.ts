@@ -222,7 +222,7 @@ export default ${shimConstName(name)}Plugin;
 }
 
 function shimConstName(pluginName: string): string {
-  return pluginName.split("-").map((p) => p[0]?.toUpperCase() + p.slice(1) ?? p).join("");
+  return pluginName.split("-").map((p) => (p[0] ?? "").toUpperCase() + p.slice(1)).join("");
 }
 
 export const opencodeAdapter: Adapter = {

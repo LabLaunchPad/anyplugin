@@ -1,5 +1,5 @@
-import type { ParsedPlugin } from "./schema/index.js";
-import type { AgentId } from "./detect/index.js";
+import type { ParsedPlugin } from "../schema/index.js";
+import type { AgentId } from "../detect/index.js";
 
 /**
  * Adapter contract: adapters are PURE — emit() renders a native bundle into outDir and
