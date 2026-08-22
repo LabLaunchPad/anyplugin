@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/LabLaunchPad/anyplugin/main/anyplugin.plugin.schema.json",
+  "title": "AnyPlugin canonical plugin manifest",
+  "description": "One manifest compiled by AnyPlugin adapters into native plugin bundles for Claude Code, OpenCode, Codex CLI, and Antigravity. Unknown top-level keys are preserved verbatim for adapter-specific needs. Use in YAML via: # yaml-language-server: $schema=...",
+  "type": "object",
+  "required": ["name", "version", "description"],
+  "additionalProperties": true,
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "description": "Plugin name, kebab-case, starts with a letter. Also the install directory name."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+",
+      "description": "Semantic version (major.minor.patch, pre-release suffix allowed)."
+    },
+    "description": { "type": "string", "minLength": 1 },
+    "displayName": { "type": "string" },
+    "author": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "homepage": { "type": "string" },
+    "license": { "type": "string" },
+    "keywords": { "type": "array", "items": { "type": "string" }, "default": [] },
+    "skills": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Skill directories (each containing SKILL.md), relative to plugin root."
+    },
+    "commands": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Command markdown files, relative to plugin root (frontmatter: description, argument-hint, allowed-tools)."
+    },
+    "agents": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Subagent markdown files (frontmatter: name, description, model?, tools?; prompt in body)."
+    },
+    "hooks": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "required": ["id", "event", "handler"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "description": "Hook id; the handler file must be named <id>.mjs." },
+          "event": {
+            "type": "string",
+            "enum": ["session-start", "before-tool-use", "after-tool-use", "prompt-submit", "turn-stop", "session-end", "permission-request"]
+          },
+          "handler": { "type": "string", "minLength": 1, "description": "Path (relative to plugin root) to a JS/MJS module exporting async run(payload)." },
+          "match": { "type": "string", "description": "Tool-name matcher (regex or plain name); omitted = all tools." },
+          "timeoutSec": { "type": "integer", "minimum": 1, "maximum": 600 }
+        }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "required": ["servers"],
+      "additionalProperties": false,
+      "properties": {
+        "servers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "transport": { "type": "string", "enum": ["stdio", "http"], "default": "stdio" },
+              "command": { "type": "string", "description": "Executable for stdio transport." },
+              "args": { "type": "array", "items": { "type": "string" }, "default": [] },
+              "env": { "type": "object", "additionalProperties": { "type": "string" }, "default": {} },
+              "cwd": { "type": "string" },
+              "url": { "type": "string", "description": "Endpoint for http transport." },
+              "headers": { "type": "object", "additionalProperties": { "type": "string" }, "default": {} },
+              "timeoutMs": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "knowledge": {
+      "type": "string",
+      "description": "OKF v0.2 knowledge bundle directory shipped inside the plugin, relative to plugin root."
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "Free-form capability gates evaluated against detectEnvironment() by adapters.",
+      "additionalProperties": true
+    }
+  }
+}

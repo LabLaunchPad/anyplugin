@@ -20,7 +20,17 @@ import { emitClaude } from "@lablaunchpad/adapter-claude";
 import { emitOpencode } from "@lablaunchpad/adapter-opencode";
 import { emitCodex } from "@lablaunchpad/adapter-codex";
 import { emitAntigravity } from "@lablaunchpad/adapter-antigravity";
-import { join, dirname } from "node:path";
+import {
+  type JournalFileEntry,
+  hashContent,
+  readCurrent,
+  readJournal,
+  writeJournal,
+  classifyJournalEntry,
+  applyJournalEntry,
+} from "./journal.js";
+import { join, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface BuildOptions {
   pluginRoot: string;
@@ -57,7 +67,52 @@ export interface InstallOptions {
   home: string;
   projectDir: string;
   pluginName: string;
+  /** Plugin version (recorded in the install journal). */
+  version?: string;
   dryRun?: boolean;
+}
+
+export interface ScaffoldResult {
+  dir: string;
+  name: string;
+  files: string[];
+}
+
+/** Location of the bundled starter template (repo layout: templates/starter). */
+function starterTemplateDir(): string {
+  return resolve(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "templates", "starter"));
+}
+
+async function listFilesRecursive(dir: string, base = dir, out: string[] = []): Promise<string[]> {
+  for (const entry of await listDir(dir)) {
+    if (entry.isDir) await listFilesRecursive(entry.abs, base, out);
+    else out.push(entry.abs.slice(base.length + 1).split("\\").join("/"));
+  }
+  return out;
+}
+
+/**
+ * Scaffold a new canonical plugin from templates/starter into targetDir.
+ * Only the manifest name is rewritten; every other file is copied verbatim.
+ */
+export async function scaffoldPlugin(name: string, targetDir: string): Promise<ScaffoldResult> {
+  validatePluginName(name);
+  const templateDir = starterTemplateDir();
+  if (!(await pathExists(templateDir))) {
+    throw new Error(`starter template not found: ${templateDir}`);
+  }
+  if (await pathExists(targetDir)) {
+    throw new Error(`target directory already exists: ${targetDir}`);
+  }
+  const parent = dirname(targetDir);
+  if (!(await pathExists(parent))) {
+    throw new Error(`parent directory not found: ${parent}`);
+  }
+  await copyDir(templateDir, targetDir);
+  const manifestPath = join(targetDir, "anyplugin.plugin.yaml");
+  const text = await readText(manifestPath);
+  await writeText(manifestPath, text.replace(/^name: my-plugin$/m, `name: ${name}`));
+  return { dir: targetDir, name, files: await listFilesRecursive(targetDir) };
 }
 
 /** Plugin names are the only user-controlled path segment; lock them to kebab-case. */
@@ -184,15 +239,21 @@ function substValues(value: unknown, pluginRoot: string): unknown {
   return value;
 }
 
-async function readJsonOrDefault(file: string): Promise<Record<string, unknown>> {
-  try {
-    return JSON.parse(await readText(file)) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
+/** Journal entry for a marker-delimited edit; an empty stripped file counts as "did not exist". */
+function markerEntry(file: string, stripped: string, finalText: string): JournalFileEntry {
+  const backup = stripped.trim() === "" ? null : stripped;
+  return {
+    file,
+    kind: "marker",
+    preInstallHash: backup === null ? null : hashContent(backup),
+    postInstallHash: hashContent(finalText),
+    backupContent: backup,
+    ownedKeys: null,
+  };
 }
 
-/** Execute one agent's install plan. Returns what happened for reporting. */
+/** Execute one agent's install plan. Returns what happened for reporting.
+ * Every config edit is journaled so uninstall can restore exact pre-install bytes. */
 export async function executeInstall(
   agent: AgentId,
   bundle: EmittedBundle,
@@ -205,6 +266,7 @@ export async function executeInstall(
   const copiedDirs: string[] = [];
   const mergedFiles: string[] = [];
   const notes: string[] = [];
+  const journalFiles: JournalFileEntry[] = [];
 
   for (const action of bundle.install.actions) {
     if (action.kind === "copy") {
@@ -226,27 +288,50 @@ export async function executeInstall(
         notes.push(`would merge ${JSON.stringify(patch)} into ${file}`);
         continue;
       }
-      const merged = deepMerge(await readJsonOrDefault(file), patch);
+      const preText = await readCurrent(file);
+      let base: Record<string, unknown>;
+      if (preText === null) {
+        base = {};
+      } else {
+        try {
+          base = JSON.parse(preText) as Record<string, unknown>;
+        } catch (err) {
+          throw new Error(`refusing to merge into unparseable JSON config ${file}: ${(err as Error).message}`);
+        }
+      }
+      const merged = deepMerge(base, patch);
       await writeText(file, JSON.stringify(merged, null, 2) + "\n");
       mergedFiles.push(file);
+      journalFiles.push({
+        file,
+        kind: "json-merge",
+        preInstallHash: preText === null ? null : hashContent(preText),
+        postInstallHash: hashContent(await readText(file)),
+        backupContent: preText,
+        ownedKeys: Object.keys(action.patch),
+      });
     } else if (action.kind === "toml-merge") {
       const file = resolveFileTemplate(action.file, ctx);
       if (opts.dryRun) {
         notes.push(`would append [mcp_servers] to ${file}`);
         continue;
       }
-const begin = `# BEGIN anyplugin:${opts.pluginName}`;
-          const end = `# END anyplugin:${opts.pluginName}`;
+      const begin = `# BEGIN anyplugin:${opts.pluginName}`;
+      const end = `# END anyplugin:${opts.pluginName}`;
       let text = "";
       try {
         text = await readText(file);
       } catch {
         text = "";
       }
-      text = stripBlock(text, begin, end);
+      // backup = file with any previous plugin block already stripped, so a
+      // reinstall→uninstall cycle never resurrects stale markers.
+      const stripped = text.includes(begin) ? stripBlock(text, begin, end) : text;
       const toml = substValues(action.append, root) as string;
-      await writeText(file, text.trimEnd() + `\n\n${begin}\n${toml.trimEnd()}\n${end}\n`);
+      const finalText = stripped.trimEnd() + `\n\n${begin}\n${toml.trimEnd()}\n${end}\n`;
+      await writeText(file, finalText);
       mergedFiles.push(file);
+      journalFiles.push(markerEntry(file, stripped, finalText));
     } else if (action.kind === "md-append") {
       const file = resolveFileTemplate(action.file, ctx);
       if (opts.dryRun) {
@@ -261,10 +346,22 @@ const begin = `# BEGIN anyplugin:${opts.pluginName}`;
       } catch {
         text = "";
       }
-      text = stripBlock(text, begin, end);
-      await writeText(file, text.trimEnd() + "\n" + action.content.trimEnd() + "\n");
+      const stripped = text.includes(begin) ? stripBlock(text, begin, end) : text;
+      const finalText = stripped.trimEnd() + "\n" + action.content.trimEnd() + "\n";
+      await writeText(file, finalText);
       mergedFiles.push(file);
+      journalFiles.push(markerEntry(file, stripped, finalText));
     }
+  }
+
+  if (!opts.dryRun) {
+    const journalPath = await writeJournal(root, {
+      pluginId: opts.pluginName,
+      version: opts.version ?? "",
+      agent,
+      files: journalFiles,
+    });
+    notes.push(`state journal: ${journalPath}`);
   }
 
   if (agent === "claude-code") {
@@ -283,9 +380,15 @@ export function stripBlock(text: string, begin: string, end: string): string {
   const b = text.indexOf(begin);
   if (b < 0) return text;
   const e = text.indexOf(end, b);
-  if (e < 0) return text.slice(0, b).trimEnd();
+  if (e < 0) {
+    // A begin marker with no end marker means the block is corrupted; stripping
+    // would silently delete everything after `begin`. Refuse and describe it.
+    throw new Error(`corrupted marker block: missing end marker (found begin marker "${begin}") — refusing to strip`);
+  }
   const after = text.slice(e + end.length);
-  return (text.slice(0, b).trimEnd() + "\n" + after.trimStart()).trim();
+  // Keep the trailing newline of the pre-block content so journal backups are
+  // byte-exact; callers that append handle their own trimming.
+  return text.slice(0, b).trimEnd() + "\n" + after.trimStart();
 }
 
 async function substFilesIn(dir: string, pluginRoot: string): Promise<void> {
@@ -311,7 +414,11 @@ async function substFilesIn(dir: string, pluginRoot: string): Promise<void> {
   }
 }
 
-/** Reverse an install: remove copied dirs, strip marker blocks, un-merge JSON keys. */
+/** Reverse an install: restore journaled files byte-exact, remove copied dirs.
+ * If a journaled file was modified after install, ABORT with a descriptive
+ * error instead of overwriting the user's edits. With dryRun, report what
+ * would happen (including conflicts) without touching anything. Falls back to
+ * a conservative marker/keys cleanup for installs predating the journal. */
 export async function executeUninstall(
   agent: AgentId,
   bundle: EmittedBundle,
@@ -322,35 +429,106 @@ export async function executeUninstall(
   const ctx = { home: opts.home, projectDir: opts.projectDir, codexHome };
   const root = installedRoot(agent, { ...ctx, pluginName: opts.pluginName });
   const touched: string[] = [];
+
+  const journal = await readJournal(root);
+  if (journal) {
+    // Phase A: classify every journaled file before modifying anything.
+    const statuses: { entry: JournalFileEntry; status: ReturnType<typeof classifyJournalEntry> }[] = [];
+    for (const entry of journal.files) {
+      statuses.push({ entry, status: classifyJournalEntry(entry, await readCurrent(entry.file)) });
+    }
+    const conflicts = statuses.filter((s) => s.status.action === "conflict");
+    if (conflicts.length > 0) {
+      if (opts.dryRun) {
+        for (const c of conflicts) touched.push(`CONFLICT: ${c.entry.file} was modified after install — uninstall would abort`);
+      } else {
+        throw new Error(
+          `uninstall aborted — ${opts.pluginName} config was modified after install (outside its managed content): ` +
+            conflicts.map((c) => c.entry.file).join(", ") +
+            ". Review those edits, or re-run install to refresh the plugin's state journal, then uninstall again.",
+        );
+      }
+    }
+    // Phase B: apply restores only when nothing conflicts.
+    for (const { entry, status } of statuses) {
+      if (opts.dryRun) {
+        if (status.action === "restore") touched.push(`would restore ${entry.file} to pre-install content`);
+        else if (status.action === "delete") touched.push(`would delete ${entry.file} (created by install)`);
+        else if (status.action === "missing") touched.push(`note: ${entry.file} already deleted by user`);
+      } else if (status.action !== "conflict") {
+        if (await applyJournalEntry(entry, status)) touched.push(entry.file);
+      }
+    }
+    // Copies (including the plugin root, which holds the journal) still go
+    // through the install plan; merge files were handled above.
+    for (const action of bundle.install.actions) {
+      if (action.kind !== "copy") continue;
+      validateRelPath(action.srcRel, `${agent} uninstall srcRel`);
+      const dest = copyDest(action, agent, ctx, opts.pluginName);
+      if (await pathExists(dest)) {
+        if (opts.dryRun) touched.push(`would remove ${dest}`);
+        else {
+          await removeTree(dest);
+          touched.push(dest);
+        }
+      }
+    }
+    return touched;
+  }
+
+  // Legacy fallback (journal absent): conservative cleanup that never creates,
+  // truncates, or reformats a config file.
   for (const action of bundle.install.actions) {
     if (action.kind === "copy") {
       validateRelPath(action.srcRel, `${agent} uninstall srcRel`);
       const dest = copyDest(action, agent, ctx, opts.pluginName);
       if (await pathExists(dest)) {
-        await removeTree(dest);
-        touched.push(dest);
+        if (opts.dryRun) touched.push(`would remove ${dest}`);
+        else {
+          await removeTree(dest);
+          touched.push(dest);
+        }
       }
     } else if (action.kind === "json-merge") {
       const file = resolveFileTemplate(action.file, ctx);
       const patch = substValues(action.patch, root) as Record<string, unknown>;
+      let text: string;
       try {
-        const current = await readJsonOrDefault(file);
-        await writeText(file, JSON.stringify(removeKeys(current, patch), null, 2) + "\n");
-        touched.push(file);
+        text = await readText(file);
       } catch {
-        /* file missing — nothing to undo */
+        continue; // file missing — nothing to undo
       }
+      let current: Record<string, unknown>;
+      try {
+        current = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        continue; // unparseable — never truncate; nothing we can safely revert
+      }
+      const cleaned = removeKeys(current, patch);
+      if (JSON.stringify(cleaned) === JSON.stringify(current)) continue; // no owned keys present
+      if (opts.dryRun) {
+        touched.push(`would revert keys in ${file}`);
+        continue;
+      }
+      await writeText(file, JSON.stringify(cleaned, null, 2) + "\n");
+      touched.push(file);
     } else if (action.kind === "toml-merge" || action.kind === "md-append") {
       const file = resolveFileTemplate(action.file, ctx);
       const begin = action.kind === "toml-merge" ? `# BEGIN anyplugin:${opts.pluginName}` : `<!-- anyplugin:${action.marker} begin -->`;
       const end = action.kind === "toml-merge" ? `# END anyplugin:${opts.pluginName}` : `<!-- anyplugin:${action.marker} end -->`;
+      let text: string;
       try {
-        const text = await readText(file);
-        await writeText(file, stripBlock(text, begin, end) + "\n");
-        touched.push(file);
+        text = await readText(file);
       } catch {
-        /* file missing */
+        continue; // file missing — nothing to undo
       }
+      if (!text.includes(begin)) continue;
+      if (opts.dryRun) {
+        touched.push(`would strip marker block in ${file}`);
+        continue;
+      }
+      await writeText(file, stripBlock(text, begin, end).replace(/\n+$/, "") + "\n");
+      touched.push(file);
     }
   }
   return touched;

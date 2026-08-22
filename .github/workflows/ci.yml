@@ -12,7 +12,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            node: 20
+            node: 22
           - os: ubuntu-latest
             node: 24
           - os: windows-latest
@@ -20,9 +20,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # pnpm version comes from the packageManager field in package.json
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
@@ -34,3 +33,47 @@ jobs:
         run: node cli/dist/bin.js okf-validate knowledge
       - name: E2E build smoke (all four agents)
         run: node cli/dist/bin.js build --plugin plugins/knowledge/plugin --out .anyplugin-build --runner plugins/knowledge/runtime/runner.js --mcp-runtime plugins/knowledge/runtime
+      # publish the dependency-free runtime for the Node 20 job
+      - name: Upload runtime artifacts
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 24
+        uses: actions/upload-artifact@v4
+        with:
+          name: anyplugin-runtime
+          path: |
+            plugins/knowledge/runtime
+            plugins/knowledge/plugin
+            knowledge
+
+  # engines: node >=20 applies to what users RUN inside agents: the emitted
+  # hook runner and MCP server are dependency-free, so verify them on Node 20
+  # with plain node (no package manager involved).
+  runtime-node-20:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: anyplugin-runtime
+      - name: Hook runner E2E (claude-code translation)
+        run: |
+          echo '{"cwd":"."}' | node plugins/knowledge/runtime/runner.js okf-session-start | grep -q "hookSpecificOutput"
+      - name: Hook runner E2E (antigravity translation)
+        run: |
+          echo '{"cwd":"."}' | ANYPLUGIN_HOST=antigravity node plugins/knowledge/runtime/runner.js okf-session-start | grep -q "injectSteps"
+      - name: Hook runner rejects hostile hook ids
+        run: |
+          set +e
+          echo '{}' | node plugins/knowledge/runtime/runner.js "../evil" 2>err.txt
+          code=$?
+          set -e
+          test "$code" -eq 1
+          grep -q "invalid hook id" err.txt
+      - name: MCP server JSON-RPC handshake
+        run: |
+          printf '%s\n%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | node plugins/knowledge/runtime/mcp-server.js | grep -q "anyplugin-okf"

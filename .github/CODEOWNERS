@@ -1,0 +1,8 @@
+# Default owner: the Lab LaunchPad account (Rahul Paul)
+* @LabLaunchPad
+
+# Core contracts — every change here is high-leverage
+/core/src/schema/    @LabLaunchPad
+/core/src/events/    @LabLaunchPad
+/core/src/adapters/  @LabLaunchPad
+/cli/src/index.ts    @LabLaunchPad
