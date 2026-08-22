@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 describe("detectAgent", () => {
   it("self-marker wins", () => {
-    const d = detectAgent({ AGENT_PRISM_HOST: "opencode", CLAUDECODE: "1" }, "/nope");
+    const d = detectAgent({ ANYPLUGIN_HOST: "opencode", CLAUDECODE: "1" }, "/nope");
     expect(d).toMatchObject({ agent: "opencode", confidence: "marker" });
   });
   it("CLAUDECODE=1 is authoritative for claude-code", () => {

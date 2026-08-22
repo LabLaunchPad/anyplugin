@@ -76,10 +76,6 @@ export const MANIFEST_BASENAMES = [
   "anyplugin.plugin.yaml",
   "anyplugin.plugin.yml",
   "anyplugin.plugin.json",
-  // legacy codename fallback
-  "prism.plugin.yaml",
-  "prism.plugin.yml",
-  "prism.plugin.json",
 ] as const;
 
 export async function loadPluginManifest(pluginRoot: string): Promise<ParsedPlugin> {

@@ -12,7 +12,7 @@ A knowledge "bundle" is a directory of Markdown concept files (OKF v0.2, Google'
 
 Try in order, use the first that exists:
 
-1. The environment variables `ANYPLUGIN_OKF_BUNDLE` (or legacy `AGENT_PRISM_OKF_BUNDLE`) — absolute path.
+1. The environment variable `ANYPLUGIN_OKF_BUNDLE` — absolute path to the bundle.
 2. MCP tools `okf_index` / `okf_read` / `okf_search` — if an `okf` MCP server is connected, ALWAYS prefer these tools.
 3. This skill's own directory: `../knowledge/` relative to this SKILL.md (plugin-shipped bundle).
 4. Project root `./knowledge/` directory (walk up from cwd).

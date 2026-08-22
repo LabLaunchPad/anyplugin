@@ -1,7 +1,7 @@
 ---
 type: Interoperability Format
 title: Open Knowledge Format (OKF) v0.2
-description: Google Cloud's OKF v0.2 spec extraction — frontmatter fields, reserved files, conformance rules, trust tiers — the authority for the knowledge/ library in agent-prism core.
+description: Google Cloud's OKF v0.2 spec extraction — frontmatter fields, reserved files, conformance rules, trust tiers — the authority for the OKF library in AnyPlugin core.
 tags: [okf, knowledge, google-cloud, spec]
 status: stable
 generated:

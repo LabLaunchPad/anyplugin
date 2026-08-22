@@ -18,7 +18,7 @@ beforeAll(async () => {
   await mkdir(join(root, "skills", "demo"), { recursive: true });
   await mkdir(join(root, "hooks"), { recursive: true });
   await mkdir(join(root, "knowledge"), { recursive: true });
-  await writeFile(join(root, "prism.plugin.yaml"), `name: demo-plugin
+  await writeFile(join(root, "anyplugin.plugin.yaml"), `name: demo-plugin
 version: 0.1.0
 description: CLI test plugin
 skills: ["./skills/demo"]

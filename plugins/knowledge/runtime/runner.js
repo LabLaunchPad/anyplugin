@@ -39,7 +39,7 @@ try {
 // --- platform detection (inline mirror of @lablaunchpad/core detect) -------
 const env = process.env;
 let platform = "unknown";
-const hostMarker = env["ANYPLUGIN_HOST"] ?? env["AGENT_PRISM_HOST"];
+const hostMarker = env["ANYPLUGIN_HOST"];
 if (hostMarker === "claude-code" || hostMarker === "opencode" || hostMarker === "codex" || hostMarker === "antigravity") {
   platform = hostMarker;
 } else if (env["CLAUDECODE"] === "1" || env["CLAUDE_CODE_SESSION_ID"]) {
@@ -58,7 +58,6 @@ const pluginRoot =
   env["ANYPLUGIN_PLUGIN_ROOT"] ||
   env["CLAUDE_PLUGIN_ROOT"] ||
   env["PLUGIN_ROOT"] ||
-  env["AGENT_PRISM_PLUGIN_ROOT"] ||
   resolve(RUNNER_DIR, "..");
 
 // --- execute handler -------------------------------------------------------

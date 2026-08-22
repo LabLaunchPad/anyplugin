@@ -17,7 +17,7 @@ beforeAll(async () => {
   await mkdir(join(root, "agents"), { recursive: true });
   await mkdir(join(root, "hooks"), { recursive: true });
   await mkdir(join(root, "knowledge", "agents"), { recursive: true });
-  await writeFile(join(root, "prism.plugin.yaml"), `name: demo-plugin
+  await writeFile(join(root, "anyplugin.plugin.yaml"), `name: demo-plugin
 version: 0.1.0
 description: Demo plugin for conformance tests
 skills: ["./skills/demo"]

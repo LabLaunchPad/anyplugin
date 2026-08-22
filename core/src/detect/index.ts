@@ -28,8 +28,7 @@ export function detectAgent(env: EnvLike, home: string): Detection {
   const signals: string[] = [];
 
   // 0. Our own self-marker (injected by the opencode shell.env shim / claude hooks).
-  // ANYPLUGIN_HOST is current; AGENT_PRISM_HOST read as a legacy alias.
-  const host = env["ANYPLUGIN_HOST"] ?? env["AGENT_PRISM_HOST"];
+  const host = env["ANYPLUGIN_HOST"];
   if (host === "opencode" || host === "claude-code" || host === "codex" || host === "antigravity") {
     return { agent: host, confidence: "marker", signals: ["ANYPLUGIN_HOST"] };
   }

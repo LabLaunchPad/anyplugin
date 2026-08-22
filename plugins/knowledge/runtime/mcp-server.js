@@ -19,7 +19,6 @@ function resolveBundle(explicit) {
   const candidates = [
     explicit,
     process.env["ANYPLUGIN_OKF_BUNDLE"],
-    process.env["AGENT_PRISM_OKF_BUNDLE"],
     join(SERVER_DIR, "..", "knowledge"),
     join(process.cwd(), "knowledge"),
   ].filter(Boolean);

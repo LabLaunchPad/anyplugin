@@ -164,7 +164,7 @@ function run(id: string, payload: unknown): Promise<{ code: number; stdout: stri
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [RUNNER, id], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, ANYPLUGIN_HOST: "opencode", AGENT_PRISM_HOST: "opencode" },
+      env: { ...process.env, ANYPLUGIN_HOST: "opencode" },
     });
     let stdout = "";
     let stderr = "";
@@ -194,7 +194,6 @@ async function maybeRun(hookName: string, payload: unknown): Promise<Record<stri
 export const ${shimConstName(name)}Plugin = async () => ({
   "shell.env": async (_input: unknown, output: { env: Record<string, string> }) => {
     output.env["ANYPLUGIN_HOST"] = "opencode";
-    output.env["AGENT_PRISM_HOST"] = "opencode"; // legacy alias
   },
   "tool.execute.before": async (input: Record<string, unknown>, output: { args: unknown }) => {
     const out = await maybeRun("tool.execute.before", { ...input, hook_event_name: "tool.execute.before" });
