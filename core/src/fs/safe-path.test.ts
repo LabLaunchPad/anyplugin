@@ -10,7 +10,7 @@ describe("assertSafeRelative (lexical boundary)", () => {
     const bad = [
       "", "..", "../", "a/../..", "a/b/../../../c", "..\\evil", "a\\..\\..\\b", "./../x",
       "/etc/passwd", "\\windows", "\\\\srv\\share", "//x/y", "C:\\x", "c:/x", "Z:\\..\\..",
-      `a${"\0"}b`, "a".repeat(4097), `${"x".repeat(256)}/ok`,
+      "a/C:x", "folder/C:", `a${"\0"}b`, "a".repeat(4097), `${"x".repeat(256)}/ok`,
     ];
     for (const input of bad) {
       expect(() => assertSafeRelative(input), JSON.stringify(input)).toThrow(SecurityError);
@@ -58,6 +58,18 @@ describe("resolveAuthorizedPath (filesystem boundary)", () => {
     }
     await expect(resolveAuthorizedPath(root, "link-out/secret.txt")).rejects.toThrow(SecurityError);
     await expect(resolveAuthorizedPath(root, "link-out")).rejects.toThrow(SecurityError);
+  });
+
+  it("throws SecurityError on a DANGLING symlink whose target is outside the root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "safepath-dangling-"));
+    const link = join(root, "dangling-link");
+    try {
+      await symlink(join(root, "..", "definitely-missing-target-xyz"), link, "file");
+    } catch {
+      return; // no symlink permission on this platform
+    }
+    await expect(resolveAuthorizedPath(root, "dangling-link")).rejects.toThrow(SecurityError);
+    await expect(resolveAuthorizedPath(root, "dangling-link/deep/file")).rejects.toThrow(SecurityError);
   });
 
   it("throws when the authorized root does not exist", async () => {

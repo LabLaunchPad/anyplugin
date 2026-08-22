@@ -83,6 +83,9 @@ export interface ParsedCommand<T extends CommandName> {
   positionals: string[];
 }
 
+/** Commands that accept exactly one optional positional (the bundle directory). */
+const POSITIONAL_COMMANDS = new Set<string>(["okf-validate", "okf-reindex"]);
+
 export function parseCliArgv<T extends CommandName>(argv: string[]): ParsedCommand<T> {
   const [rawCommand, ...rest] = argv;
   const command = rawCommand as T;
@@ -105,6 +108,15 @@ export function parseCliArgv<T extends CommandName>(argv: string[]): ParsedComma
   if (!checked.success) {
     const issues = checked.error.issues.map((i: z.ZodIssue) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
     throw new Error(`invalid arguments for ${String(command)}: ${issues}`);
+  }
+  // Positionals are part of the contract too: silently ignoring them (e.g.
+  // `build my-plugin` instead of `build --plugin my-plugin`) is a silent no-op.
+  if (POSITIONAL_COMMANDS.has(command)) {
+    if (parsed.positionals.length > 1) {
+      throw new Error(`invalid arguments for ${String(command)}: expected at most one bundle directory, got ${parsed.positionals.length} (${parsed.positionals.join(" ")})`);
+    }
+  } else if (parsed.positionals.length > 0) {
+    throw new Error(`invalid arguments for ${String(command)}: this command takes no positional arguments (got: ${parsed.positionals.join(" ")}) — use flags, see anyplugin help`);
   }
   return { command, values: checked.data, positionals: parsed.positionals };
 }

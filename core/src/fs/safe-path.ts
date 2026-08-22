@@ -1,4 +1,4 @@
-import { realpath } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
 import { isAbsolute, join, parse, resolve, sep } from "node:path";
 
 /**
@@ -53,6 +53,9 @@ export function assertSafeRelative(input: string, what = "relative path"): strin
     if (raw.length > MAX_SEGMENT) {
       throw new SecurityError(`unsafe ${what}: segment longer than ${MAX_SEGMENT} bytes`);
     }
+    if (/^[A-Za-z]:/u.test(raw)) {
+      throw new SecurityError(`unsafe ${what}: drive-letter segment ${JSON.stringify(input)}`);
+    }
     if (CONTROL_CHARS.test(raw)) {
       throw new SecurityError(`unsafe ${what}: control characters in ${JSON.stringify(input)}`);
     }
@@ -77,6 +80,16 @@ async function tryRealpath(p: string): Promise<string | null> {
     return await realpath(p);
   } catch {
     return null;
+  }
+}
+
+/** True when a directory entry exists (lstat follows nothing — dangling links count as existing). */
+async function entryExists(p: string): Promise<boolean> {
+  try {
+    await lstat(p);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -107,6 +120,12 @@ export async function resolveAuthorizedPath(authorizedRoot: string, untrustedInp
         throw new SecurityError(`path escape detected: ${JSON.stringify(untrustedInput)} resolves outside the authorized root ${authorizedRoot}`);
       }
       return candidate;
+    }
+    // realpath failed but the entry EXISTS ⇒ a link whose target is missing
+    // (or unreadable). Its target may live outside the root, and a writer
+    // would follow it — refuse instead of treating it as "not existing".
+    if (await entryExists(probe)) {
+      throw new SecurityError(`path escape detected: ${JSON.stringify(untrustedInput)} passes through an unresolvable link (${probe})`);
     }
     if (probe === parse(probe).root || probe.length <= 2) {
       throw new SecurityError(`unsafe path: authorized root does not exist: ${authorizedRoot}`);

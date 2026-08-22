@@ -40,4 +40,16 @@ describe("strict CLI contract (Pattern C)", () => {
   it("rejects unknown commands", () => {
     expect(() => parseCliArgv(["frobnicate", "--json"])).toThrow(/unknown command/);
   });
+
+  it("rejects positionals on commands that take none (no silent no-ops)", () => {
+    expect(() => parseCliArgv(["build", "my-plugin"])).toThrow(/takes no positional/);
+    expect(() => parseCliArgv(["detect", "xyz"])).toThrow(/takes no positional/);
+    expect(() => parseCliArgv(["install", "foo", "--dry-run"])).toThrow(/takes no positional/);
+  });
+
+  it("okf commands accept at most one bundle directory positional", () => {
+    expect(() => parseCliArgv(["okf-validate", "a", "b"])).toThrow(/at most one/);
+    const { positionals } = parseCliArgv(["okf-validate", "knowledge"]);
+    expect(positionals).toEqual(["knowledge"]);
+  });
 });

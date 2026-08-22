@@ -16,7 +16,7 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 - **Status**: `[FIXED & ERADICATED]` (commits `78994ec`, Phase-1 `feat: implement SafePath boundary`)
 - **Root Cause Analysis**: `process.argv[2]` was interpolated into `import()` candidate paths without any validation; any string (including traversal sequences) reached module resolution.
 - **Fix + Evidence**: hook ids locked to `^[a-zA-Z0-9_-]+$`; invalid ids exit 1 before any path use. E2E test feeds `../../etc/passwd`, `a/b`, `..\evil`, `hook id!` and asserts exit 1 + `invalid hook id` on stderr (CI `runtime-node-20` job re-verifies on a clean machine).
-- **Systemic Guardrail (class eradication)**: (1) *identifier-vs-path separation* — free-text ids that become module paths satisfy a strict identifier regex, never string interpolation; (2) the shared **SafePath boundary** (`core/src/fs/safe-path.ts`, spec §1.1) is now the single way untrusted input becomes a path — lexical rejection (traversal/absolute/UNC/drive/NUL/length) + two-sided realpath containment + `SecurityError` with no partial action; proven by a deterministic 10,000-input hostile corpus test (zero escapes) and a real symlink/junction escape test. Consumers: installer plan paths, manifest path fields, MCP bundle resolution. Runner keeps the stricter identifier rule (it selects module names, not paths).
+- **Systemic Guardrail (class eradication)**: (1) *identifier-vs-path separation* — free-text ids that become module paths satisfy a strict identifier regex, never string interpolation; (2) the shared **SafePath boundary** (`core/src/fs/safe-path.ts`, spec §1.1) is now the single way untrusted input becomes a path — lexical rejection (traversal/absolute/UNC/drive — including mid-path drive-letter segments /NUL/length) + two-sided realpath containment + `SecurityError` with no partial action; proven by a deterministic 10,000-input hostile corpus test (zero escapes), a real symlink/junction escape test, and (review-hardened) a **dangling-symlink refusal test** — a link whose target is missing is treated as an escape, never as "not existing". Consumers: installer plan paths, manifest path fields, MCP bundle resolution. Runner keeps the stricter identifier rule (it selects module names, not paths).
 
 ### SEC-02 — (definition pending from source audit) · Severity: TBD
 - **Status**: `[UNMAPPED]`
@@ -38,7 +38,7 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 - **Status**: `[FIXED & ERADICATED]` (commits `223af46`, Phase-1 `feat: strict CLI contract`)
 - **Root Cause Analysis**: code destructured only `{ values }` and read raw `argv` slices for positionals, so `okf-validate --json` treated `--json` as the bundle directory.
 - **Fix + Evidence**: positional parsing fixed first (mixed-args E2E); Phase 1 replaced ALL raw parsing with `cli/src/strict-args.ts` — one strict Zod schema per command (flags AND positionals), unknown flags and command-inappropriate flags are hard errors, `bin.ts` no longer calls `parseArgs` at all.
-- **Systemic Guardrail**: the contract lives in one module — a new flag must be added to a command's schema or every use of it fails; 7-case suite covers typo'd flags, misplaced flags, missing required flags, and unknown commands.
+- **Systemic Guardrail**: the contract lives in one module — a new flag must be added to a command's schema or every use of it fails; **positionals are part of the contract** (review-hardened): every command except `okf-validate`/`okf-reindex` rejects positional arguments outright, and the okf commands accept at most one — silent no-ops like `build my-plugin` are impossible. 9-case suite covers typo'd flags, misplaced flags, missing required flags, unknown commands, and positional misuse.
 
 ### BUG-03 — (definition pending from source audit) · Severity: TBD
 - **Status**: `[UNMAPPED]`
@@ -99,6 +99,7 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 - **CI had never run green** — duplicate pnpm version configuration; pnpm 11.14 incompatible with the advertised Node 20 cell. Fixed: matrix Ubuntu 22/24 + Windows 24 + dedicated `runtime-node-20` job (commits `abe73e2`, `6460c96`, `62e3add`). Guardrail: the green check itself (all 4 checks) + docs state the dev-vs-runtime Node contract.
 - **Tests mutated the repo** — dogfood suite regenerated the committed knowledge bundle in place, clobbering the curated root index. Fixed on a temp copy with a survival assertion (commit `259e270`). Guardrail: test asserts the curated index is untouched every run.
 - **`regenerateIndexes` never rendered `# Subdirectories`** and skipped dirs containing only subdirs. Fixed + nested-bundle test (commit `78994ec`).
+- **Known fail-closed surface (intentional, per spec §2.2)**: `codex@>=0.147` `mcp.http` is `UNKNOWN` in the capability matrix, so a plugin declaring an HTTP MCP server hard-fails for the codex target even though an http emission path exists — audit the codex TOML http shape and fill the matrix row to change this.
 
 ## Phase-1 queue (executes only after founder approval of `CORE-INVARIANTS-V2.md`)
 
