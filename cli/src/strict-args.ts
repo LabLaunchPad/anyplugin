@@ -14,7 +14,7 @@ const dir = z.string();
 export const CommandArgs = {
   init: z
     .object({
-      name: z.string({ required_error: "init requires --name (kebab-case plugin name)" }),
+      name: z.string({ error: "init requires --name (kebab-case plugin name)" }),
       dir: dir.optional(),
       json: flag.optional(),
     })
@@ -118,5 +118,5 @@ export function parseCliArgv<T extends CommandName>(argv: string[]): ParsedComma
   } else if (parsed.positionals.length > 0) {
     throw new Error(`invalid arguments for ${String(command)}: this command takes no positional arguments (got: ${parsed.positionals.join(" ")}) — use flags, see anyplugin help`);
   }
-  return { command, values: checked.data, positionals: parsed.positionals };
+  return { command, values: checked.data as z.infer<(typeof CommandArgs)[T]>, positionals: parsed.positionals };
 }
