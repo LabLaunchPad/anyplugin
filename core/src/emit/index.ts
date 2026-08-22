@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readdir, stat } from "node:fs/promises";
+import { mkdir, writeFile, readdir, stat, readFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 
 /** Shared filesystem helpers for adapters emitting native artifacts. */
@@ -42,6 +42,35 @@ export async function copyDir(src: string, dest: string): Promise<string[]> {
 
 export function toPosix(p: string): string {
   return p.split("\\").join("/");
+}
+
+/** Filesystem primitives shared by adapters and the install CLI. */
+export async function readText(path: string): Promise<string> {
+  return await readFile(path, "utf8");
+}
+
+export async function writeText(path: string, content: string): Promise<void> {
+  await ensureDir(dirname(path));
+  await writeFile(path, content, "utf8");
+}
+
+export async function removeTree(path: string): Promise<void> {
+  const { rm } = await import("node:fs/promises");
+  await rm(path, { recursive: true, force: true });
+}
+
+export async function listDir(path: string): Promise<{ name: string; isDir: boolean; abs: string }[]> {
+  const entries = await readdir(path, { withFileTypes: true });
+  return entries.map((e) => ({ name: e.name, isDir: e.isDirectory(), abs: join(path, e.name) }));
+}
+
+export async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function relPosix(from: string, to: string): string {

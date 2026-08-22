@@ -96,6 +96,9 @@ export async function emitCodex(plugin: ParsedPlugin, opts: EmitOptions): Promis
   // MCP: rendered as a config.toml fragment the CLI appends under [mcp_servers].
   const serverNames = Object.keys(plugin.mcp.servers);
   if (serverNames.length > 0) {
+    if (opts.mcpRuntimeAbsDir) {
+      for (const f of await copyDir(opts.mcpRuntimeAbsDir, join(out, "mcp"))) track(f);
+    }
     // Nested objects so smol-toml renders [mcp_servers.<name>] table headers, not quoted dotted keys.
     const serversTable: Record<string, unknown> = {};
     for (const [name, server] of Object.entries(plugin.mcp.servers)) {
@@ -127,6 +130,7 @@ export async function emitCodex(plugin: ParsedPlugin, opts: EmitOptions): Promis
       kind: "copy",
       srcRel: ".",
       destAbs: "{{CODEX_PLUGIN_DIR}}",
+      role: "root",
     },
   ];
   const configActions: InstallAction[] = serverNames.length

@@ -16,6 +16,8 @@ export interface EmitOptions {
   runnerRelPath: string;
   /** Absolute path to a compiled runner script copied into every emitted bundle. */
   runnerAbsPath: string;
+  /** Absolute dir of compiled MCP server runtime (containing server.js + deps), copied to <bundle>/mcp when the plugin declares servers. */
+  mcpRuntimeAbsDir?: string;
 }
 
 export interface EmittedBundle {
@@ -35,6 +37,10 @@ export interface CopyAction {
   srcRel: string;
   /** Absolute destination on the target machine. */
   destAbs: string;
+  /** "root" marks the action that installs the plugin's main directory (uninstall removes it). */
+  role?: "root";
+  /** For non-root actions: the single path segment appended to the whitelisted destination dir. */
+  destFile?: string;
 }
 
 export interface JsonMergeAction {

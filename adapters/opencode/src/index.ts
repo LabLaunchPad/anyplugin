@@ -74,6 +74,9 @@ export async function emitOpencode(plugin: ParsedPlugin, opts: EmitOptions): Pro
   const patch: Record<string, unknown> = {};
   const serverNames = Object.keys(plugin.mcp.servers);
   if (serverNames.length > 0) {
+    if (opts.mcpRuntimeAbsDir) {
+      for (const f of await copyDir(opts.mcpRuntimeAbsDir, join(out, "mcp"))) track(f);
+    }
     const mcp: Record<string, unknown> = {};
     for (const [name, server] of Object.entries(plugin.mcp.servers)) {
       if (server.transport === "http") {
@@ -96,16 +99,16 @@ export async function emitOpencode(plugin: ParsedPlugin, opts: EmitOptions): Pro
 
   const actions: InstallAction[] = [];
   if (bridge.length > 0) {
-    actions.push({ kind: "copy", srcRel: ".", destAbs: "{{PROJECT}}/.opencode/plugins/{{PLUGIN_NAME}}" });
+    actions.push({ kind: "copy", srcRel: ".", destAbs: "{{PROJECT}}/.opencode/plugins/{{PLUGIN_NAME}}", role: "root" });
   }
   for (const skillDir of plugin.skills) {
-    actions.push({ kind: "copy", srcRel: `skills/${basename(skillDir)}`, destAbs: `{{PROJECT}}/.opencode/skills/${basename(skillDir)}` });
+    actions.push({ kind: "copy", srcRel: `skills/${basename(skillDir)}`, destAbs: "{{PROJECT}}/.opencode/skills", destFile: basename(skillDir) });
   }
   for (const cmd of plugin.commands) {
-    actions.push({ kind: "copy", srcRel: `commands/${basename(cmd)}`, destAbs: `{{PROJECT}}/.opencode/commands/${basename(cmd)}` });
+    actions.push({ kind: "copy", srcRel: `commands/${basename(cmd)}`, destAbs: "{{PROJECT}}/.opencode/commands", destFile: basename(cmd) });
   }
   for (const agentFile of plugin.agents) {
-    actions.push({ kind: "copy", srcRel: `agent/${basename(agentFile)}`, destAbs: `{{PROJECT}}/.opencode/agent/${basename(agentFile)}` });
+    actions.push({ kind: "copy", srcRel: `agent/${basename(agentFile)}`, destAbs: "{{PROJECT}}/.opencode/agent", destFile: basename(agentFile) });
   }
   if (Object.keys(patch).length > 0) {
     actions.push({ kind: "json-merge", file: "{{PROJECT}}/opencode.json", patch });

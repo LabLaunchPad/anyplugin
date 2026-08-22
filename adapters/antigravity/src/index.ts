@@ -86,6 +86,9 @@ export async function emitAntigravity(plugin: ParsedPlugin, opts: EmitOptions): 
   const serverNames = Object.keys(plugin.mcp.servers);
   let mcpPatch: Record<string, unknown> | undefined;
   if (serverNames.length > 0) {
+    if (opts.mcpRuntimeAbsDir) {
+      for (const f of await copyDir(opts.mcpRuntimeAbsDir, join(out, "mcp"))) track(f);
+    }
     const mcpServers: Record<string, unknown> = {};
     for (const [name, server] of Object.entries(plugin.mcp.servers)) {
       if (server.transport === "http") {
@@ -107,7 +110,7 @@ export async function emitAntigravity(plugin: ParsedPlugin, opts: EmitOptions): 
   }
 
   const actions: InstallAction[] = [
-    { kind: "copy", srcRel: `plugins/${plugin.name}`, destAbs: "{{PROJECT}}/.agents/plugins/{{PLUGIN_NAME}}" },
+    { kind: "copy", srcRel: `plugins/${plugin.name}`, destAbs: "{{PROJECT}}/.agents/plugins/{{PLUGIN_NAME}}", role: "root" },
   ];
   const configActions: InstallAction[] = mcpPatch
     ? [{ kind: "json-merge", file: "{{PROJECT}}/.agents/mcp_config.json", patch: mcpPatch }]

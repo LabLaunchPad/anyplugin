@@ -1,0 +1,24 @@
+name: agent-prism-knowledge
+version: 0.1.0
+description: OKF v0.2 knowledge layer for every coding agent — read, capture, and validate a shared project knowledge bundle (index/read/search via MCP, session hooks, curator subagent).
+displayName: Agent Prism Knowledge
+author:
+  name: agent-prism
+license: MIT
+keywords: [okf, knowledge, memory, cross-agent]
+skills: ["./skills/okf-reader"]
+agents: ["./agents/knowledge-curator.md"]
+hooks:
+  - id: okf-session-start
+    event: session-start
+    handler: ./hooks/session-start.mjs
+  - id: okf-turn-stop
+    event: turn-stop
+    handler: ./hooks/turn-stop.mjs
+mcp:
+  servers:
+    okf:
+      transport: stdio
+      command: node
+      args: ["{{PLUGIN_ROOT}}/mcp/server.js"]
+knowledge: ./knowledge

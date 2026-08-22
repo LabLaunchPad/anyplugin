@@ -89,18 +89,21 @@ export async function emitClaude(plugin: ParsedPlugin, opts: EmitOptions): Promi
 
   const serverNames = Object.keys(plugin.mcp.servers);
   if (serverNames.length > 0) {
+    if (opts.mcpRuntimeAbsDir) {
+      for (const f of await copyDir(opts.mcpRuntimeAbsDir, join(out, "mcp"))) track(f);
+    }
     const mcp: Record<string, unknown> = {};
     for (const [name, server] of Object.entries(plugin.mcp.servers)) {
       if (server.transport === "http") {
         mcp[name] = {
           type: "http",
-          url: server.url ?? "",
+          url: substRoot(server.url ?? ""),
           ...(Object.keys(server.headers).length ? { headers: server.headers } : {}),
         };
       } else {
         mcp[name] = {
-          command: server.command ?? "node",
-          args: server.args,
+          command: substRoot(server.command ?? "node"),
+          args: server.args.map((a) => substRoot(a)),
           ...(Object.keys(server.env).length ? { env: server.env } : {}),
         };
       }
@@ -109,7 +112,7 @@ export async function emitClaude(plugin: ParsedPlugin, opts: EmitOptions): Promi
   }
 
   const actions: InstallAction[] = [
-    { kind: "copy", srcRel: ".", destAbs: "{{CLAUDE_PLUGINS_DIR}}/{{PLUGIN_NAME}}" },
+    { kind: "copy", srcRel: ".", destAbs: "{{CLAUDE_PLUGINS_DIR}}/{{PLUGIN_NAME}}", role: "root" },
   ];
   return {
     agent: "claude-code",
@@ -136,6 +139,15 @@ async function copyOne(src: string, dest: string): Promise<string> {
   await mkdir(dirname(dest), { recursive: true });
   await copyFile(src, dest);
   return dest;
+}
+
+/**
+ * Canonical manifests write plugin-relative paths as {{PLUGIN_ROOT}}/...
+ * Claude Code has native ${CLAUDE_PLUGIN_ROOT} interpolation in .mcp.json;
+ * other adapters keep the token and the install CLI substitutes absolute paths.
+ */
+export function substRoot(value: string): string {
+  return value.split("{{PLUGIN_ROOT}}").join("${CLAUDE_PLUGIN_ROOT}");
 }
 
 async function writeIfChanged2(path: string, content: string): Promise<string> {
