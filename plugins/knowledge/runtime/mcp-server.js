@@ -8,14 +8,44 @@
  * Bundle resolution: bundle arg > ANYPLUGIN_OKF_BUNDLE > <server>/../knowledge > <cwd>/knowledge
  */
 import { createRequire } from "node:module";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, dirname, relative, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync, realpathSync } from "node:fs";
+import { join, dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * SafePath boundary (spec §1.1, self-contained inline — the runtime ships no
+ * dependencies): a bundle is served only when it exists AND its realpath is
+ * one of, or inside one of, the authorized roots (the operator-configured
+ * bundle, the plugin's own bundled knowledge, or the working directory).
+ */
+function authorizedRoots() {
+  const candidates = [
+    process.env["ANYPLUGIN_OKF_BUNDLE"],
+    join(SERVER_DIR, "..", "knowledge"),
+    process.cwd(),
+  ].filter(Boolean);
+  const roots = [];
+  for (const c of candidates) {
+    try {
+      if (existsSync(c)) roots.push(realpathSync(c));
+    } catch {
+      /* unreadable root — skip */
+    }
+  }
+  return roots;
+}
+
+function isUnder(path, root) {
+  if (path === root) return true;
+  const norm = process.platform === "win32" ? (p) => p.toLowerCase() : (p) => p;
+  return norm(path).startsWith(norm(root.endsWith(sep) ? root : root + sep));
+}
+
 function resolveBundle(explicit) {
+  const roots = authorizedRoots();
   const candidates = [
     explicit,
     process.env["ANYPLUGIN_OKF_BUNDLE"],
@@ -23,7 +53,9 @@ function resolveBundle(explicit) {
     join(process.cwd(), "knowledge"),
   ].filter(Boolean);
   for (const c of candidates) {
-    if (existsSync(c)) return resolve(c);
+    if (!existsSync(c)) continue;
+    const real = realpathSync(c);
+    if (roots.some((r) => isUnder(real, r))) return real;
   }
   return null;
 }

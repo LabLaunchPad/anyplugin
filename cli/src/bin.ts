@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { parseArgs } from "node:util";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { statSync } from "node:fs";
@@ -19,6 +18,7 @@ import {
 } from "./index.js";
 import type { AgentId } from "@lablaunchpad/core";
 import { ALL_AGENTS, removeTree } from "@lablaunchpad/core";
+import { parseCliArgv, type CommandName } from "./strict-args.js";
 
 const HELP = `anyplugin — agent-agnostic plugin development for Claude Code, OpenCode, Codex, Antigravity
 
@@ -64,28 +64,18 @@ interface ParsedFlags {
 }
 
 async function main(): Promise<void> {
-  const [command, ...rest] = process.argv.slice(2);
-  if (!command || command === "help" || command === "--help" || command === "-h") {
+  const [rawCommand] = process.argv.slice(2);
+  if (!rawCommand || rawCommand === "help" || rawCommand === "--help" || rawCommand === "-h") {
     process.stdout.write(HELP);
     return;
   }
-  const { values, positionals } = parseArgs({
-    args: rest,
-    options: {
-      plugin: { type: "string" },
-      out: { type: "string" },
-      agents: { type: "string" },
-      home: { type: "string" },
-      project: { type: "string" },
-      "dry-run": { type: "boolean" },
-      runner: { type: "string" },
-      "mcp-runtime": { type: "string" },
-      name: { type: "string" },
-      dir: { type: "string" },
-      json: { type: "boolean" },
-    },
-    allowPositionals: true,
-  }) as { values: ParsedFlags; positionals: string[] };
+  // Strict CLI contract: every command parses through its Zod schema
+  // (flags AND positionals); unknown flags and misplaced flags are errors.
+  const { command, values, positionals } = parseCliArgv(process.argv.slice(2)) as unknown as {
+    command: CommandName;
+    values: ParsedFlags;
+    positionals: string[];
+  };
 
   const home = values.home ?? homedir();
   const projectDir = resolve(values.project ?? process.cwd());
@@ -210,6 +200,7 @@ async function main(): Promise<void> {
     }
   }
 
+  // strict-args rejects unknown commands before we get here
   process.stderr.write(`unknown command: ${command}\n\n${HELP}`);
   process.exitCode = 1;
 }

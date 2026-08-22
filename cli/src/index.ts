@@ -2,6 +2,7 @@ import {
   type AgentId,
   type EmittedBundle,
   type InstallPlan,
+  type ParsedPlugin,
   loadPluginManifest,
   detectAgent,
   detectInstalledAgents,
@@ -15,7 +16,14 @@ import {
   removeTree,
   listDir,
   pathExists,
+  assertSafeRelative,
+  resolveAuthorizedPath,
+  type Capability,
+  supports,
+  rationale,
+  DEFAULT_VARIANTS,
 } from "@lablaunchpad/core";
+import { SecurityError } from "@lablaunchpad/core";
 import { emitClaude } from "@lablaunchpad/adapter-claude";
 import { emitOpencode } from "@lablaunchpad/adapter-opencode";
 import { emitCodex } from "@lablaunchpad/adapter-codex";
@@ -39,6 +47,50 @@ export interface BuildOptions {
   runnerAbsPath: string;
   runnerRelPath?: string;
   mcpRuntimeAbsDir?: string;
+  /** Capability-matrix variant pin per agent (default: DEFAULT_VARIANTS). */
+  variants?: Partial<Record<AgentId, string>>;
+}
+
+/** Derive the capabilities a manifest REQUIRES (spec §2.2 negotiation input). */
+function requiredCapabilities(plugin: ParsedPlugin): Capability[] {
+  const caps = new Set<Capability>();
+  for (const hook of plugin.hooks) caps.add(`hooks.${hook.event}` as Capability);
+  for (const server of Object.values(plugin.mcp.servers)) {
+    caps.add(server.transport === "http" ? "mcp.http" : "mcp.stdio");
+  }
+  if (plugin.skills.length > 0) caps.add("skills");
+  if (plugin.commands.length > 0) caps.add("commands");
+  if (plugin.agents.length > 0) caps.add("agents.subagent");
+  if (plugin.knowledge !== undefined) caps.add("knowledge");
+  return [...caps];
+}
+
+/**
+ * Capability gate (spec §2.2): UNSUPPORTED and UNKNOWN are hard build errors
+ * (fail closed); DEGRADED emits the documented fallback plus a build warning —
+ * never silence.
+ */
+function enforceCapabilities(agent: AgentId, variant: string, caps: Capability[]): string[] {
+  const warnings: string[] = [];
+  for (const cap of caps) {
+    const level = supports(agent, variant, cap);
+    if (level === "UNSUPPORTED") {
+      throw new Error(
+        `build for ${agent}@${variant} aborted: capability "${cap}" is UNSUPPORTED (${rationale(agent, variant, cap)}). ` +
+          `Drop this capability for the target, drop the target, or accept a documented DEGRADED path.`,
+      );
+    }
+    if (level === "UNKNOWN") {
+      throw new Error(
+        `build for ${agent}@${variant} aborted: support for capability "${cap}" is UNKNOWN — failing closed. ` +
+          `Pin a known target variant or extend the capability matrix (core/src/capabilities/matrix.ts).`,
+      );
+    }
+    if (level === "DEGRADED") {
+      warnings.push(`capability DEGRADED on ${agent}@${variant}: ${cap} — ${rationale(agent, variant, cap)}`);
+    }
+  }
+  return warnings;
 }
 
 /** Emit native bundles for every (or selected) agent. */
@@ -46,6 +98,7 @@ export async function buildAll(opts: BuildOptions): Promise<Record<string, Emitt
   const plugin = await loadPluginManifest(opts.pluginRoot);
   const agents = opts.agents ?? [...ALL_AGENTS];
   const runnerRelPath = opts.runnerRelPath ?? "runner.js";
+  const caps = requiredCapabilities(plugin);
   const common = {
     pluginRoot: opts.pluginRoot,
     runnerRelPath,
@@ -54,11 +107,16 @@ export async function buildAll(opts: BuildOptions): Promise<Record<string, Emitt
   };
   const results: Record<string, EmittedBundle> = {};
   for (const agent of agents) {
+    const variant = opts.variants?.[agent] ?? DEFAULT_VARIANTS[agent];
+    const warnings = enforceCapabilities(agent, variant, caps);
     const outDir = join(opts.outRoot, agent);
-    if (agent === "claude-code") results[agent] = await emitClaude(plugin, { ...common, outDir });
-    else if (agent === "opencode") results[agent] = await emitOpencode(plugin, { ...common, outDir });
-    else if (agent === "codex") results[agent] = await emitCodex(plugin, { ...common, outDir });
-    else if (agent === "antigravity") results[agent] = await emitAntigravity(plugin, { ...common, outDir });
+    let bundle: EmittedBundle;
+    if (agent === "claude-code") bundle = await emitClaude(plugin, { ...common, outDir });
+    else if (agent === "opencode") bundle = await emitOpencode(plugin, { ...common, outDir });
+    else if (agent === "codex") bundle = await emitCodex(plugin, { ...common, outDir });
+    else bundle = await emitAntigravity(plugin, { ...common, outDir });
+    bundle.warnings.push(...warnings);
+    results[agent] = bundle;
   }
   return results;
 }
@@ -124,15 +182,13 @@ export function validatePluginName(name: string): string {
 }
 
 /**
- * Relative paths from install plans must be plain relative segments:
- * letters, digits, dot, dash, underscore, slash. No traversal, no drive
- * letters, no backslashes, not absolute.
+ * Relative paths from install plans pass the SafePath boundary (spec §1.1):
+ * lexical rejection of traversal/absolute/UNC/drive forms, then containment.
+ * `.` is the legitimate whole-bundle root copy (role: "root") and is allowed.
  */
 export function validateRelPath(rel: string, what: string): string {
-  if (!/^[A-Za-z0-9._\-/]+$/.test(rel) || rel.indexOf("..") >= 0 || rel.startsWith("/")) {
-    throw new Error(`unsafe relative path in ${what}: ${JSON.stringify(rel)}`);
-  }
-  return rel;
+  if (rel === ".") return rel;
+  return assertSafeRelative(rel, `relative path in ${what}`);
 }
 
 /** Per-agent root where the emitted bundle physically lands after install. */
@@ -181,10 +237,10 @@ function resolveFileTemplate(
 
 /** Single path segment: one directory/file name, no separators, no traversal. */
 export function validateSegment(segment: string, what: string): string {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(segment) || segment === ".." || segment === ".") {
-    throw new Error(`unsafe path segment in ${what}: ${JSON.stringify(segment)}`);
+  if (segment.includes("/") || segment.includes("\\")) {
+    throw new SecurityError(`unsafe path segment in ${what}: separators are not allowed (${JSON.stringify(segment)})`);
   }
-  return segment;
+  return assertSafeRelative(segment, `path segment in ${what}`);
 }
 
 /** Destination for a copy action: root role → installed root; otherwise template dir + validated segment. */
@@ -271,6 +327,7 @@ export async function executeInstall(
   for (const action of bundle.install.actions) {
     if (action.kind === "copy") {
       const srcRel = validateRelPath(action.srcRel, `${agent} copy srcRel`);
+      if (srcRel !== ".") await resolveAuthorizedPath(bundle.dir, srcRel); // containment: src lives inside the emitted bundle
       const dest = copyDest(action, agent, ctx, opts.pluginName);
       if (opts.dryRun) {
         notes.push(`would copy ${srcRel} → ${dest}`);
@@ -463,7 +520,8 @@ export async function executeUninstall(
     // through the install plan; merge files were handled above.
     for (const action of bundle.install.actions) {
       if (action.kind !== "copy") continue;
-      validateRelPath(action.srcRel, `${agent} uninstall srcRel`);
+      const srcRel = validateRelPath(action.srcRel, `${agent} uninstall srcRel`);
+      if (srcRel !== ".") await resolveAuthorizedPath(bundle.dir, srcRel);
       const dest = copyDest(action, agent, ctx, opts.pluginName);
       if (await pathExists(dest)) {
         if (opts.dryRun) touched.push(`would remove ${dest}`);
@@ -480,7 +538,8 @@ export async function executeUninstall(
   // truncates, or reformats a config file.
   for (const action of bundle.install.actions) {
     if (action.kind === "copy") {
-      validateRelPath(action.srcRel, `${agent} uninstall srcRel`);
+      const srcRel = validateRelPath(action.srcRel, `${agent} uninstall srcRel`);
+      if (srcRel !== ".") await resolveAuthorizedPath(bundle.dir, srcRel);
       const dest = copyDest(action, agent, ctx, opts.pluginName);
       if (await pathExists(dest)) {
         if (opts.dryRun) touched.push(`would remove ${dest}`);

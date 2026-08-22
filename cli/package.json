@@ -16,6 +16,7 @@
     "@lablaunchpad/adapter-claude": "workspace:*",
     "@lablaunchpad/adapter-opencode": "workspace:*",
     "@lablaunchpad/adapter-codex": "workspace:*",
-    "@lablaunchpad/adapter-antigravity": "workspace:*"
+    "@lablaunchpad/adapter-antigravity": "workspace:*",
+    "zod": "^3.24.0"
   }
 }
