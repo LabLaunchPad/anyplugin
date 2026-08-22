@@ -357,9 +357,21 @@ export async function regenerateIndexes(root: string): Promise<string[]> {
     list.push(doc);
     byDir.set(dir, list);
   }
-  const dirs = [...byDir.keys()].sort((a, b) => b.length - a.length); // deepest first
+  // Index EVERY directory on the path of any document — a dir holding only
+  // subdirectories (e.g. the root) still needs an index.md listing them.
+  const dirSet = new Set<string>(byDir.keys());
+  if (bundle.documents.length > 0) dirSet.add("");
+  for (const doc of bundle.documents) {
+    let acc = "";
+    for (const part of dirname(doc.id).split("/")) {
+      if (part === "." || part === "") break;
+      acc = acc ? `${acc}/${part}` : part;
+      dirSet.add(acc);
+    }
+  }
+  const dirs = [...dirSet].sort((a, b) => b.length - a.length); // deepest first
   for (const dir of dirs) {
-    const docs = byDir.get(dir)!;
+    const docs = byDir.get(dir) ?? [];
     const sections = new Map<string, OkfDocument[]>();
     for (const d of docs) {
       const type = String(d.frontmatter["type"] ?? "Unknown");
@@ -368,15 +380,22 @@ export async function regenerateIndexes(root: string): Promise<string[]> {
       sections.set(type, list);
     }
     let body = "";
-    const subdirs = new Set<string>();
-    for (const d of docs) {
-      const dir2 = dirname(d.id);
-      if (dir2 !== dir) subdirs.add(dir2.slice(dir.length + 1));
+    // Subdirectories must be derived from the WHOLE bundle: grouping `docs`
+    // (current dir only) can never see children, since dirname(d.id) === dir
+    // holds for every doc in it.
+    const prefix = dir === "" ? "" : dir + "/";
+    const subdirSet = new Set<string>();
+    for (const doc of bundle.documents) {
+      if (!doc.id.startsWith(prefix)) continue;
+      const rest = doc.id.slice(prefix.length);
+      const slash = rest.indexOf("/");
+      if (slash > 0) subdirSet.add(rest.slice(0, slash));
     }
-    if (dir === "" && subdirs.size > 0) {
+    const subdirs = [...subdirSet].sort();
+    if (subdirs.length > 0) {
       body += "# Subdirectories\n\n";
-      for (const s of [...subdirs].sort()) {
-        const childDocs = docs.filter((d) => dirname(d.id) === `${dir === "" ? "" : dir + "/"}${s}`);
+      for (const s of subdirs) {
+        const childDocs = bundle.documents.filter((d) => d.id.startsWith(`${prefix}${s}/`));
         const desc =
           childDocs.length === 1
             ? String(childDocs[0]!.frontmatter["description"] ?? `Contains ${childDocs.length} entries.`)

@@ -16,8 +16,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const RUNNER_DIR = dirname(fileURLToPath(import.meta.url));
 const hookId = process.argv[2];
-if (!hookId) {
-  console.error("usage: node runner.js <hook-id>");
+// The hook id becomes part of a module import path — lock it to a plain
+// identifier so a hostile/typo'd id can never traverse the filesystem.
+if (!hookId || !/^[a-zA-Z0-9_-]+$/.test(hookId)) {
+  process.stderr.write("anyplugin runner: invalid hook id\n");
   process.exit(1);
 }
 
