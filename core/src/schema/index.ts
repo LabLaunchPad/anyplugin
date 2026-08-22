@@ -2,6 +2,7 @@ import { z } from "zod";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
+import { assertSafeRelative } from "../fs/safe-path.js";
 
 /** Canonical hook events — the platform-neutral names every adapter maps FROM. */
 export const CanonicalEvent = z.enum([
@@ -108,5 +109,13 @@ export function parsePluginManifest(raw: unknown): ParsedPlugin {
   }
   const extra: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
   for (const key of Object.keys(known.data)) delete extra[key];
-  return { ...known.data, extra };
+  const plugin: ParsedPlugin = { ...known.data, extra };
+  // SafePath boundary (spec §1.1): every manifest-declared path is lexically
+  // validated relative to the plugin root before any adapter or installer uses it.
+  for (const s of plugin.skills) assertSafeRelative(s, "manifest skills[] entry");
+  for (const c of plugin.commands) assertSafeRelative(c, "manifest commands[] entry");
+  for (const a of plugin.agents) assertSafeRelative(a, "manifest agents[] entry");
+  if (plugin.knowledge !== undefined) assertSafeRelative(plugin.knowledge, "manifest knowledge path");
+  for (const hook of plugin.hooks) assertSafeRelative(hook.handler, `manifest hooks[${hook.id}].handler`);
+  return plugin;
 }

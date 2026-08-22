@@ -6,6 +6,7 @@ All notable changes to AnyPlugin are documented here. Format follows [Keep a Cha
 
 ### Added
 
+- **SafePath boundary** (`core/src/fs/safe-path.ts`, spec `CORE-INVARIANTS-V2.md` §1.1): the single way untrusted input becomes a filesystem path — lexical rejection (traversal, absolute/UNC/drive forms, NUL, oversized segments) plus two-sided realpath containment, throwing `SecurityError` with no partial action. Verified by a deterministic 10,000-input hostile corpus (zero escapes) and a real symlink/junction escape test. Installer plan paths, manifest path fields, and the MCP server's bundle resolution all flow through it (the MCP runtime carries an inline mirror because it ships dependency-free); the old scattered regex locks were deleted.
 - **Transactional install journal** — every config edit records pre-install backup, pre/post SHA-256 hashes, and owned keys in `.anyplugin-state.json` inside the installed plugin root. `uninstall` restores exact pre-install bytes and **aborts with a descriptive error instead of overwriting** when a config was modified after install; `uninstall --dry-run` reports conflicts without touching anything. Reinstall→uninstall cycles never resurrect stale marker blocks.
 - `anyplugin init --name NAME [--dir DIR]` — scaffold a new canonical plugin from `templates/starter` (validated kebab-case name, refuses existing targets).
 - `--json` machine-readable output for every CLI command (detect, build, install, uninstall, okf-validate, okf-reindex, init).

@@ -13,10 +13,10 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 ## Security (Layer 1: Trust)
 
 ### SEC-01 — Arbitrary file load via unvalidated hook id in the universal runner · Severity: P0
-- **Status**: `[FIXED & ERADICATED]` (commit `78994ec`)
+- **Status**: `[FIXED & ERADICATED]` (commits `78994ec`, Phase-1 `feat: implement SafePath boundary`)
 - **Root Cause Analysis**: `process.argv[2]` was interpolated into `import()` candidate paths without any validation; any string (including traversal sequences) reached module resolution.
 - **Fix + Evidence**: hook ids locked to `^[a-zA-Z0-9_-]+$`; invalid ids exit 1 before any path use. E2E test feeds `../../etc/passwd`, `a/b`, `..\evil`, `hook id!` and asserts exit 1 + `invalid hook id` on stderr (CI `runtime-node-20` job re-verifies on a clean machine).
-- **Systemic Guardrail (class eradication)**: (1) *identifier-vs-path separation* — free-text ids that become module paths must satisfy a strict identifier regex, never string interpolation; (2) hostile-input regression test embedded in CI, not just the unit suite. Phase 1 Pattern A extends the class guardrail to *path-shaped* inputs via `resolveAuthorizedPath` (see `CORE-INVARIANTS-V2.md` §1.1).
+- **Systemic Guardrail (class eradication)**: (1) *identifier-vs-path separation* — free-text ids that become module paths satisfy a strict identifier regex, never string interpolation; (2) the shared **SafePath boundary** (`core/src/fs/safe-path.ts`, spec §1.1) is now the single way untrusted input becomes a path — lexical rejection (traversal/absolute/UNC/drive/NUL/length) + two-sided realpath containment + `SecurityError` with no partial action; proven by a deterministic 10,000-input hostile corpus test (zero escapes) and a real symlink/junction escape test. Consumers: installer plan paths, manifest path fields, MCP bundle resolution. Runner keeps the stricter identifier rule (it selects module names, not paths).
 
 ### SEC-02 — (definition pending from source audit) · Severity: TBD
 - **Status**: `[UNMAPPED]`
@@ -63,10 +63,10 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 - **Systemic Guardrail**: journal is the single recovery mechanism (destructive re-derivation deleted); conflict-abort + reversibility are mandatory test columns for any new installer destination (AGENTS.md rule, PR template checklist).
 
 ### AP-002 — Path traversal surface in installer paths · Severity: P0
-- **Status**: `[FIXED & ERADICATED]` (pre-existing hardening; formal utility queued Phase 1)
+- **Status**: `[FIXED & ERADICATED]` (Phase-1 `feat: implement SafePath boundary`)
 - **Root Cause Analysis**: install plans carry relative paths that become filesystem destinations.
-- **Fix + Evidence**: destinations resolve ONLY through the `TEMPLATES` whitelist plus `validatePluginName` / `validateRelPath` / `validateSegment` regex locks (no `..`, no absolute, no drive letters, no backslashes); guard tests exercise traversal payloads.
-- **Systemic Guardrail**: whitelist-first construction (paths are never composed from untrusted text). Phase 1 replaces the per-call regex locks with one shared `resolveAuthorizedPath` (see spec §1.1) so the invariant lives in one audited place.
+- **Fix + Evidence**: destinations resolve ONLY through the `TEMPLATES` whitelist; every plan-relative source path and name segment now flows through the shared SafePath boundary (`assertSafeRelative` / `resolveAuthorizedPath`) — the local regex locks were **deleted, not duplicated**; copy sources additionally prove containment inside the emitted bundle directory via realpath.
+- **Systemic Guardrail**: whitelist-first construction (paths never composed from untrusted text) + the single shared SafePath utility; the 10k hostile corpus and guard tests block the class wholesale.
 
 ### AP-003 — (definition pending) · Severity: TBD · **Status**: `[UNMAPPED]`
 
@@ -81,7 +81,10 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 - **Status**: `[PARTIALLY ERADICATED]` — documentation drift is `[FIXED & ERADICATED]` (commit `add2868`): the drift guard now checks each native name in the **correct per-agent table column** and requires dropped events to be documented as `—`. True semantic negotiation (which mapping is `DEGRADED` vs `NATIVE`) is `[SPEC'D — QUEUED PHASE 1]` via the Capability Matrix.
 
 ### AP-008 — MCP server resolves caller-supplied bundle paths without a boundary · Severity: P1
-- **Status**: `[OPEN]` — mitigation notes: `mcp-server.js` `resolveBundle` accepts `bundle` args (MCP tool input, host-agent side) and `ANYPLUGIN_OKF_BUNDLE`; paths are read-only operations. Phase 1 routes them through `resolveAuthorizedPath` anchored at the configured roots.
+- **Status**: `[FIXED & ERADICATED]` (Phase-1 `feat: implement SafePath boundary`)
+- **Root Cause Analysis**: `resolveBundle` accepted any existing directory from tool args/env/cwd without an authorization boundary.
+- **Fix + Evidence**: the dependency-free runtime now carries an inline SafePath guard — a bundle is served only when its realpath equals or lies inside an authorized root (operator-configured `ANYPLUGIN_OKF_BUNDLE`, the plugin's own bundled knowledge, or the working directory). Outside paths are refused, not read.
+- **Systemic Guardrail**: authorized-root containment as an inline mirror of `core/src/fs/safe-path.ts` (the runtime ships no workspace deps by design — the two implementations are tied by spec §1.1 and covered by the E2E MCP suite).
 
 ### AP-009 — Uninstall destroys user edits made after install · Severity: P0
 - **Status**: `[FIXED & ERADICATED]` (commit `223af46`) — see AP-001; the conflict path throws a descriptive abort listing offending files, preserves edits byte-exact, and `--dry-run` surfaces `CONFLICT:` lines without touching anything. (Supersedes the earlier reviewer finding that the json-merge dry-run had false negatives — that code path was replaced wholesale.)
@@ -98,6 +101,6 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 
 ## Phase-1 queue (executes only after founder approval of `CORE-INVARIANTS-V2.md`)
 
-1. `feat: implement SafePath boundary [SEC-01/AP-002/AP-008 eradicated]` — `core/src/fs/safe-path.ts`, property-based hostile-path test, refactor runner/MCP/installer/manifest-path validation onto it.
+1. ~~`feat: implement SafePath boundary [SEC-01/AP-002/AP-008 eradicated]`~~ — **DONE**: `core/src/fs/safe-path.ts`, 10k-input hostile corpus + symlink-escape tests, runner/MCP/installer/manifest-path validation unified on it.
 2. `feat: strict CLI contract [BUG-02 class eradicated]` — `cli/src/strict-args.ts`, per-command Zod schemas, delete raw parseArgs usage.
-3. `feat: capability negotiation matrix [AP-004/AP-007 eradicated]` — `core/src/capabilities/matrix.ts`, OpenCode V2 native emission + conformance test, fail-closed UNKNOWN.
+3. `feat: capability negotiation matrix [AP-004/AP-007 eradicated]` — `core/src/capabilities/matrix.ts`, OpenCode V2 rows with fail-closed UNKNOWN, UNSUPPORTED = build error. (V2-*native emission* stays `[OPEN]` — requires a dedicated OpenCode v2 plugin-API audit; the matrix already kills the silent-breakage class by failing builds loudly.)

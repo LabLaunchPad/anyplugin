@@ -27,6 +27,7 @@ pnpm clean                       # remove all dist/ output
 | OKF v0.2 parse/serialize/validate | `core/src/okf/index.ts` |
 | Installer (path whitelist, marker blocks, reversibility) | `cli/src/index.ts` |
 | Install journal (transactional state, conflict detection) | `cli/src/journal.ts` |
+| SafePath boundary (the ONLY way untrusted input becomes a path) | `core/src/fs/safe-path.ts` — spec `CORE-INVARIANTS-V2.md` §1.1 |
 | CLI entry (commands, flags, --json) | `cli/src/bin.ts` |
 | Universal hook runner (self-contained) | `plugins/knowledge/runtime/runner.js` |
 | MCP server (dependency-free stdio) | `plugins/knowledge/runtime/mcp-server.js` |
