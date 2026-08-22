@@ -7,7 +7,7 @@ AnyPlugin compiles one canonical plugin manifest (`anyplugin.plugin.yaml`) into 
 ```bash
 pnpm install --frozen-lockfile   # pnpm 11, Node >= 20
 pnpm build                       # tsc -b across the workspace (ALSO the typecheck — there is no separate lint)
-pnpm test                        # vitest run — 75 tests incl. runtime E2E (spawns runner.js, mcp-server.js, cli/dist/bin.js)
+pnpm test                        # vitest run — 86 tests incl. runtime E2E (spawns runner.js, mcp-server.js, cli/dist/bin.js)
 pnpm clean                       # remove all dist/ output
 ```
 
@@ -26,6 +26,7 @@ pnpm clean                       # remove all dist/ output
 | Agent/environment detection | `core/src/detect/index.ts` |
 | OKF v0.2 parse/serialize/validate | `core/src/okf/index.ts` |
 | Installer (path whitelist, marker blocks, reversibility) | `cli/src/index.ts` |
+| Install journal (transactional state, conflict detection) | `cli/src/journal.ts` |
 | CLI entry (commands, flags, --json) | `cli/src/bin.ts` |
 | Universal hook runner (self-contained) | `plugins/knowledge/runtime/runner.js` |
 | MCP server (dependency-free stdio) | `plugins/knowledge/runtime/mcp-server.js` |
@@ -62,8 +63,8 @@ research/   audit working area (clones of official repos)
 ## Installer safety rules (do not weaken)
 
 - Destination paths come ONLY from the `TEMPLATES` whitelist in `cli/src/index.ts` plus validated segments (`validatePluginName`, `validateRelPath`, `validateSegment`). Never build paths by token substitution.
-- Config edits are marker-delimited (`# BEGIN/END anyplugin:<name>` for TOML, `<!-- anyplugin:<name> begin/end -->` for markdown); JSON merges are key-reverted on uninstall. `{{PLUGIN_ROOT}}` substitution happens in VALUES only, never in paths.
-- Any new install destination requires: a new TEMPLATES entry + tests proving uninstall fully reverses it.
+- Config edits are marker-delimited (`# BEGIN/END anyplugin:<name>` for TOML, `<!-- anyplugin:<name> begin/end -->` for markdown) and journaled in `.anyplugin-state.json` (pre-install backup + pre/post hashes + owned keys — see `cli/src/journal.ts`). Uninstall restores exact pre-install bytes and MUST abort with a descriptive error when a journaled file changed after install. Install refuses to merge into unparseable JSON; `stripBlock` throws on an unterminated marker block instead of deleting content. `{{PLUGIN_ROOT}}` substitution happens in VALUES only, never in paths.
+- Any new install destination requires: a new TEMPLATES entry + tests proving uninstall fully reverses it (including the conflict-abort path).
 
 ## Conventions
 

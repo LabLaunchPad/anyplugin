@@ -36,6 +36,14 @@ function runNode(args: string[], opts: { input?: string; env?: Record<string, st
 
 /** The universal runner is the ONE process all four agents execute. */
 describe("runner.js E2E (real process, real handler)", () => {
+  it("rejects a path-traversal hook id without attempting to load it", async () => {
+    for (const badId of ["../../etc/passwd", "a/b", "..\\evil", "hook id!"]) {
+      const r = await runNode([RUNNER, badId], { input: "{}" });
+      expect(r.code, `hookId ${badId}`).toBe(1);
+      expect(r.stderr, `hookId ${badId}`).toMatch(/invalid hook id/);
+    }
+  }, 30000);
+
   it("claude-code: additionalContext → hookSpecificOutput", async () => {
     const r = await runNode([RUNNER, "okf-session-start"], {
       input: JSON.stringify({ cwd: REPO_ROOT, session_id: "s1" }),
@@ -151,6 +159,29 @@ describe("mcp-server.js E2E (JSON-RPC over stdio)", () => {
 
 /** CLI machine-readable output, exercised through the built binary. */
 describe.skipIf(!existsSync(DIST_BIN))("CLI --json E2E (cli/dist/bin.js)", () => {
+  it("okf-validate handles flags without/before positionals (default ./knowledge)", async () => {
+    for (const args of [["--json"], ["--json", "knowledge"]]) {
+      const r = await runNode([DIST_BIN, "okf-validate", ...args], { cwd: REPO_ROOT });
+      expect(r.code, `args: ${args.join(" ")}`).toBe(0);
+      const out = JSON.parse(r.stdout);
+      expect(out.conformant).toBe(true);
+      expect(out.errorCount).toBe(0);
+    }
+  }, 30000);
+
+  it("uninstall --dry-run leaves no .anyplugin-build in the plugin dir", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "dryrun-e2e-"));
+    const pluginDir = join(tmp, "preview-plugin");
+    const initR = await runNode([DIST_BIN, "init", "--name", "preview-plugin", "--dir", pluginDir, "--json"]);
+    expect(initR.code).toBe(0);
+    const r = await runNode([
+      DIST_BIN, "uninstall", "--plugin", pluginDir,
+      "--home", join(tmp, "home"), "--project", join(tmp, "proj"), "--dry-run",
+    ]);
+    expect(r.code).toBe(0);
+    expect(existsSync(join(pluginDir, ".anyplugin-build"))).toBe(false);
+  }, 30000);
+
   it("detect --json emits parseable detection state", async () => {
     const r = await runNode([DIST_BIN, "detect", "--json"]);
     expect(r.code).toBe(0);

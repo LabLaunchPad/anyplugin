@@ -76,7 +76,7 @@ The lifecycle of a plugin, end to end:
 2. **Adapters** — `build` compiles the manifest through four pure adapters, each emitting that agent's native artifacts (see table below). Translation of event names, config formats, and path tokens is handled here.
 3. **Universal runtime** — every agent executes the identical `node runner.js <hook-id>` process with JSON on stdin. Handlers are named `<hook-id>.mjs` and export `run(payload)`; platform differences (blocking exit codes, context injection, permission decisions) are translated per agent.
 4. **Detection** — the CLI and runtime detect the hosting agent from environment fingerprints (`ANYPLUGIN_HOST` self-marker, `CLAUDECODE`, `CODEX_SANDBOX`, `ANTIGRAVITY_AGENT`, `OPENCODE_*`), plus OS, shell, sandbox, and network status.
-5. **Install / uninstall** — `install` copies each bundle to the agent's native location and merges config via marker-delimited blocks; `uninstall` strips exactly those blocks and removes exactly those copies. Both `install --dry-run` and `uninstall --dry-run` preview without writing.
+5. **Install / uninstall** — `install` copies each bundle to the agent's native location and merges config via marker-delimited blocks, recording a per-file state journal; `uninstall` restores the exact pre-install bytes and aborts (rather than overwrites) if a config changed after install. Both `install --dry-run` and `uninstall --dry-run` preview without writing.
 
 ### The canonical manifest
 
@@ -144,8 +144,9 @@ Browse the bundle: [`knowledge/`](knowledge/index.md) — audited facts about al
 ## Install safety
 
 - Install plans are pure data: destination paths come from a fixed whitelist of path templates plus validated name segments — never token substitution into paths.
-- Config edits are marker-delimited (`# BEGIN anyplugin:<plugin>` / `# END anyplugin:<plugin>` in TOML, HTML comments in markdown); `uninstall` strips exactly those blocks and key-reverts JSON merges.
-- `install --dry-run` and `uninstall --dry-run` print every change without writing.
+- Every config edit is **journaled** (`.anyplugin-state.json` inside the installed plugin root) with pre-install backups and SHA-256 hashes. `uninstall` restores the exact pre-install bytes — and if you edited a config after install, it **aborts with a descriptive error instead of overwriting your edits**.
+- Config edits are marker-delimited (`# BEGIN anyplugin:<plugin>` / `# END anyplugin:<plugin>` in TOML, HTML comments in markdown) so they stay readable and diffable; install refuses to merge into unparseable JSON.
+- `install --dry-run` and `uninstall --dry-run` preview every change without writing — dry runs build into a throwaway temp directory, never your plugin directory.
 - Hook failures always exit non-blocking, so a plugin can't break your agent mid-session.
 
 ## Development
@@ -153,7 +154,7 @@ Browse the bundle: [`knowledge/`](knowledge/index.md) — audited facts about al
 ```bash
 pnpm install --frozen-lockfile   # install (pnpm 11, Node >= 20)
 pnpm build                       # tsc -b across the workspace
-pnpm test                        # vitest run — 75 tests incl. runtime E2E
+pnpm test                        # vitest run — 86 tests incl. runtime E2E
 pnpm clean                       # remove all dist/ output
 ```
 
