@@ -7,6 +7,7 @@ import { join } from "node:path";
 
 export async function run(payload) {
   const candidates = [
+    process.env["ANYPLUGIN_OKF_BUNDLE"],
     process.env["AGENT_PRISM_OKF_BUNDLE"],
     join(payload.pluginRoot ?? ".", "knowledge"),
     join(payload.cwd ?? process.cwd(), "knowledge"),

@@ -1,7 +1,7 @@
 {
-  "name": "@agent-prism/adapter-opencode",
-  "version": "0.1.0",
-  "description": "Agent-Prism adapter: emit/install OpenCode plugins and config",
+  "name": "@lablaunchpad/adapter-opencode",
+  "version": "0.1.1",
+  "description": "AnyPlugin adapter: emit/install OpenCode plugins and config",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -9,6 +9,6 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@agent-prism/core": "workspace:*"
+    "@lablaunchpad/core": "workspace:*"
   }
 }

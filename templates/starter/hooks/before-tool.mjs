@@ -1,5 +1,5 @@
 /**
- * Canonical hook handler — executed by the agent-prism runner on EVERY agent.
+ * Canonical hook handler — executed by the AnyPlugin runner on EVERY agent.
  * payload: { platform, hookId, pluginRoot, sessionId, cwd, toolName, toolInput, raw }
  * Return a HookResult; keep handlers fast and never throw (failures are logged
  * and swallowed so the host agent is never broken).

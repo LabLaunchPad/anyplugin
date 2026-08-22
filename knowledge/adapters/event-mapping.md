@@ -1,11 +1,11 @@
 ---
 type: Adapter Design
 title: Canonical event mapping
-description: Mapping of agent-prism canonical hook events to the native hook/event names of Claude Code, OpenCode, Codex, and Antigravity, plus payload translation notes.
+description: Mapping of AnyPlugin canonical hook events to the native hook/event names of Claude Code, OpenCode, Codex, and Antigravity, plus payload translation notes.
 tags: [hooks, events, mapping, adapters]
 status: stable
 generated:
-  by: agent-prism/design@0.1.0
+  by: anyplugin/design@0.1.1
   at: 2026-08-22T09:30:00+00:00
 sources:
   - resource: https://code.claude.com/docs/en/hooks

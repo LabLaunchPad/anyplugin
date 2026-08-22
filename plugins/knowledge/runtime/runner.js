@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * agent-prism canonical hook runner — the ONE process all four agents execute.
+ * AnyPlugin canonical hook runner — the ONE process all four agents execute.
  * Usage: node runner.js <hook-id>   (platform JSON arrives on stdin)
  *
- * Self-contained by design: emitted bundles must run without the agent-prism
+ * Self-contained by design: emitted bundles must run without the AnyPlugin
  * workspace. Handlers live at ./handlers/<hook-id>.mjs next to this file and
  * export `async function run(payload) => HookResult`.
  *
@@ -32,15 +32,16 @@ let raw = {};
 try {
   raw = rawText.trim() ? JSON.parse(rawText) : {};
 } catch {
-  process.stderr.write(`agent-prism runner: stdin was not JSON (${rawText.slice(0, 80)}…)`);
+  process.stderr.write(`anyplugin runner: stdin was not JSON (${rawText.slice(0, 80)}…)`);
   process.exit(0); // never break the host agent on our own parse failure
 }
 
-// --- platform detection (inline mirror of @agent-prism/core detect) -------
+// --- platform detection (inline mirror of @lablaunchpad/core detect) -------
 const env = process.env;
 let platform = "unknown";
-if (env["AGENT_PRISM_HOST"] === "claude-code" || env["AGENT_PRISM_HOST"] === "opencode" || env["AGENT_PRISM_HOST"] === "codex" || env["AGENT_PRISM_HOST"] === "antigravity") {
-  platform = env["AGENT_PRISM_HOST"];
+const hostMarker = env["ANYPLUGIN_HOST"] ?? env["AGENT_PRISM_HOST"];
+if (hostMarker === "claude-code" || hostMarker === "opencode" || hostMarker === "codex" || hostMarker === "antigravity") {
+  platform = hostMarker;
 } else if (env["CLAUDECODE"] === "1" || env["CLAUDE_CODE_SESSION_ID"]) {
   platform = "claude-code";
 } else if ((env["CODEX_SANDBOX"] && env["CODEX_SANDBOX"] !== "") || env["CODEX_CI"]) {
@@ -54,6 +55,7 @@ if (env["AGENT_PRISM_HOST"] === "claude-code" || env["AGENT_PRISM_HOST"] === "op
 // OpenCode shim and Antigravity install embed absolute paths; fallback: runner's
 // grandparent directory (bundle root).
 const pluginRoot =
+  env["ANYPLUGIN_PLUGIN_ROOT"] ||
   env["CLAUDE_PLUGIN_ROOT"] ||
   env["PLUGIN_ROOT"] ||
   env["AGENT_PRISM_PLUGIN_ROOT"] ||
@@ -100,12 +102,12 @@ try {
   if (!mod) throw lastError ?? new Error("no handler found");
   const fn = mod.run ?? mod.default?.run ?? mod.default;
   if (typeof fn !== "function") {
-    process.stderr.write(`agent-prism runner: handler ${hookId} exports no run()`);
+    process.stderr.write(`anyplugin runner: handler ${hookId} exports no run()`);
     process.exit(0);
   }
   result = (await fn(payload)) ?? {};
 } catch (err) {
-  process.stderr.write(`agent-prism runner ${hookId} failed: ${err && err.message ? err.message : err}`);
+  process.stderr.write(`anyplugin runner ${hookId} failed: ${err && err.message ? err.message : err}`);
   process.exit(0); // handler failure must not break the host agent
 }
 

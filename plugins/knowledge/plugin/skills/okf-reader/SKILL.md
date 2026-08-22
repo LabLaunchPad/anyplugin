@@ -12,7 +12,7 @@ A knowledge "bundle" is a directory of Markdown concept files (OKF v0.2, Google'
 
 Try in order, use the first that exists:
 
-1. The environment variable `AGENT_PRISM_OKF_BUNDLE` (absolute path).
+1. The environment variables `ANYPLUGIN_OKF_BUNDLE` (or legacy `AGENT_PRISM_OKF_BUNDLE`) — absolute path.
 2. MCP tools `okf_index` / `okf_read` / `okf_search` — if an `okf` MCP server is connected, ALWAYS prefer these tools.
 3. This skill's own directory: `../knowledge/` relative to this SKILL.md (plugin-shipped bundle).
 4. Project root `./knowledge/` directory (walk up from cwd).
@@ -34,9 +34,9 @@ Try in order, use the first that exists:
 - Recommended: `title`, `description`, `tags`, `generated: {by: <tool>/<version>, at: <ISO8601+offset>}`.
 - Record provenance in `sources: [{resource, id, title}]` and cite with `[^id]` footnotes.
 - Append a one-line entry under today's `## YYYY-MM-DD` heading in `log.md` (newest first).
-- Never edit `index.md` by hand sections you didn't add; prefer regenerating via `npx prism okf-reindex` if available.
+- Never edit `index.md` by hand sections you didn't add; prefer regenerating via `npx anyplugin okf-reindex` if available.
 - NEVER remove `type` from any file, and preserve unknown frontmatter keys when editing.
 
 ## Validation
 
-`npx prism okf-validate <bundle-dir>` checks conformance (errors = missing/empty `type`, unparseable frontmatter, reserved-file structure).
+`npx anyplugin okf-validate <bundle-dir>` checks conformance (errors = missing/empty `type`, unparseable frontmatter, reserved-file structure).

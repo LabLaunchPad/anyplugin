@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { emitAntigravity } from "./index.js";
-import { loadPluginManifest } from "@agent-prism/core";
+import { loadPluginManifest } from "@lablaunchpad/core";
 
 let root: string;
 let plugin: Awaited<ReturnType<typeof loadPluginManifest>>;

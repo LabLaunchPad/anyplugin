@@ -1,6 +1,6 @@
 {
-  "name": "@agent-prism/core",
-  "version": "0.1.0",
+  "name": "@lablaunchpad/core",
+  "version": "0.1.1",
   "description": "Core runtime: agent/environment detection, canonical plugin schema, event mapping, OKF v0.2 library",
   "type": "module",
   "main": "./dist/index.js",

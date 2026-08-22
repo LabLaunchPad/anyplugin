@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { emitClaude } from "./index.js";
-import { loadPluginManifest } from "@agent-prism/core";
+import { loadPluginManifest } from "@lablaunchpad/core";
 import { readFile } from "node:fs/promises";
 
 let root: string;

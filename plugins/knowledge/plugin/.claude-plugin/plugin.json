@@ -1,12 +1,13 @@
 {
-  "name": "agent-prism-knowledge",
-  "version": "0.1.0",
+  "name": "anyplugin-knowledge",
+  "version": "0.1.1",
   "description": "OKF v0.2 knowledge layer for every coding agent — read, capture, and validate a shared project knowledge bundle (okf_index/okf_read/okf_search via MCP, session hooks, curator subagent).",
-  "displayName": "Agent Prism Knowledge",
+  "displayName": "AnyPlugin Knowledge",
   "author": {
-    "name": "agent-prism"
+    "name": "Rahul Paul",
+    "url": "https://github.com/LabLaunchPad"
   },
   "license": "MIT",
-  "keywords": ["okf", "knowledge", "memory", "cross-agent", "agent-prism"],
+  "keywords": ["okf", "knowledge", "memory", "cross-agent", "anyplugin"],
   "hooks": "./claude/hooks.json"
 }

@@ -1,8 +1,12 @@
 {
-  "name": "agent-prism",
+  "name": "anyplugin",
   "private": true,
-  "version": "0.1.0",
-  "description": "Agent-agnostic plugin framework: one plugin source, native installs for Claude Code, OpenCode, Codex CLI, and Antigravity, with an OKF v0.2 knowledge layer.",
+  "version": "0.1.1",
+  "description": "AnyPlugin — agent-agnostic plugin development. One plugin source, native installs for Claude Code, OpenCode, Codex CLI, and Antigravity, with an OKF v0.2 knowledge layer.",
+  "author": {
+    "name": "Rahul Paul",
+    "url": "https://github.com/LabLaunchPad"
+  },
   "type": "module",
   "packageManager": "pnpm@11.14.0",
   "engines": {

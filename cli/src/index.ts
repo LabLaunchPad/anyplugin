@@ -15,11 +15,11 @@ import {
   removeTree,
   listDir,
   pathExists,
-} from "@agent-prism/core";
-import { emitClaude } from "@agent-prism/adapter-claude";
-import { emitOpencode } from "@agent-prism/adapter-opencode";
-import { emitCodex } from "@agent-prism/adapter-codex";
-import { emitAntigravity } from "@agent-prism/adapter-antigravity";
+} from "@lablaunchpad/core";
+import { emitClaude } from "@lablaunchpad/adapter-claude";
+import { emitOpencode } from "@lablaunchpad/adapter-opencode";
+import { emitCodex } from "@lablaunchpad/adapter-codex";
+import { emitAntigravity } from "@lablaunchpad/adapter-antigravity";
 import { join, dirname } from "node:path";
 
 export interface BuildOptions {
@@ -235,8 +235,8 @@ export async function executeInstall(
         notes.push(`would append [mcp_servers] to ${file}`);
         continue;
       }
-      const begin = `# BEGIN agent-prism:${opts.pluginName}`;
-      const end = `# END agent-prism:${opts.pluginName}`;
+const begin = `# BEGIN anyplugin:${opts.pluginName}`;
+          const end = `# END anyplugin:${opts.pluginName}`;
       let text = "";
       try {
         text = await readText(file);
@@ -253,8 +253,8 @@ export async function executeInstall(
         notes.push(`would append ${opts.pluginName} section to ${file}`);
         continue;
       }
-      const begin = `<!-- agent-prism:${action.marker} begin -->`;
-      const end = `<!-- agent-prism:${action.marker} end -->`;
+      const begin = `<!-- anyplugin:${action.marker} begin -->`;
+      const end = `<!-- anyplugin:${action.marker} end -->`;
       let text = "";
       try {
         text = await readText(file);
@@ -342,8 +342,8 @@ export async function executeUninstall(
       }
     } else if (action.kind === "toml-merge" || action.kind === "md-append") {
       const file = resolveFileTemplate(action.file, ctx);
-      const begin = action.kind === "toml-merge" ? `# BEGIN agent-prism:${opts.pluginName}` : `<!-- agent-prism:${action.marker} begin -->`;
-      const end = action.kind === "toml-merge" ? `# END agent-prism:${opts.pluginName}` : `<!-- agent-prism:${action.marker} end -->`;
+      const begin = action.kind === "toml-merge" ? `# BEGIN anyplugin:${opts.pluginName}` : `<!-- anyplugin:${action.marker} begin -->`;
+      const end = action.kind === "toml-merge" ? `# END anyplugin:${opts.pluginName}` : `<!-- anyplugin:${action.marker} end -->`;
       try {
         const text = await readText(file);
         await writeText(file, stripBlock(text, begin, end) + "\n");
@@ -374,6 +374,12 @@ function removeKeys(target: Record<string, unknown>, patch: Record<string, unkno
     }
   }
   return out;
+}
+
+/** Validated plugin manifest access for the CLI: root must exist, be a directory, contain no traversal. */
+export async function loadPluginSafe(pluginRoot: string): Promise<{ name: string; version: string }> {
+  const manifest = await loadPluginManifest(pluginRoot);
+  return { name: manifest.name, version: manifest.version };
 }
 
 export { loadPluginManifest, detectAgent, detectInstalledAgents, detectEnvironment, validateBundle, regenerateIndexes };

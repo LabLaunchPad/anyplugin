@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * agent-prism OKF MCP server — dependency-free, self-contained.
+ * AnyPlugin OKF MCP server — dependency-free, self-contained.
  * Speaks the MCP stdio protocol (JSON-RPC 2.0) with three tools:
  *   okf_index(bundle?)  → concept list {id, type, title, description, status, trust}
  *   okf_read(concept, bundle?) → {frontmatter, body}
  *   okf_search(query, bundle?) → matching concepts (id/type/tags/title/body substring)
- * Bundle resolution: bundle arg > AGENT_PRISM_OKF_BUNDLE > <server>/../knowledge > <cwd>/knowledge
+ * Bundle resolution: bundle arg > ANYPLUGIN_OKF_BUNDLE > <server>/../knowledge > <cwd>/knowledge
  */
 import { createRequire } from "node:module";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -18,6 +18,7 @@ const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 function resolveBundle(explicit) {
   const candidates = [
     explicit,
+    process.env["ANYPLUGIN_OKF_BUNDLE"],
     process.env["AGENT_PRISM_OKF_BUNDLE"],
     join(SERVER_DIR, "..", "knowledge"),
     join(process.cwd(), "knowledge"),
@@ -131,7 +132,7 @@ const TOOLS = [
 
 function callTool(name, args) {
   const bundleDir = resolveBundle(args.bundle);
-  if (!bundleDir) throw new Error("no OKF bundle found (pass bundle, set AGENT_PRISM_OKF_BUNDLE, or create ./knowledge)");
+  if (!bundleDir) throw new Error("no OKF bundle found (pass bundle, set ANYPLUGIN_OKF_BUNDLE, or create ./knowledge)");
   const concepts = loadConcepts(bundleDir);
   if (name === "okf_index") {
     return concepts.map((c) => ({ id: c.id, type: c.type, title: c.title, description: c.description, status: c.status, trust: c.trust, tags: c.tags }));
@@ -154,7 +155,7 @@ function callTool(name, args) {
   throw new Error(`unknown tool: ${name}`);
 }
 
-const serverInfo = { name: "agent-prism-okf", version: "0.1.0" };
+const serverInfo = { name: "anyplugin-okf", version: "0.1.1" };
 
 function handleMessage(msg) {
   if (msg.method === "initialize") {

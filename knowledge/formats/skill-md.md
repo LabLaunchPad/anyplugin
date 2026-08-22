@@ -5,7 +5,7 @@ description: The shared skill format adopted by all four target agents, with per
 tags: [skill-md, agentskills, skills, portability]
 status: stable
 generated:
-  by: agent-prism/research@0.1.0
+  by: anyplugin/research@0.1.1
   at: 2026-08-22T09:30:00+00:00
 sources:
   - resource: https://agentskills.io

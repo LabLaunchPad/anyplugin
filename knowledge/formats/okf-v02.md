@@ -5,7 +5,7 @@ description: Google Cloud's OKF v0.2 spec extraction — frontmatter fields, res
 tags: [okf, knowledge, google-cloud, spec]
 status: stable
 generated:
-  by: agent-prism/research@0.1.0
+  by: anyplugin/research@0.1.1
   at: 2026-08-22T09:30:00+00:00
 sources:
   - resource: https://github.com/GoogleCloudPlatform/open-knowledge-format
@@ -51,7 +51,7 @@ Bundle-absolute (leading `/`, recommended) or relative markdown links; consumers
 
 Third-party sites okf.md and openknowledgeformat.com are community-run (one still documents v0.1 only; one claims an `okf.yaml` manifest — contradicts official spec). The official repo SPEC.md is authoritative. No `.okf` extension exists — everything is `.md`.
 
-## Validator matrix (verified against official tests/ + reference_agent, drives @agent-prism/core okf implementation)
+## Validator matrix (verified against official tests/ + reference_agent, drives @lablaunchpad/core okf implementation)
 
 MUST-fail: non-reserved `.md` without parseable frontmatter mapping (rule: file not starting `---` = empty frontmatter ⇒ fails on missing type); unterminated frontmatter; empty/missing `type`; `type: Attested Computation` without `runtime`; frontmatter in non-root index.md (root index.md may carry ONLY `okf_version`).
 

@@ -9,7 +9,7 @@ import {
   writeIfChanged,
   toPosix,
   jsonStable,
-} from "@agent-prism/core";
+} from "@lablaunchpad/core";
 import { basename, dirname, join } from "node:path";
 import { copyFile, mkdir } from "node:fs/promises";
 
