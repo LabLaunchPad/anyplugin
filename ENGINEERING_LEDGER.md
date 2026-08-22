@@ -71,14 +71,15 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 ### AP-003 — (definition pending) · Severity: TBD · **Status**: `[UNMAPPED]`
 
 ### AP-004 — OpenCode V2 breaks V1 hook shims · Severity: P1
-- **Status**: `[SPEC'D — QUEUED PHASE 1]` (spec `CORE-INVARIANTS-V2.md` §2)
-- **Root Cause Analysis**: OpenCode's v2 core dropped the v1 hook API; the adapter emits a v1 TS shim, so plugins silently degrade or break on v2 hosts.
-- **Systemic Guardrail (planned)**: 4-state Capability Matrix (`NATIVE | DEGRADED | UNSUPPORTED | UNKNOWN`) with fail-closed `UNKNOWN` and hard build error on `UNSUPPORTED` unless the manifest explicitly accepts degradation. Conformance test must assert V2-native emission.
+- **Status**: `[FIXED & ERADICATED]` for the silent-breakage class (Phase-1 `feat: capability negotiation matrix`); **V2-native emission remains `[OPEN]`** — requires a dedicated OpenCode v2 plugin-API audit before native emission can be written without inventing syntax.
+- **Root Cause Analysis**: OpenCode's v2 core dropped the v1 hook API; the adapter emitted a v1 TS shim unconditionally, so plugins targeting v2 hosts silently degraded or broke.
+- **Fix + Evidence**: `core/src/capabilities/matrix.ts` — 4-state negotiation (`NATIVE | DEGRADED | UNSUPPORTED | UNKNOWN`), `UNKNOWN` fails closed, `UNSUPPORTED` is a **hard build error** with the offending capability and rationale named. `buildAll` derives required capabilities from the manifest and gates every target/variant (tests: hooks→`opencode@v2` rejects; `session-end`→antigravity rejects; unknown variant rejects; DEGRADED emits build warnings, e.g. commands omitted on codex/antigravity).
+- **Systemic Guardrail**: compatibility verdicts are authored data in one matrix (every row cites its audited rationale); adapters can no longer silently drop or break capabilities — a new agent/variant must be added to the matrix or every build for it fails closed.
 
 ### AP-005 … AP-006 — (definitions pending) · **Status**: `[UNMAPPED]`
 
 ### AP-007 — Semantic loss in canonical event mapping · Severity: P1
-- **Status**: `[PARTIALLY ERADICATED]` — documentation drift is `[FIXED & ERADICATED]` (commit `add2868`): the drift guard now checks each native name in the **correct per-agent table column** and requires dropped events to be documented as `—`. True semantic negotiation (which mapping is `DEGRADED` vs `NATIVE`) is `[SPEC'D — QUEUED PHASE 1]` via the Capability Matrix.
+- **Status**: `[FIXED & ERADICATED]` — documentation drift (commit `add2868`: per-agent-column drift guard) and silent semantic loss (Phase-1 capability matrix: DEGRADED folds now emit build warnings; UNSUPPORTED folds are build errors).
 
 ### AP-008 — MCP server resolves caller-supplied bundle paths without a boundary · Severity: P1
 - **Status**: `[FIXED & ERADICATED]` (Phase-1 `feat: implement SafePath boundary`)
@@ -103,4 +104,4 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 
 1. ~~`feat: implement SafePath boundary [SEC-01/AP-002/AP-008 eradicated]`~~ — **DONE**: `core/src/fs/safe-path.ts`, 10k-input hostile corpus + symlink-escape tests, runner/MCP/installer/manifest-path validation unified on it.
 2. ~~`feat: strict CLI contract [BUG-02 class eradicated]`~~ — **DONE**: `cli/src/strict-args.ts`, per-command Zod schemas, `bin.ts` no longer parses raw argv (zod added as a direct cli dependency — already in the graph via core).
-3. `feat: capability negotiation matrix [AP-004/AP-007 eradicated]` — `core/src/capabilities/matrix.ts`, OpenCode V2 rows with fail-closed UNKNOWN, UNSUPPORTED = build error. (V2-*native emission* stays `[OPEN]` — requires a dedicated OpenCode v2 plugin-API audit; the matrix already kills the silent-breakage class by failing builds loudly.)
+3. ~~`feat: capability negotiation matrix [AP-004/AP-007 eradicated]`~~ — **DONE**: `core/src/capabilities/matrix.ts` (4 states, fail-closed UNKNOWN, UNSUPPORTED = build error, DEGRADED = warning), buildAll gate with per-agent variant pinning. **Open sub-item**: OpenCode V2-native emission (`[OPEN]` — needs a v2 plugin-API audit; the matrix already makes v2-with-hooks a loud build failure instead of silent breakage).

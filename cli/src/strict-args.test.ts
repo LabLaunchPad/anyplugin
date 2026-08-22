@@ -15,7 +15,7 @@ describe("strict CLI contract (Pattern C)", () => {
   });
 
   it("accepts every documented install/uninstall flag", () => {
-    const { values } = parseCliArgv([
+    const { values } = parseCliArgv<"install">([
       "install", "--plugin", "p", "--agents", "codex", "--home", "h", "--project", "pr",
       "--dry-run", "--runner", "r", "--mcp-runtime", "m", "--json",
     ]);

@@ -5,3 +5,4 @@ export * from "./okf/index.js";
 export * from "./emit/index.js";
 export * from "./adapters/index.js";
 export * from "./fs/index.js";
+export * from "./capabilities/index.js";
