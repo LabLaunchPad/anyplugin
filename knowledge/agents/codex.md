@@ -10,7 +10,7 @@ generated:
 sources:
   - resource: https://learn.chatgpt.com/docs/config-file/config-reference
     id: "1"
-    title: Codex config reference (JSON schema: developers.openai.com/codex/config-schema.json)
+    title: "Codex config reference (JSON schema at developers.openai.com/codex/config-schema.json)"
   - resource: https://github.com/openai/codex
     id: "2"
     title: openai/codex repository
