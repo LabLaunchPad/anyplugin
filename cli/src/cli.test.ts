@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildAll, executeInstall, executeUninstall, stripBlock, deepMerge, validateRelPath, validatePluginName } from "./index.js";
-import { pathExists } from "@lablaunchpad/core";
+import { pathExists, toPosix } from "@lablaunchpad/core";
 
 let root: string;
 let home: string;
@@ -65,11 +65,11 @@ describe("executeInstall / executeUninstall", () => {
     expect(codexToml).toContain("# BEGIN anyplugin:demo-plugin");
     expect(codexToml).toContain("[mcp_servers.okf]");
     expect(codexToml).toContain(join(home, ".codex", "plugins", "demo-plugin"));
-    // antigravity plugin + merged workspace mcp_config.json
+    // antigravity plugin + merged workspace mcp_config.json (posix-normalized for cross-OS)
     expect(await pathExists(join(project, ".agents", "plugins", "demo-plugin", "plugin.json"))).toBe(true);
     const agMcp = JSON.parse(await readFile(join(project, ".agents", "mcp_config.json"), "utf8"));
-    expect(String(agMcp["mcpServers"]["okf"]["args"][0]).replace(/\//g, "\\")).toContain(
-      join(project, ".agents", "plugins", "demo-plugin", "mcp", "server.js"),
+    expect(toPosix(String(agMcp["mcpServers"]["okf"]["args"][0]))).toContain(
+      toPosix(join(project, ".agents", "plugins", "demo-plugin", "mcp", "server.js")),
     );
     // antigravity hooks.json had {{PLUGIN_ROOT}} substituted
     const agHooks = await readFile(join(project, ".agents", "plugins", "demo-plugin", "hooks.json"), "utf8");
