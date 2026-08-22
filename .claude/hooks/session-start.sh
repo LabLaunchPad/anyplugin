@@ -15,6 +15,8 @@ pnpm build
 
 # Global Claude Code plugins used for reviewing this repo's PRs. Both the
 # marketplace add and plugin install are idempotent no-ops when already present.
-claude plugin marketplace add anthropics/claude-code
-claude plugin install pr-review-toolkit@claude-code-plugins -s user -y
-claude plugin install code-review@claude-code-plugins -s user -y
+# Non-fatal: a GitHub hiccup here must not block the pnpm install/build above,
+# which is what tests and linting actually depend on.
+claude plugin marketplace add anthropics/claude-code || echo "warning: failed to add claude-code-plugins marketplace (non-fatal)" >&2
+claude plugin install pr-review-toolkit@claude-code-plugins -s user -y || echo "warning: failed to install pr-review-toolkit plugin (non-fatal)" >&2
+claude plugin install code-review@claude-code-plugins -s user -y || echo "warning: failed to install code-review plugin (non-fatal)" >&2
