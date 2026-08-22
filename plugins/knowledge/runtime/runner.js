@@ -95,17 +95,22 @@ try {
   // Emitted bundles place handlers at ./handlers/<id>.mjs next to this runner;
   // the canonical repo layout keeps the runner in plugins/<name>/runtime/ and
   // handlers in plugins/<name>/plugin/hooks/.
-  const handlerNames = [
-    `./handlers/${hookId}.mjs`,
-    `../plugin/hooks/${hookId}.mjs`,
-    `${(pluginRoot ?? "").replace(/\\/g, "/")}/hooks/${hookId}.mjs`,
-  ];
+  // Handler discovery: every candidate is CONSTRUCTED with path joins from the
+  // validated hook id under fixed roots — never by concatenating unvalidated
+  // strings, so no ../ can enter a path. Roots: the runner's own dir (emitted
+  // layout: handlers/<id>.mjs), the bundle root (repo layout:
+  // plugin/hooks/<id>.mjs), and the host-injected plugin root (trusted env:
+  // hooks/<id>.mjs).
+  const candidates = [
+    join(RUNNER_DIR, "handlers", `${hookId}.mjs`),
+    join(resolve(RUNNER_DIR, ".."), "plugin", "hooks", `${hookId}.mjs`),
+    pluginRoot ? join(pluginRoot, "hooks", `${hookId}.mjs`) : undefined,
+  ].filter(Boolean);
   let mod;
   let lastError;
-  for (const name of handlerNames) {
+  for (const candidate of candidates) {
     try {
-      const href = /^[A-Za-z]:[\\/]/.test(name) ? pathToFileURL(name).href : new URL(name, `${import.meta.url}`).href;
-      mod = await import(href);
+      mod = await import(pathToFileURL(candidate).href);
       break;
     } catch (err) {
       lastError = err;
