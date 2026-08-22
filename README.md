@@ -20,7 +20,7 @@ anyplugin.plugin.yaml ──▶ adapters ──▶ 4 native bundles ──▶ in
 
 ## Install
 
-Requires Node ≥ 20 and pnpm 11. The CLI is not yet on npm (see [Roadmap](#roadmap)) — install from source:
+Requires Node ≥ 20 to run and pnpm 11 to develop (pnpm 11 itself needs Node ≥ 22.13). The CLI is not yet on npm (see [Roadmap](#roadmap)) — install from source:
 
 ```bash
 git clone https://github.com/LabLaunchPad/anyplugin
@@ -158,7 +158,7 @@ pnpm test                        # vitest run — 86 tests incl. runtime E2E
 pnpm clean                       # remove all dist/ output
 ```
 
-CI (`.github/workflows/ci.yml`) runs on Ubuntu (Node 20 & 24) and Windows (Node 24): install, build, tests (including E2E that spawns the real hook runner and MCP server), OKF conformance validation, and an all-four-agents build smoke.
+CI (`.github/workflows/ci.yml`) runs on Ubuntu (Node 22 & 24) and Windows (Node 24): install, build, tests (including E2E that spawns the real hook runner and MCP server), OKF conformance validation, and an all-four-agents build smoke. A dedicated Node 20 job verifies the dependency-free runtime (hook runner + MCP server) with plain `node` — that's the surface the `engines: node >=20` promise actually covers.
 
 Coding agents: [`AGENTS.md`](AGENTS.md) has the full repo map, source-of-truth table, hook runtime protocol, and the recipe for adding a new agent adapter.
 

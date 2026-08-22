@@ -13,7 +13,7 @@ pnpm clean                       # remove all dist/ output
 
 - Run `pnpm build` before `pnpm test`: the CLI E2E suite spawns `cli/dist/bin.js` (it skips silently if dist is missing, so a skip means "build first").
 - On Windows with long repo paths, run tooling through a short junction with `NODE_PRESERVE_SYMLINKS=1`.
-- CI (`.github/workflows/ci.yml`): Ubuntu (Node 20 & 24) + Windows (Node 24) — install, build, test, `okf-validate knowledge`, all-four-agents build smoke.
+- Node >= 20 runs the emitted runtime; development needs pnpm 11 (which itself requires Node >= 22.13). CI matrix: Ubuntu (Node 22 & 24) + Windows (Node 24) for the full suite, plus a Node 20 job exercising the dependency-free runner/MCP runtime from the built artifacts.
 
 ## Where the source of truth lives
 

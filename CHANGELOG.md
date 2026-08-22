@@ -24,6 +24,7 @@ All notable changes to AnyPlugin are documented here. Format follows [Keep a Cha
 - Node 20.0–20.10 compatibility: `import.meta.dirname` replaced with `dirname(fileURLToPath(import.meta.url))`.
 - `regenerateIndexes` now discovers subdirectories from the whole bundle (the `# Subdirectories` section previously never rendered) and writes an index for dirs containing only subdirectories.
 - `uninstall` (legacy path) can no longer create config files or truncate unparseable ones to `{}`; `install` refuses to merge into unparseable JSON configs.
+- **Fixed**: CI had never run green — `pnpm/action-setup` errored on duplicate pnpm versions (input + `packageManager` field), and pnpm 11.14 cannot run on the advertised Node 20 cell (requires ≥ 22.13). Matrix is now Ubuntu (Node 22 & 24) + Windows (Node 24), plus a dedicated Node 20 job that verifies the dependency-free hook runner and MCP server with plain `node`. Also: esbuild build-script allowance uses the real pnpm key (`onlyBuiltDependencies`), replacing a leftover placeholder.
 - Removed the last "prism" naming traces from source: schema error messages now say `anyplugin.plugin.{yaml,yml,json}`; exported schema types renamed `PrismPluginSchema`/`PrismPlugin`/`PrismPluginInput` → `AnyPluginManifestSchema`/`AnyPluginManifest`/`AnyPluginManifestInput`; stale comments updated in `core/src/adapters/index.ts` and `plugins/knowledge/runtime/mcp-server.js`.
 - README quickstart previously showed `npx anyplugin` (unpublished) — now uses the real `node cli/dist/bin.js` path and marks npm distribution as planned.
 
