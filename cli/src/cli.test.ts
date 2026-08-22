@@ -93,16 +93,13 @@ describe("executeInstall / executeUninstall", () => {
     expect(await pathExists(join(home, ".codex", "plugins", "demo-plugin"))).toBe(false);
     expect(await pathExists(join(project, ".agents", "plugins", "demo-plugin"))).toBe(false);
     expect(await pathExists(join(project, ".opencode", "plugins", "demo-plugin"))).toBe(false);
-    const codexAfter = await readFile(join(home, ".codex", "config.toml"), "utf8");
-    expect(codexAfter).not.toContain("anyplugin:demo-plugin");
-    const ocAfter = JSON.parse(await readFile(join(project, "opencode.json"), "utf8"));
-    expect(ocAfter["skills"]).toBeUndefined();
-    expect(ocAfter["mcp"]).toBeUndefined();
-    const agMcpAfter = JSON.parse(await readFile(join(project, ".agents", "mcp_config.json"), "utf8"));
-    expect(agMcpAfter["mcpServers"]).toBeUndefined();
+    // configs the install CREATED are deleted (journal: backup null); the
+    // pre-existing AGENTS.md is restored byte-exact to its original content.
+    expect(await pathExists(join(home, ".codex", "config.toml"))).toBe(false);
+    expect(await pathExists(join(project, "opencode.json"))).toBe(false);
+    expect(await pathExists(join(project, ".agents", "mcp_config.json"))).toBe(false);
     const agentsAfter = await readFile(join(project, "AGENTS.md"), "utf8");
-    expect(agentsAfter).not.toContain("anyplugin:");
-    expect(agentsAfter).toContain("Existing project instructions");
+    expect(agentsAfter).toBe("# Existing project instructions\n\nKeep me.\n");
   });
 });
 
@@ -123,6 +120,12 @@ describe("stripBlock", () => {
     const text = "before\n# BEGIN x\njunk\n# END x\nafter";
     expect(stripBlock(text, "# BEGIN x", "# END x")).toMatch(/before[\s\S]*after/);
     expect(stripBlock("nothing", "# BEGIN x", "# END x")).toBe("nothing");
+  });
+
+  it("throws on a begin marker with no end marker (would silently delete content)", () => {
+    expect(() => stripBlock("before\n# BEGIN x\njunk and everything after", "# BEGIN x", "# END x")).toThrow(
+      /missing end marker/i,
+    );
   });
 });
 

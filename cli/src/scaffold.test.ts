@@ -90,12 +90,13 @@ mcp:
     expect(await readFile(join(home, ".codex", "config.toml"), "utf8")).toContain("# BEGIN anyplugin:dry-plugin");
     expect(await readFile(join(project, "AGENTS.md"), "utf8")).toContain("anyplugin:dry-plugin begin");
 
-    // real uninstall still reverses everything afterwards
+    // real uninstall still reverses everything afterwards: created configs are
+    // deleted (journal: backup null), copied roots removed
     for (const [key, bundle] of Object.entries(bundles)) {
       await executeUninstall(key as never, bundle, opts);
     }
     expect(await pathExists(join(home, ".claude", "plugins", "dry-plugin"))).toBe(false);
-    expect(await readFile(join(home, ".codex", "config.toml"), "utf8")).not.toContain("anyplugin:dry-plugin");
-    expect(await readFile(join(project, "AGENTS.md"), "utf8")).not.toContain("anyplugin:");
+    expect(await pathExists(join(home, ".codex", "config.toml"))).toBe(false);
+    expect(await pathExists(join(project, "AGENTS.md"))).toBe(false);
   });
 });

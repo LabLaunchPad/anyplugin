@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { join, resolve, dirname } from "node:path";
 import { statSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import {
   buildAll,
   executeInstall,
@@ -16,7 +18,7 @@ import {
   regenerateIndexes,
 } from "./index.js";
 import type { AgentId } from "@lablaunchpad/core";
-import { ALL_AGENTS } from "@lablaunchpad/core";
+import { ALL_AGENTS, removeTree } from "@lablaunchpad/core";
 
 const HELP = `anyplugin — agent-agnostic plugin development for Claude Code, OpenCode, Codex, Antigravity
 
@@ -42,6 +44,8 @@ options:
   --agents LIST    comma subset of: claude-code,opencode,codex,antigravity
   --name NAME      plugin name for init (kebab-case)
   --dir DIR        target directory for init (default: ./NAME)
+  --runner PATH    hook runner script copied into bundles (default: bundled runner)
+  --mcp-runtime DIR  MCP server runtime dir copied into bundles
   --json           machine-readable JSON output for every command
 `;
 
@@ -52,7 +56,6 @@ interface ParsedFlags {
   home?: string;
   project?: string;
   "dry-run"?: boolean;
-  dryRun?: boolean;
   runner?: string;
   "mcp-runtime"?: string;
   name?: string;
@@ -66,7 +69,7 @@ async function main(): Promise<void> {
     process.stdout.write(HELP);
     return;
   }
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
     args: rest,
     options: {
       plugin: { type: "string" },
@@ -82,7 +85,7 @@ async function main(): Promise<void> {
       json: { type: "boolean" },
     },
     allowPositionals: true,
-  }) as { values: ParsedFlags };
+  }) as { values: ParsedFlags; positionals: string[] };
 
   const home = values.home ?? homedir();
   const projectDir = resolve(values.project ?? process.cwd());
@@ -118,7 +121,7 @@ async function main(): Promise<void> {
   }
 
   if (command === "okf-validate" || command === "okf-reindex") {
-    const dir = requireDir(resolve(rest[0] ?? values.plugin ?? "./knowledge"), "bundle dir");
+    const dir = requireDir(resolve(positionals[0] ?? values.plugin ?? "./knowledge"), "bundle dir");
     if (command === "okf-validate") {
       const issues = await validateBundle(dir);
       const errors = issues.filter((i) => i.level === "error");
@@ -143,14 +146,23 @@ async function main(): Promise<void> {
   if (command === "build" || command === "install" || command === "uninstall") {
     const pluginRoot = requireDir(resolve(values.plugin ?? "."), "--plugin");
     const manifest = await loadPluginSafe(pluginRoot);
-    const outRoot = resolve(values.out ?? join(pluginRoot, ".anyplugin-build"));
-    const runnerAbsPath = values.runner ?? defaultRunnerPath();
+    const dryRun = values["dry-run"] === true;
+    let outRoot = resolve(values.out ?? join(pluginRoot, ".anyplugin-build"));
+    // A dry run must not leave a build tree inside the user's plugin dir:
+    // render bundles into a throwaway temp dir and remove it afterwards.
+    let sandbox: string | undefined;
+    if (dryRun && !values.out) {
+      sandbox = await mkdtemp(join(tmpdir(), "anyplugin-dryrun-"));
+      outRoot = sandbox;
+    }
+    const runnerAbsPath = values.runner ? resolve(values.runner) : defaultRunnerPath();
+    try {
     const bundles = await buildAll({
       pluginRoot,
       outRoot,
       agents,
       runnerAbsPath,
-      mcpRuntimeAbsDir: values["mcp-runtime"],
+      mcpRuntimeAbsDir: values["mcp-runtime"] ? resolve(values["mcp-runtime"]) : undefined,
     });
 
     if (command === "build") {
@@ -167,13 +179,13 @@ async function main(): Promise<void> {
       return;
     }
 
-    const opts = { home, projectDir, pluginName: manifest.name, dryRun: values["dry-run"] === true };
+    const opts = { home, projectDir, pluginName: manifest.name, version: manifest.version, dryRun };
     if (values.json) {
       const payload: Record<string, unknown> = {};
       for (const [agentKey, bundle] of Object.entries(bundles)) {
         const agent = agentKey as AgentId;
         if (command === "install") payload[agent] = await executeInstall(agent, bundle, opts);
-        else payload[agent] = { cleaned: await executeUninstall(agent, bundle, opts), dryRun: opts.dryRun };
+        else payload[agent] = { cleaned: await executeUninstall(agent, bundle, opts), dryRun };
       }
       console.log(JSON.stringify({ command, plugin: manifest.name, agents: payload }, null, 2));
       return;
@@ -188,11 +200,14 @@ async function main(): Promise<void> {
         for (const n of result.notes) console.log(`  note: ${n}`);
       } else {
         const touched = await executeUninstall(agent, bundle, opts);
-        console.log(`\n[${agent}] ${opts.dryRun ? "dry-run uninstall" : "uninstalled"} (${touched.length} location(s) ${opts.dryRun ? "to clean" : "cleaned"})`);
-        for (const t of touched) console.log(`  ${opts.dryRun ? "" : "cleaned "}${t}`);
+        console.log(`\n[${agent}] ${dryRun ? "dry-run uninstall" : "uninstalled"} (${touched.length} location(s) ${dryRun ? "to clean" : "cleaned"})`);
+        for (const t of touched) console.log(`  ${dryRun ? "" : "cleaned "}${t}`);
       }
     }
     return;
+    } finally {
+      if (sandbox) await removeTree(sandbox);
+    }
   }
 
   process.stderr.write(`unknown command: ${command}\n\n${HELP}`);
@@ -226,7 +241,7 @@ function requireDir(absPath: string, what: string): string {
 
 function defaultRunnerPath(): string {
   // Default: the anyplugin-knowledge plugin's self-contained runner.
-  return resolve(join(import.meta.dirname ?? ".", "..", "..", "plugins", "knowledge", "runtime", "runner.js"));
+  return resolve(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "plugins", "knowledge", "runtime", "runner.js"));
 }
 
 async function detectInstalledAgentsSafe(home: string): Promise<string[]> {
