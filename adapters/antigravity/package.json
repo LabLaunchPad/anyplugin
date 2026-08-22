@@ -1,0 +1,14 @@
+{
+  "name": "@agent-prism/adapter-antigravity",
+  "version": "0.1.0",
+  "description": "Agent-Prism adapter: emit/install Google Antigravity .agents/ customizations",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@agent-prism/core": "workspace:*"
+  }
+}

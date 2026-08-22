@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./core" },
+    { "path": "./adapters/claude" },
+    { "path": "./adapters/opencode" },
+    { "path": "./adapters/codex" },
+    { "path": "./adapters/antigravity" },
+    { "path": "./plugins/knowledge" },
+    { "path": "./cli" }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@agent-prism/adapter-claude",
+  "version": "0.1.0",
+  "description": "Agent-Prism adapter: emit/install Claude Code plugin bundles",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@agent-prism/core": "workspace:*"
+  }
+}

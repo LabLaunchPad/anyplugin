@@ -1,0 +1,16 @@
+{
+  "name": "@agent-prism/plugin-knowledge",
+  "version": "0.1.0",
+  "description": "First-party Agent-Prism plugin: OKF v0.2 knowledge layer (reader skill, capture hooks, MCP server, validator)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@agent-prism/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.0"
+  }
+}

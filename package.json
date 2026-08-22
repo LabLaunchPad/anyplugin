@@ -1,0 +1,22 @@
+{
+  "name": "agent-prism",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Agent-agnostic plugin framework: one plugin source, native installs for Claude Code, OpenCode, Codex CLI, and Antigravity, with an OKF v0.2 knowledge layer.",
+  "type": "module",
+  "packageManager": "pnpm@11.14.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "node scripts/clean.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

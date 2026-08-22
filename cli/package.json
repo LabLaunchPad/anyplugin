@@ -1,0 +1,21 @@
+{
+  "name": "@agent-prism/cli",
+  "version": "0.1.0",
+  "description": "prism — detect agents, build universal plugins, install native artifacts into every coding agent",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "prism": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@agent-prism/core": "workspace:*",
+    "@agent-prism/adapter-claude": "workspace:*",
+    "@agent-prism/adapter-opencode": "workspace:*",
+    "@agent-prism/adapter-codex": "workspace:*",
+    "@agent-prism/adapter-antigravity": "workspace:*"
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.vitest/
+research/clones/
+research/reports/raw/
+.env
+.env.*
+*.log

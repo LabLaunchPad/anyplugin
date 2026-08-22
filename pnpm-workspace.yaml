@@ -1,0 +1,7 @@
+packages:
+  - core
+  - adapters/*
+  - plugins/*
+  - cli
+allowBuilds:
+  esbuild: set this to true or false

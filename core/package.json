@@ -1,0 +1,22 @@
+{
+  "name": "@agent-prism/core",
+  "version": "0.1.0",
+  "description": "Core runtime: agent/environment detection, canonical plugin schema, event mapping, OKF v0.2 library",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./detect": { "types": "./dist/detect/index.d.ts", "default": "./dist/detect/index.js" },
+    "./schema": { "types": "./dist/schema/index.d.ts", "default": "./dist/schema/index.js" },
+    "./events": { "types": "./dist/events/index.d.ts", "default": "./dist/events/index.js" },
+    "./okf": { "types": "./dist/okf/index.d.ts", "default": "./dist/okf/index.js" }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "yaml": "^2.5.0",
+    "zod": "^3.24.0"
+  }
+}
