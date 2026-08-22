@@ -20,7 +20,7 @@ import { emitClaude } from "@lablaunchpad/adapter-claude";
 import { emitOpencode } from "@lablaunchpad/adapter-opencode";
 import { emitCodex } from "@lablaunchpad/adapter-codex";
 import { emitAntigravity } from "@lablaunchpad/adapter-antigravity";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 
 export interface BuildOptions {
   pluginRoot: string;
@@ -58,6 +58,49 @@ export interface InstallOptions {
   projectDir: string;
   pluginName: string;
   dryRun?: boolean;
+}
+
+export interface ScaffoldResult {
+  dir: string;
+  name: string;
+  files: string[];
+}
+
+/** Location of the bundled starter template (repo layout: templates/starter). */
+function starterTemplateDir(): string {
+  return resolve(join(import.meta.dirname ?? ".", "..", "..", "templates", "starter"));
+}
+
+async function listFilesRecursive(dir: string, base = dir, out: string[] = []): Promise<string[]> {
+  for (const entry of await listDir(dir)) {
+    if (entry.isDir) await listFilesRecursive(entry.abs, base, out);
+    else out.push(entry.abs.slice(base.length + 1).split("\\").join("/"));
+  }
+  return out;
+}
+
+/**
+ * Scaffold a new canonical plugin from templates/starter into targetDir.
+ * Only the manifest name is rewritten; every other file is copied verbatim.
+ */
+export async function scaffoldPlugin(name: string, targetDir: string): Promise<ScaffoldResult> {
+  validatePluginName(name);
+  const templateDir = starterTemplateDir();
+  if (!(await pathExists(templateDir))) {
+    throw new Error(`starter template not found: ${templateDir}`);
+  }
+  if (await pathExists(targetDir)) {
+    throw new Error(`target directory already exists: ${targetDir}`);
+  }
+  const parent = dirname(targetDir);
+  if (!(await pathExists(parent))) {
+    throw new Error(`parent directory not found: ${parent}`);
+  }
+  await copyDir(templateDir, targetDir);
+  const manifestPath = join(targetDir, "anyplugin.plugin.yaml");
+  const text = await readText(manifestPath);
+  await writeText(manifestPath, text.replace(/^name: my-plugin$/m, `name: ${name}`));
+  return { dir: targetDir, name, files: await listFilesRecursive(targetDir) };
 }
 
 /** Plugin names are the only user-controlled path segment; lock them to kebab-case. */
@@ -311,7 +354,8 @@ async function substFilesIn(dir: string, pluginRoot: string): Promise<void> {
   }
 }
 
-/** Reverse an install: remove copied dirs, strip marker blocks, un-merge JSON keys. */
+/** Reverse an install: remove copied dirs, strip marker blocks, un-merge JSON keys.
+ * With dryRun, report what would be cleaned without touching anything. */
 export async function executeUninstall(
   agent: AgentId,
   bundle: EmittedBundle,
@@ -327,14 +371,22 @@ export async function executeUninstall(
       validateRelPath(action.srcRel, `${agent} uninstall srcRel`);
       const dest = copyDest(action, agent, ctx, opts.pluginName);
       if (await pathExists(dest)) {
-        await removeTree(dest);
-        touched.push(dest);
+        if (opts.dryRun) touched.push(`would remove ${dest}`);
+        else {
+          await removeTree(dest);
+          touched.push(dest);
+        }
       }
     } else if (action.kind === "json-merge") {
       const file = resolveFileTemplate(action.file, ctx);
       const patch = substValues(action.patch, root) as Record<string, unknown>;
       try {
         const current = await readJsonOrDefault(file);
+        if (opts.dryRun) {
+          const cleaned = removeKeys(current, patch);
+          if (JSON.stringify(cleaned) !== JSON.stringify(current)) touched.push(`would revert keys in ${file}`);
+          continue;
+        }
         await writeText(file, JSON.stringify(removeKeys(current, patch), null, 2) + "\n");
         touched.push(file);
       } catch {
@@ -346,6 +398,10 @@ export async function executeUninstall(
       const end = action.kind === "toml-merge" ? `# END anyplugin:${opts.pluginName}` : `<!-- anyplugin:${action.marker} end -->`;
       try {
         const text = await readText(file);
+        if (opts.dryRun) {
+          if (text.includes(begin)) touched.push(`would strip marker block in ${file}`);
+          continue;
+        }
         await writeText(file, stripBlock(text, begin, end) + "\n");
         touched.push(file);
       } catch {

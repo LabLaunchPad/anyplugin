@@ -7,6 +7,7 @@ import {
   buildAll,
   executeInstall,
   executeUninstall,
+  scaffoldPlugin,
   detectAgent,
   detectInstalledAgents,
   detectEnvironment,
@@ -22,12 +23,14 @@ const HELP = `anyplugin — agent-agnostic plugin development for Claude Code, O
 Every agent has plugin dev. AnyPlugin makes it agent-agnostic.
 
 commands:
+  anyplugin init --name NAME [--dir DIR]
+                                     scaffold a new plugin from templates/starter
   anyplugin detect                   show detected agent + environment + installed agents
   anyplugin build [--plugin DIR] [--out DIR] [--agents LIST]
                                      emit native bundles per agent (default all four)
   anyplugin install [--plugin DIR] [--agents LIST] [--home DIR] [--project DIR] [--dry-run]
                                      install emitted bundles into agent locations
-  anyplugin uninstall [--plugin DIR] [--agents LIST] [--home DIR] [--project DIR]
+  anyplugin uninstall [--plugin DIR] [--agents LIST] [--home DIR] [--project DIR] [--dry-run]
                                        reverse an install
   anyplugin okf-validate [DIR]       validate an OKF v0.2 bundle (default ./knowledge)
   anyplugin okf-reindex [DIR]        regenerate bundle index.md files
@@ -37,7 +40,25 @@ options:
   --plugin DIR     canonical plugin root containing anyplugin.plugin.yaml (default: .)
   --out DIR        build output root (default: .anyplugin-build)
   --agents LIST    comma subset of: claude-code,opencode,codex,antigravity
+  --name NAME      plugin name for init (kebab-case)
+  --dir DIR        target directory for init (default: ./NAME)
+  --json           machine-readable JSON output for every command
 `;
+
+interface ParsedFlags {
+  plugin?: string;
+  out?: string;
+  agents?: string;
+  home?: string;
+  project?: string;
+  "dry-run"?: boolean;
+  dryRun?: boolean;
+  runner?: string;
+  "mcp-runtime"?: string;
+  name?: string;
+  dir?: string;
+  json?: boolean;
+}
 
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
@@ -56,22 +77,43 @@ async function main(): Promise<void> {
       "dry-run": { type: "boolean" },
       runner: { type: "string" },
       "mcp-runtime": { type: "string" },
+      name: { type: "string" },
+      dir: { type: "string" },
+      json: { type: "boolean" },
     },
     allowPositionals: true,
-  });
+  }) as { values: ParsedFlags };
 
   const home = values.home ?? homedir();
   const projectDir = resolve(values.project ?? process.cwd());
-  const pluginRoot = requireDir(resolve(values.plugin ?? "."), "--plugin");
   const agents = parseAgents(values.agents);
+
+  if (command === "init") {
+    if (!values.name) throw new Error("init requires --name (kebab-case plugin name)");
+    const targetDir = resolve(values.dir ?? join(process.cwd(), values.name));
+    const result = await scaffoldPlugin(values.name, targetDir);
+    if (values.json) {
+      console.log(JSON.stringify({ command: "init", ...result }, null, 2));
+    } else {
+      console.log(`scaffolded ${result.name} → ${result.dir} (${result.files.length} files)`);
+      for (const f of result.files) console.log(`  ${f}`);
+      console.log(`\nnext: implement hooks/, then run anyplugin build --plugin ${result.dir}`);
+    }
+    return;
+  }
 
   if (command === "detect") {
     const detection = detectAgent(process.env, home);
     const env = detectEnvironment(process.env, projectDir);
+    const installed = await detectInstalledAgentsSafe(home);
+    if (values.json) {
+      console.log(JSON.stringify({ command: "detect", agent: detection.agent ?? null, confidence: detection.confidence, signals: detection.signals, environment: env, installed }, null, 2));
+      return;
+    }
     console.log(`running agent : ${detection.agent ?? "none"} (${detection.confidence})${detection.signals.length ? ` via ${detection.signals.join(", ")}` : ""}`);
     console.log(`environment   : ${env.os} / ${env.shell} / node ${env.nodeVersion}`);
     console.log(`network blocked: ${env.networkBlocked} | permission mode: ${env.permissionMode ?? "n/a"}`);
-    console.log(`installed     : ${(await detectInstalledAgentsSafe(home)).join(", ") || "none"}`);
+    console.log(`installed     : ${installed.join(", ") || "none"}`);
     return;
   }
 
@@ -79,20 +121,27 @@ async function main(): Promise<void> {
     const dir = requireDir(resolve(rest[0] ?? values.plugin ?? "./knowledge"), "bundle dir");
     if (command === "okf-validate") {
       const issues = await validateBundle(dir);
+      const errors = issues.filter((i) => i.level === "error");
+      if (values.json) {
+        console.log(JSON.stringify({ command: "okf-validate", bundle: dir, issues, errorCount: errors.length, conformant: errors.length === 0 }, null, 2));
+        if (errors.length > 0) process.exitCode = 1;
+        return;
+      }
       for (const issue of issues) {
         console.log(`${issue.level.toUpperCase().padEnd(7)} ${issue.file} [${issue.rule}] ${issue.message}`);
       }
-      const errors = issues.filter((i) => i.level === "error");
       console.log(`\n${issues.length} issue(s), ${errors.length} error(s) — bundle ${errors.length === 0 ? "CONFORMANT" : "NON-CONFORMANT"} with OKF v0.2`);
       if (errors.length > 0) process.exitCode = 1;
       return;
     }
     const written = await regenerateIndexes(dir);
-    console.log(`regenerated ${written.length} index.md file(s) in ${dir}`);
+    if (values.json) console.log(JSON.stringify({ command: "okf-reindex", bundle: dir, written }, null, 2));
+    else console.log(`regenerated ${written.length} index.md file(s) in ${dir}`);
     return;
   }
 
   if (command === "build" || command === "install" || command === "uninstall") {
+    const pluginRoot = requireDir(resolve(values.plugin ?? "."), "--plugin");
     const manifest = await loadPluginSafe(pluginRoot);
     const outRoot = resolve(values.out ?? join(pluginRoot, ".anyplugin-build"));
     const runnerAbsPath = values.runner ?? defaultRunnerPath();
@@ -105,6 +154,12 @@ async function main(): Promise<void> {
     });
 
     if (command === "build") {
+      if (values.json) {
+        const payload: Record<string, unknown> = {};
+        for (const [agent, bundle] of Object.entries(bundles)) payload[agent] = { dir: bundle.dir, fileCount: bundle.files.length, warnings: bundle.warnings };
+        console.log(JSON.stringify({ command: "build", plugin: manifest.name, out: outRoot, agents: payload }, null, 2));
+        return;
+      }
       for (const [agent, bundle] of Object.entries(bundles)) {
         console.log(`\n[${agent}] → ${bundle.dir} (${bundle.files.length} files)`);
         for (const w of bundle.warnings) console.log(`  warning: ${w}`);
@@ -113,6 +168,16 @@ async function main(): Promise<void> {
     }
 
     const opts = { home, projectDir, pluginName: manifest.name, dryRun: values["dry-run"] === true };
+    if (values.json) {
+      const payload: Record<string, unknown> = {};
+      for (const [agentKey, bundle] of Object.entries(bundles)) {
+        const agent = agentKey as AgentId;
+        if (command === "install") payload[agent] = await executeInstall(agent, bundle, opts);
+        else payload[agent] = { cleaned: await executeUninstall(agent, bundle, opts), dryRun: opts.dryRun };
+      }
+      console.log(JSON.stringify({ command, plugin: manifest.name, agents: payload }, null, 2));
+      return;
+    }
     for (const [agentKey, bundle] of Object.entries(bundles)) {
       const agent = agentKey as AgentId;
       if (command === "install") {
@@ -123,8 +188,8 @@ async function main(): Promise<void> {
         for (const n of result.notes) console.log(`  note: ${n}`);
       } else {
         const touched = await executeUninstall(agent, bundle, opts);
-        console.log(`\n[${agent}] uninstalled (${touched.length} location(s) cleaned)`);
-        for (const t of touched) console.log(`  cleaned ${t}`);
+        console.log(`\n[${agent}] ${opts.dryRun ? "dry-run uninstall" : "uninstalled"} (${touched.length} location(s) ${opts.dryRun ? "to clean" : "cleaned"})`);
+        for (const t of touched) console.log(`  ${opts.dryRun ? "" : "cleaned "}${t}`);
       }
     }
     return;

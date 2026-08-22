@@ -43,10 +43,10 @@ export const McpServerSchema = z.object({
 export type McpServer = z.infer<typeof McpServerSchema>;
 
 /**
- * The universal plugin manifest (prism.plugin.yaml). One source of truth compiled
+ * The universal plugin manifest (anyplugin.plugin.yaml). One source of truth compiled
  * by adapters into each agent's native artifacts. See knowledge/ for per-agent targets.
  */
-export const PrismPluginSchema = z.object({
+export const AnyPluginManifestSchema = z.object({
   name: z.string().regex(/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/, "kebab-case, starts with a letter"),
   version: z.string().regex(/^\d+\.\d+\.\d+/),
   description: z.string().min(1),
@@ -69,8 +69,8 @@ export const PrismPluginSchema = z.object({
   capabilities: z.record(z.unknown()).optional(),
   /** Extra keys are preserved verbatim for adapter-specific needs (like OKF unknown-key preservation). */
 });
-export type PrismPlugin = z.infer<typeof PrismPluginSchema>;
-export type PrismPluginInput = z.input<typeof PrismPluginSchema>;
+export type AnyPluginManifest = z.infer<typeof AnyPluginManifestSchema>;
+export type AnyPluginManifestInput = z.input<typeof AnyPluginManifestSchema>;
 
 export const MANIFEST_BASENAMES = [
   "anyplugin.plugin.yaml",
@@ -91,20 +91,20 @@ export async function loadPluginManifest(pluginRoot: string): Promise<ParsedPlug
     }
   }
   if (text === undefined) {
-    throw new Error(`no prism.plugin.{yaml,yml,json} found in ${pluginRoot}`);
+    throw new Error(`no anyplugin.plugin.{yaml,yml,json} found in ${pluginRoot}`);
   }
   const raw = used.endsWith(".json") ? JSON.parse(text) : parseYaml(text);
   return parsePluginManifest(raw);
 }
 
 /** Parsed manifest: validated fields + unknown top-level keys preserved verbatim. */
-export type ParsedPlugin = PrismPlugin & { extra: Record<string, unknown> };
+export type ParsedPlugin = AnyPluginManifest & { extra: Record<string, unknown> };
 
 export function parsePluginManifest(raw: unknown): ParsedPlugin {
-  const known = PrismPluginSchema.safeParse(raw);
+  const known = AnyPluginManifestSchema.safeParse(raw);
   if (!known.success) {
     const issues = known.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
-    throw new Error(`invalid prism plugin manifest: ${issues}`);
+    throw new Error(`invalid anyplugin manifest: ${issues}`);
   }
   const extra: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
   for (const key of Object.keys(known.data)) delete extra[key];

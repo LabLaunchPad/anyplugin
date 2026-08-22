@@ -8,7 +8,7 @@ import type { AgentId } from "../detect/index.js";
  */
 
 export interface EmitOptions {
-  /** Canonical plugin source root (contains prism.plugin.yaml). */
+  /** Canonical plugin source root (contains anyplugin.plugin.yaml). */
   pluginRoot: string;
   /** Directory to render the native bundle into. */
   outDir: string;

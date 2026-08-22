@@ -38,7 +38,7 @@ function walkMd(dir, base = dir, out = []) {
   return out;
 }
 
-/** Lenient frontmatter reader — good enough for listing/reading; validation uses prism CLI. */
+/** Lenient frontmatter reader — good enough for listing/reading; validation uses the anyplugin CLI. */
 function parseMd(text) {
   if (!text.startsWith("---")) return { fm: {}, body: text };
   const first = text.indexOf("\n");

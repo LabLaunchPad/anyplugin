@@ -7,6 +7,15 @@
     "name": "Rahul Paul",
     "url": "https://github.com/LabLaunchPad"
   },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LabLaunchPad/anyplugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LabLaunchPad/anyplugin/issues"
+  },
+  "homepage": "https://github.com/LabLaunchPad/anyplugin#readme",
   "type": "module",
   "packageManager": "pnpm@11.14.0",
   "engines": {
