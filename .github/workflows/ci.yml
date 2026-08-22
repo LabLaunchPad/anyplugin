@@ -65,8 +65,12 @@ jobs:
           echo '{"cwd":"."}' | ANYPLUGIN_HOST=antigravity node plugins/knowledge/runtime/runner.js okf-session-start | grep -q "injectSteps"
       - name: Hook runner rejects hostile hook ids
         run: |
-          echo '{}' | node plugins/knowledge/runtime/runner.js "../evil" && exit 1 || true
-          echo '{}' | node plugins/knowledge/runtime/runner.js "../evil" 2>err.txt; test $? -eq 1 && grep -q "invalid hook id" err.txt
+          set +e
+          echo '{}' | node plugins/knowledge/runtime/runner.js "../evil" 2>err.txt
+          code=$?
+          set -e
+          test "$code" -eq 1
+          grep -q "invalid hook id" err.txt
       - name: MCP server JSON-RPC handshake
         run: |
           printf '%s\n%s\n' \
