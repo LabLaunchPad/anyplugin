@@ -4,6 +4,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    rebase-strategy: auto
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -11,3 +12,4 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: development
+    rebase-strategy: auto

@@ -46,6 +46,29 @@ Every PR goes through the same loop — for humans and AI coding agents alike:
 
 The loop's guarantees live in tests: schema changes trip the sync test, event-mapping changes trip the drift guard, installer changes must prove reversibility, and the runtime E2E suite executes the real runner and MCP server. CI enforces all of it mechanically; the loop adds the human/agent judgment on top.
 
+## Dependabot PRs stuck on a stale base
+
+Dependabot generally won't rebase a PR whose base merely moved without conflicting — its `auto` rebase-strategy triggers reliably on a real merge conflict, not just on the base advancing. If several dependabot PRs merge back-to-back (as in a batch), an unrelated PR can end up with a stale base and failing CI even though it has no conflict — dependabot may not touch it on its own.
+
+Commenting `@dependabot rebase` is the documented trigger, but don't assume it landed — verify the PR's *head* actually moved afterward (not just the base branch, which advances on every push to `main` regardless of what dependabot did):
+
+```bash
+git merge-base --is-ancestor origin/main origin/<dependabot-branch> && echo "rebase landed"
+```
+
+If it didn't land, rebase manually instead of re-commenting — or use GitHub's "Update branch" button on the PR if branch protection's "Require branches to be up to date" exposes one, which does the same merge without a local checkout. To do it locally (needed when the merge must be built/tested before pushing):
+
+```bash
+git fetch origin main <dependabot-branch>
+git worktree add ../wt-pr<N> origin/<dependabot-branch> --detach
+cd ../wt-pr<N> && git merge origin/main --no-edit
+# full-scratch build + test before pushing (see Setup above)
+git push origin HEAD:<dependabot-branch>
+cd - && git worktree remove ../wt-pr<N>
+```
+
+This puts a merge commit on the dependabot branch, which is fine today but would be rejected under "Require linear history" and gets discarded by any later dependabot force-push. `rebase-strategy: auto` in `dependabot.yml` (the default) only covers the conflict case above — it does not make this scenario impossible.
+
 ## Branch protection on `main`
 
 The PR review loop above is a convention enforced by discipline, not by GitHub — nothing currently stops a direct push or a merge with red CI. A repo admin should turn on branch protection for `main` to make it durable:
