@@ -36,7 +36,7 @@ jobs:
       # publish the dependency-free runtime for the Node 20 job
       - name: Upload runtime artifacts
         if: matrix.os == 'ubuntu-latest' && matrix.node == 24
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: anyplugin-runtime
           path: |
