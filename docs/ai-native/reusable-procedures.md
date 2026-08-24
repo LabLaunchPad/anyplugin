@@ -213,6 +213,83 @@ being constrained.
 
 ---
 
+## THE DECISION LADDER — what may be settled without asking
+
+`ENGINEERING_LEDGER.md` and the entries above cite "L1/L2" and "L4 boundary" as though the ladder were
+written down. Until now it was not — it lived in session conversation, so a compacted or fresh session met
+a dangling citation with nothing to consult. That is the failure `COMPACTION_INTEGRITY_PROTOCOL` exists to
+catch, reached through a reference rather than a summary. This is the ladder those citations mean.
+
+| level | what it is | action |
+|---|---|---|
+| **L0** | A mechanical fact the repository states directly | Act |
+| **L1** | Multiple independent repository facts constrain the answer to one | Act |
+| **L2** | A deterministic derivation from established evidence, or reuse of a precedent whose applicability test passes | Act |
+| **L3** | A reversible, local engineering choice with established precedent — or a bounded experiment that would settle the question safely | Act (run the experiment) |
+| **L4** | See the boundaries below | Consolidate into one packet; do not act |
+
+**The L4 boundaries, which nothing overrides** — not confidence, not precedent, not token efficiency,
+not a deadline:
+
+- modifying a frozen contract
+- establishing new storage authority
+- competing architectures with no repository-determined answer
+- a security or trust boundary
+- materially changing production behaviour
+- authorization or policy changes
+- destructive or externally-visible side effects
+- irreversible migration
+
+**Being unable to find a constraint is not the same as being constrained.** A confident derivation over
+an unconstrained question is invention wearing a derivation's clothes — see the contract-design rule
+above, which is what decides whether a milestone is L1/L2 or L4 in the first place.
+
+### Before escalating, in this order
+
+1. An existing authoritative rule (contracts, invariants, ownership)
+2. An accepted precedent whose **applicability test passes** (registry above — a match on shape is not a match)
+3. An existing procedure in this file
+4. Deterministic repository inspection
+5. The smallest discriminating experiment
+6. A reversible implementation plus verification
+
+Escalate only when all six are exhausted, or an L4 boundary is crossed outright. Then escalate **once**,
+consolidated — related decisions travel together, and independent work continues meanwhile. Stopping
+repeatedly for one blocked branch is its own failure.
+
+**Never re-ask a settled question.** A decision recorded in the registry, with its applicability
+conditions met, is an answer. Re-opening it costs the reasoning it was recorded to save.
+
+### UNKNOWN is typed, and the type decides the response
+
+Collapsing these into one "UNKNOWN" produces both failure directions at once — escalating what could be
+measured, and treating as safe what was never checked.
+
+| type | means | response |
+|---|---|---|
+| `NOT_OBSERVED` | The experiment ran; the interesting state did not occur | Report the distribution; never promote to FALSE or to PASS (U1a, F20) |
+| `UNSPECIFIED` | Nothing in the repository decides it | Usually L4 if implementing would commit the answer; otherwise defer |
+| `UNAUDITED` | Nobody checked | Acquire evidence; do not infer a verdict (F9) |
+| `NOT_COMPUTABLE` | The data needed to answer does not exist | Say so plainly; do not approximate (`provenance-semantics.md`) |
+| `APPLICABILITY` | A precedent might transfer | Run the discriminating check; do not assume either way |
+| `SAFETY` | The unknown is itself the risk | L4, always |
+| `DEFERRED` | Understood, deliberately postponed | Do not reopen absent a dependency change |
+| `OUT_OF_SCOPE` | Belongs to another milestone | Record; do not expand scope to cover it |
+
+Only `SAFETY`, `UNSPECIFIED`-that-blocks, and unresolved `APPLICABILITY` on an L4 boundary normally stop
+work. The rest are recorded and worked around.
+
+**This rule is itself subject to the governing principle.** A delegation rule that only ever delegates is
+as defective as a guard that cannot fail: it must be demonstrable that a genuinely novel or
+safety-crossing case escalates, not only that a settled one proceeds. No harness for that is built here —
+building one before a second instance of the failure would be the speculative-abstraction mistake this
+file argues against — but the obligation is recorded so it is not mistaken for satisfied.
+
+**Evidence.** M3 / M7 (settled at L1/L2 against existing frozen contracts) · M9 (L4 — no contract exists
+to constrain it) · M7a/F7 (L4 — production-behaviour contradiction across three documents).
+
+---
+
 ## PROCEDURE: CROSS_PLATFORM_CANONICALIZATION_CHECK
 
 **Trigger.** Any change to a cryptographic identity, a hash-bearing record, or a generated artifact whose
