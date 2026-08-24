@@ -86,6 +86,53 @@ wasted reasoning in one direction and vacuous evidence in the other.
 
 ---
 
+## RULE: A VERIFIER MUST HAVE AN INDEPENDENT GROUND TRUTH
+
+**A stored claim cannot simultaneously serve as both the claim and the ground truth it is checked
+against.** Before defining a verification algorithm, identify — explicitly, in writing — where the
+value it compares the claim to actually comes from, and confirm that source is not itself derived from
+the record being verified.
+
+**Why it exists.** The M7 preflight found `Evidence.contentHash` documented as *"hash of the observed
+content,"* which reads as something a verifier can simply recompute and compare. It cannot: the
+`Evidence` record stores the hash and a `source` string, never the observed content itself. A verifier
+that reads `Evidence.contentHash`, reformats or re-hashes something derived from the same record, and
+compares the result to itself is checking the record's internal consistency, not whether the claim is
+true — it would `PASS` a record whose author mutated both the content *and* the stored hash to match.
+This is `ANTI_VACUITY_ANALYSIS`'s false-implementation step applied specifically to verifiers: the false
+verifier here isn't a bad test, it's a verifier with no real ground truth, dressed as one.
+
+**The check.** For any verifier, name the two inputs separately before writing the comparison:
+
+```
+CLAIM        — what the record asserts (e.g. Evidence.contentHash)
+GROUND TRUTH — where the actual value comes from, independent of the record
+```
+
+If GROUND TRUTH cannot be named without pointing back into the same record (or a field derived from
+it), the verifier is non-discriminating by construction — no amount of test-writing fixes that; the
+architecture must supply an independent source first.
+
+**Candidate ground-truth models**, in the order M7's preflight found the architecture actually
+constrains them:
+
+| Model | Ground truth comes from | Cost |
+|---|---|---|
+| **Verification-time supplied observation** | The caller passes the content to check, at the moment of verification | None — fits the frozen `EvidenceSchema` and M7 having no persisted store, as-is |
+| **Re-execute the source** | Re-running `Evidence.source` (a command/URL/path) | Entangles verification with execution/isolation (M9, not yet built) and non-reproducible sources (time, network, environment) make a mismatch ambiguous between tampering and legitimate drift |
+| **Persist the original observation** | A content store written alongside `Evidence` at creation time | Reopens M3's closed, CI-verified storage architecture — a storage-authority change |
+| **Content-addressed external artifact reference** | A new `artifactRef`-style field on `Evidence` | A frozen-contract change (`FROZEN CONTRACT RULE`, above) |
+
+Only the first requires no change to anything already closed. The other three each name a specific,
+identifiable HITL-gated change (execution scope, storage authority, or contract change) rather than
+being ruled out by preference — the point of naming them is so a future session doesn't have to
+re-derive this table from scratch if requirements change.
+
+**Evidence.** M7 preflight, this session — `Evidence.contentHash` is documented as hashing "observed
+content" the record never stores.
+
+---
+
 ## PROCEDURE: CROSS_PLATFORM_CANONICALIZATION_CHECK
 
 **Trigger.** Any change to a cryptographic identity, a hash-bearing record, or a generated artifact whose
