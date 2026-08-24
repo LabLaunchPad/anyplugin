@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import { z } from "zod";
+import { INTENSITY_MODES } from "@lablaunchpad/core";
 
 /**
  * Strict CLI contract (spec CORE-INVARIANTS-V2, Pattern C): every command
@@ -62,10 +63,13 @@ export const CommandArgs = {
   "okf-reindex": z.object({ plugin: dir.optional(), json: flag.optional() }).strict(),
   intensity: z
     .object({
-      mode: z.enum(["conservative", "balanced", "aggressive"], {
+      mode: z.enum(INTENSITY_MODES, {
         required_error: "intensity requires --mode conservative|balanced|aggressive",
       }),
       plugin: dir.optional(),
+      agents: z.string().optional(),
+      home: dir.optional(),
+      project: dir.optional(),
       json: flag.optional(),
     })
     .strict(),

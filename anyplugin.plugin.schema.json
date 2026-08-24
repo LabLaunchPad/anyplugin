@@ -100,18 +100,20 @@
     "ladder": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
       "maxItems": 12,
       "description": "Behavioral decision ladder injected into instructions — stop at the first rung that holds (ponytail pattern)."
     },
     "intensity": {
       "type": "object",
       "additionalProperties": false,
+      "minProperties": 1,
       "properties": {
         "conservative": { "type": "string" },
         "balanced": { "type": "string" },
         "aggressive": { "type": "string" }
       },
-      "description": "Named intensity modes the plugin distinguishes at runtime; the active mode is read from .anyplugin-mode in the plugin root."
+      "description": "Named intensity modes the plugin distinguishes at runtime (at least one required); the active mode is set per installed agent root with `anyplugin intensity --mode <mode>`."
     },
     "capabilities": {
       "type": "object",

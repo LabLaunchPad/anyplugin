@@ -223,7 +223,13 @@ const TEMPLATES: Record<string, (o: { home: string; projectDir: string; codexHom
   "{{PROJECT}}/.opencode/skills": (o) => join(o.projectDir, ".opencode", "skills"),
   "{{PROJECT}}/.opencode/commands": (o) => join(o.projectDir, ".opencode", "commands"),
   "{{PROJECT}}/.opencode/agent": (o) => join(o.projectDir, ".opencode", "agent"),
+  "{{PROJECT}}/.anyplugin/instruction": (o) => join(o.projectDir, ".anyplugin", "instruction"),
 };
+
+/** Minimal template context for CLI paths that only ever vary by project dir. */
+function projectTemplateCtx(projectDir: string): { home: string; projectDir: string; codexHome: string } {
+  return { home: projectDir, projectDir, codexHome: projectDir };
+}
 
 function resolveFileTemplate(
   template: string,
@@ -632,16 +638,21 @@ export async function installInstructions(opts: {
   dryRun?: boolean;
 }): Promise<{ agentsMd: string; stateRoot: string; notes: string[] }> {
   const plugin = await loadPluginManifest(opts.pluginRoot);
-  validatePluginName(plugin.name);
-  const agentsMd = join(opts.projectDir, "AGENTS.md");
-  const stateRoot = join(opts.projectDir, ".anyplugin", "instruction", plugin.name);
+  const name = validatePluginName(plugin.name);
+  const ctx = projectTemplateCtx(opts.projectDir);
+  const agentsMd = resolveFileTemplate("{{PROJECT}}/AGENTS.md", ctx);
+  const stateRoot = join(resolveFileTemplate("{{PROJECT}}/.anyplugin/instruction", ctx), name);
   const notes: string[] = [];
   if (opts.dryRun) {
     notes.push(`would append instruction tier to ${agentsMd}`);
     return { agentsMd, stateRoot, notes };
   }
-  const begin = `<!-- anyplugin:${plugin.name} begin -->`;
-  const end = `<!-- anyplugin:${plugin.name} end -->`;
+  // Namespaced with a `:instruction` suffix so this never collides with a
+  // native install's own `anyplugin:<name>` marker in the same AGENTS.md
+  // (e.g. OpenCode's md-append action) — each install owns an independent
+  // block, and each can be installed/uninstalled without disturbing the other.
+  const begin = `<!-- anyplugin:${plugin.name}:instruction begin -->`;
+  const end = `<!-- anyplugin:${plugin.name}:instruction end -->`;
   let text = "";
   try {
     text = await readText(agentsMd);
@@ -669,8 +680,9 @@ export async function uninstallInstructions(opts: {
   dryRun?: boolean;
 }): Promise<string[]> {
   const plugin = await loadPluginManifest(opts.pluginRoot);
-  validatePluginName(plugin.name);
-  const stateRoot = join(opts.projectDir, ".anyplugin", "instruction", plugin.name);
+  const name = validatePluginName(plugin.name);
+  const ctx = projectTemplateCtx(opts.projectDir);
+  const stateRoot = join(resolveFileTemplate("{{PROJECT}}/.anyplugin/instruction", ctx), name);
   const journal = await readJournal(stateRoot);
   if (!journal) return [];
   const touched: string[] = [];

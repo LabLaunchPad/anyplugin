@@ -34,7 +34,7 @@ export function generateInstructionTier(plugin: ParsedPlugin): string {
     for (const [mode, description] of Object.entries(plugin.intensity)) {
       if (description !== undefined) lines.push(`- **${mode}**: ${description}`);
     }
-    lines.push("", "Active mode is read from `.anyplugin-mode` in the plugin root; switch it with `anyplugin intensity --mode <mode> --plugin <dir>`.", "");
+    lines.push("", "Active mode is read from `.anyplugin-mode` in each agent's installed plugin root; switch it with `anyplugin intensity --mode <mode> --plugin <dir>` (writes to every currently-installed root for this plugin).", "");
   }
 
   if (plugin.extra !== undefined && typeof plugin.extra["instructions"] === "string") {
