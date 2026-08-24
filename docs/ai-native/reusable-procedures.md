@@ -9,8 +9,10 @@ and execute** one of these instead of re-investigating the original problem.
 **This file owns nothing else.** Finding ids, defect taxonomy, statuses, and the
 VERIFY → FIX → ERADICATE THE CLASS protocol belong to
 [`ENGINEERING_LEDGER.md`](../../ENGINEERING_LEDGER.md); milestones and constraints belong to
-[`ROADMAP.md`](../../ROADMAP.md); current subsystem state belongs to
-[`CURRENT_STATE.md`](../../CURRENT_STATE.md). Entries here reference those; they never restate them.
+[`ROADMAP.md`](../../ROADMAP.md). Entries here reference those; they never restate them.
+Current subsystem state has **no** single owning document: `CURRENT_STATE.md` is a pinned snapshot of
+`77729f8` and says so in its own header, so current state is established from the ledger, the source,
+and CI at the exact HEAD — never from a document that claims to be current.
 
 A procedure earns a place here only when it is **executable** — a checklist a future session can run and
 get a pass/fail from. Advice belongs in prose; this file is for steps.
@@ -687,8 +689,9 @@ re-attempt the literal instruction, it is mandatory. This is a discipline to app
 handoff, not a mechanism this repository can run as a test — see Acceptance below.
 
 **What this deliberately does not do.** No memory-compression engine, no second ledger. The header is
-a pointer into artifacts this repository already owns (`ENGINEERING_LEDGER.md`, `CURRENT_STATE.md`,
-this file); externalizing state into well-structured repository artifacts is what should make context
+a pointer into artifacts this repository already owns (`ENGINEERING_LEDGER.md` and this file — **not**
+`CURRENT_STATE.md`, which is a pinned snapshot and would hand a recovering session a stale picture);
+externalizing state into well-structured repository artifacts is what should make context
 progressively *smaller*, not a better summarizer. Building the latter would be exactly the premature,
 speculative machinery this project's own doctrine argues against.
 
