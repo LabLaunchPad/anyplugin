@@ -55,6 +55,37 @@ the procedures themselves.
 
 ---
 
+## RULE: EVIDENCE INSPECTION DEPTH MUST MATCH THE PROPERTY BEING CLAIMED
+
+Green CI is not one thing. Whether it is sufficient by itself depends entirely on what is being claimed
+— treating "green" as a single universal sufficiency bar is how the U1a Windows miss happened: CI was
+green, and green was misread as "closed" without reading what the passing test had actually recorded. The
+fix generalizes past that one incident:
+
+| Claim | Green CI alone sufficient? | What else is required |
+|---|---|---|
+| Pure deterministic transformation | Usually yes | Negative tests proving the guard can fail |
+| Schema validation | Usually yes | Invalid-input tests, not only valid ones |
+| Cross-process determinism | **No** | Fresh-process boundary evidence (F18) |
+| Fault occurrence | **No** | Raw outcome distribution/classification, not a pass/fail summary (F20, U1a) |
+| Measurement accuracy | **No** | Ground-truth comparison; unit and resolution checked separately (F19) |
+| Cross-platform behaviour | **No** | Per-platform results inspected individually, never generalized from one cell |
+| Durability | **No** | A fault model that actually matches the failure mode claimed (U1a vs. U1b — a process kill is not a power loss) |
+| Performance / resource claim | **No** | Raw measurements plus the resolution analysis `MEASUREMENT_EVIDENCE_PROTOCOL` requires |
+
+The left column is not exhaustive and is not meant to be looked up mechanically — the actual test is
+**"is the interesting state part of what makes this claim true, or only part of how it's tested?"** M3's
+correctness tests (ordering, rejection, replay determinism) are the first row: the test passing *is* the
+evidence, because nothing about the claim depends on a rare or platform-specific event occurring. U1a's
+tear reproduction is the fourth row: the claim is specifically about an event occurring, so a green suite
+that never provoked the event proves nothing. Conflating the two — applying fourth-row scrutiny where
+first-row suffices, or first-row credulity where fourth-row rigor is required — is itself a source of
+wasted reasoning in one direction and vacuous evidence in the other.
+
+**Evidence.** U1a's Windows correction (`ENGINEERING_LEDGER.md`) · F20 · F19 · F18.
+
+---
+
 ## PROCEDURE: CROSS_PLATFORM_CANONICALIZATION_CHECK
 
 **Trigger.** Any change to a cryptographic identity, a hash-bearing record, or a generated artifact whose
