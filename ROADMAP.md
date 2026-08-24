@@ -216,7 +216,15 @@ This is a **class, not an instance** — per `ENGINEERING_LEDGER.md`'s VERIFY �
 2. `core/src/okf/index.ts:431-451` — `appendLog()`, the identical routine as exported **public `core` API**. Currently has no callers, which is the only reason it has not bitten yet.
 3. `core/src/okf/index.ts:350-424` — `regenerateIndexes()`, a second non-atomic whole-file rewrite.
 
-The event log **must not** copy this pattern — it requires atomic `O_APPEND` single writes.
+The event log **must not** copy this pattern.
+
+> **Corrected by measurement (F10, `ENGINEERING_LEDGER.md` AP-018).** This finding originally prescribed
+> *"atomic `O_APPEND` single writes"* as the remedy. That remedy does not hold: **POSIX bounds `O_APPEND`
+> write atomicity at `PIPE_BUF` (4096 bytes), and Windows guarantees no equivalent at all** — both are
+> platforms this repo tests. Implemented as first written, M2 would have inherited the very class F3
+> identifies while believing itself immune. The finding stands; the remedy is replaced by
+> `EVENT_WRITE_CONTRACT v1`, which states observable guarantees instead of the word *atomic* and is
+> satisfied by a mechanism chosen from measurement.
 
 **F4 — Two divergent implementations of one output protocol. Gates M11.**
 `core/src/events/index.ts:121` early-returns on `result.raw`, discarding every other field. `runner.js:160` instead merges raw, then applies `block` *after* it (`runner.js:162-170`) — so in the runner `block` wins over `raw`, while in core `raw` discards everything. Two different precedence rules for one protocol.
@@ -283,7 +291,7 @@ Each milestone follows the same shape — **Goal / Non-goals / Truth constraint 
 |---|---|---|---|---|
 | **M0** | Repository truth | 4 audit artifacts exist; F1–F8 confirmed or corrected; **zero source diffs** | — | — |
 | **M1** | Freeze kernel contract | Workspace glob + tsconfig reference added; JSON Schemas + contract tests green; deterministic hash; invalid objects rejected; boundary tests armed | M0 | — |
-| **M2** | Worker State + Contract | Replaying the event log reconstructs **byte-identical** state; illegal transitions rejected; **atomic append**; all three F3 sites addressed or explicitly deferred | M1 | F3 |
+| **M2** | Worker State + Contract | Replaying the event log reconstructs **byte-identical** state; illegal transitions rejected; **`EVENT_WRITE_CONTRACT v1` satisfied** (not "atomic append" — see F3's correction); all three F3 sites addressed or explicitly deferred | M1 | F3 |
 | **M3** | Evidence Ledger | Invalidating E1 preserves history *and* flips current validity; immutability test | M1 | — |
 | **M4** | Decision + Experience | `OBSERVATION` / `LESSON` / `HYPOTHESIS` / `VERIFIED_KNOWLEDGE` distinction proven by test — a lesson must **never** auto-promote to authoritative evidence | M3 | — |
 | **M5** | Dependency Graph | Deterministic traversal across branching, multi-hop, cycles, disconnected components; byte-identical output for identical input | M1 | — |

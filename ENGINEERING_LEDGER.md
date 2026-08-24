@@ -7,6 +7,13 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 > (iteration 2), and the CI-runnability pass (iteration 3), all on branch `feat/agentability-fixes`.
 > IDs without a mapped audit finding are marked `[UNMAPPED]` rather than invented; the founder should
 > attach the source-audit definitions for those rows.
+>
+> **Extended (M0–M1, Worker Runtime).** Rows AP-017…AP-020 and the F-series notes below come from the M0
+> repository-truth reconnaissance and the M1 kernel review. Findings keep their original `F<n>` ids as
+> historical labels and are mapped into this taxonomy by **class**, not one row per finding — several F-ids
+> are instances of one class, and one (F9) was a misreport of surfaces this ledger already carried. Where a
+> previously recorded conclusion conflicts with new measurement, the conflict is stated and resolved in
+> place rather than silently overwritten; see AP-018.
 
 ---
 
@@ -91,6 +98,56 @@ Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` �
 - **Status**: `[FIXED & ERADICATED]` (commit `223af46`) — see AP-001; the conflict path throws a descriptive abort listing offending files, preserves edits byte-exact, and `--dry-run` surfaces `CONFLICT:` lines without touching anything. (Supersedes the earlier reviewer finding that the json-merge dry-run had false negatives — that code path was replaced wholesale.)
 
 ### AP-010 … AP-016 — (definitions pending) · **Status**: `[UNMAPPED]`
+
+### AP-017 — Canonical↔native hook translation layer is unverified end-to-end · Severity: P1
+- **Status**: `[OPEN]` — gates M11.
+- **Root Cause Analysis**: the translation between canonical events and each agent's native protocol is implemented **twice** (in `core/src/events/` and again in the dependency-free `runner.js`) and is covered by no shared conformance test. Four independently-found findings are instances of this one class, which is why they are recorded here together rather than as four bugs:
+  - **F1** — `adapters/opencode/src/index.ts:183` parses hook stdout only `if (result.code === 0 …)`, but a `block: true` result exits **2** (`runner.js:175`), so the canonical block channel is a no-op on OpenCode while the matrix marks those hooks `NATIVE`. Scope precisely: permission *denial* still works via the separate `permissionDecision` channel (`:205-210`), which exits 0 — M7 must not rebuild a channel that already functions.
+  - **F2** — the OpenCode bridge is keyed by **native** name (`:142`), so `turn-stop` and `session-end` both map to `session.idle` and one hook is silently dropped, last-wins.
+  - **F4** — `core/src/events/index.ts:121` early-returns on `result.raw`, discarding every other field, while `runner.js:160-170` merges raw and then applies `block` *after* it. Two precedence rules for one protocol. The payload diverges in both directions: the runner omits `event`/`nativeEvent` that `HookPayload` declares required, and adds `hookId`/`pluginRoot`/`intensityMode` that it does not declare.
+  - **F8** — `runner.js:175` is `process.exit(result.block ? 2 : 0)` with no platform branch, while `AGENTS.md:62` documents exit-0 semantics for Antigravity — and the lines immediately above it *do* branch on platform for the payload shape. Either the runner is wrong or the documentation is; **one of the two must change**, and which is a source-of-truth decision, not a patch.
+- **Relationship to AP-007**: AP-007 is marked `[FIXED & ERADICATED]` for the two mechanisms it named — documentation drift and DEGRADED/UNSUPPORTED capability folds. These four instances run through a **different** mechanism (the output-protocol and event-name translation itself) that the eradication did not cover. The class is therefore wider than AP-007's remedy, which is recorded here rather than by weakening AP-007's status.
+- **Systemic Guardrail (required, not yet built)**: one shared conformance suite that both implementations must pass, so a protocol can no longer be implemented twice with two precedence rules. A one-sided patch to either implementation does not close this.
+
+### AP-018 — Non-atomic whole-file rewrite · Severity: P1
+- **Status**: `[OPEN]` for the three AnyPlugin instances; `[FIXED & ERADICATED]` for the Worker Runtime event log (see below).
+- **Root Cause Analysis**: unlocked `readFileSync` → mutate → `writeFileSync` on a shared file. Concurrent writers overwrite each other, and a process that dies mid-write leaves a file that is neither the old content nor the new one, with nothing recorded that can detect which. Three instances, named so that a fix cannot land on the copy and ship the original (**F3**):
+  1. `plugins/knowledge/plugin/hooks/okf-turn-stop.mjs:21-36` — the hook, the only one currently wired to an agent.
+  2. `core/src/okf/index.ts:431-451` — `appendLog()`, the identical routine exported as public `core` API. It has no callers, which is the only reason it has not bitten yet.
+  3. `core/src/okf/index.ts:350-424` — `regenerateIndexes()`, a second non-atomic whole-file rewrite.
+- **CONTRADICTION RESOLVED — the originally prescribed remedy was wrong.** `ROADMAP.md` F3 concluded *"the event log must not copy this pattern — it requires atomic `O_APPEND` single writes"*, and the M2 acceptance row required *"atomic append"*. Measurement contradicts the prescription: **POSIX bounds `O_APPEND` write atomicity at `PIPE_BUF` (4096 bytes) and Windows guarantees no equivalent at all**, so "atomic `O_APPEND`" is not a property that can be relied on for records of arbitrary size on the platforms this repo tests. Written as specified, M2 would have inherited the very class F3 identified, while believing itself immune. Resolved through this ledger's protocol: the finding stands, the remedy is replaced.
+- **Fix + Evidence (kernel surface)**: `EVENT_WRITE_CONTRACT v1` (`packages/worker-runtime/src/log/write-contract.ts`) states five observable guarantees and deliberately never uses the word *atomic* as a primitive — it conflates six properties (write atomicity, durability, ordering, concurrency, corruption detection, recovery) and a mechanism routinely satisfies one while violating its neighbour. Five candidate mechanisms were implemented and measured (`scripts/f10-bench.mjs`, `log/write-contract.test.ts`) across the full CI matrix. The decisive result: plain append **silently accepted** a tampered record — well-formed, parseable, correct length, and not what was written — because the information needed to detect it was never recorded. Checksummed framing converts every failure into a *detected* failure instead. Under a deliberately racy writer the framed mechanism lost 18 of 100 concurrent events, **detected all 18 and silently accepted none**, with byte accounting intact.
+- **Systemic Guardrail (class eradication, kernel surface)**: the contract is executable, so a future mechanism change must satisfy the same conformance suite; candidate A's defect is **pinned by an assertion rather than deleted**, so it stands as the answer the next time someone proposes appending to a file. Concurrent-append survival above `PIPE_BUF` is recorded per platform and **not asserted** — generalizing an observation into a guarantee is the failure this harness exists to prevent.
+- **Remaining work**: the three AnyPlugin instances above are untouched. They are not fixed by the kernel's contract and must not be reported as such.
+
+### AP-019 — `runtime.failurePolicy` is specified but does not exist, and three documents disagree · Severity: P2
+- **Status**: `[OPEN]` — gates M7a.
+- **Root Cause Analysis** (**F7**): `CORE-INVARIANTS-V2.md` §1.3.3 defines `failurePolicy: blocking`; grep finds **zero occurrences outside that document** — no schema field, no implementation, no test. Meanwhile the runtime's actual behaviour is that hook failures are always non-blocking. Either the spec describes an unbuilt feature, or a distinct mechanism is intended over *concern outcomes* (a verification returned FAIL) rather than over *handler throws* — in which case the "extension, not invention" framing is wrong and M7a is new design.
+- **Systemic Guardrail (required, not yet built)**: a specified-but-absent field is invisible to every test in the repository. The class is *specification that no test can falsify*; the remedy is that a normative field either exists in the schema or is removed from the spec.
+
+### AP-020 — Representation ambiguity in content-addressed integrity · Severity: P0
+- **Status**: `[FIXED & ERADICATED]`
+- **Root Cause Analysis**: the class is **one logical value with two byte representations (or two logical values with one)**. Anything content-addressed inherits it: a differing representation yields a false positive in tamper detection, and a shared representation yields a false *negative*, which is strictly worse — the ledger then asserts something that never happened. Three instances, the second and third found by deliberately applying the first's class to code already declared frozen:
+  - **F13** — a CRLF checkout changed generated-schema bytes, so the hashes recorded in the M1 report were platform-dependent, contradicting the determinism that report claimed. Found by Windows CI; not reproducible locally.
+  - **F14** — NFC and NFD forms of one string hashed differently. Not hypothetical: macOS normalizes filenames toward NFD while Linux stores NFC, so one record captured on two machines produced two hashes.
+  - **F15** — integers beyond ±(2^53−1) collapse as f64, so `9007199254740993` and `9007199254740992` produced **one** hash. A collision, i.e. a false negative in tamper detection.
+- **Fix + Evidence**: `.gitattributes` pins `text=auto eol=lf` (0 CRLF files across all tracked files, verified via `git ls-files --eol`); `canonical.ts` normalizes strings **and keys** to NFC and rejects keys that collide after normalization rather than silently merging or dropping one; unsafe integers are refused rather than hashed, with an error naming the offending path. `canonical-contract.test.ts` carries frozen golden vectors that run on every CI matrix cell, so platform- and version-independence is demonstrated rather than asserted.
+- **Systemic Guardrail (class eradication)**: canonicalization is treated as a **security primitive, not a serialization helper**, and the governing question for every accepted value is not "is this valid JSON?" but *"can two materially different semantic values collapse into the same canonical representation?"* — if yes, the value is refused. The canonicalizer rejects, rather than coerces, everything `JSON.stringify` would silently corrupt (NaN→null, undefined array elements→null, engine-dependent `Date`). A known caveat is pinned by its own tripwire test: canonicalization does **not** normalize path semantics, so any future record that stores a path must POSIX-normalize before hashing. No frozen contract stores one today.
+
+### F9 — capability truth · **not a new finding**
+Recorded as a **correction**, because it was initially reported as five undiscovered defects. The ledger already documented both live surfaces, with named remediations:
+- `codex@>=0.147` `mcp.http` is `UNKNOWN` and therefore fails closed — see *Additional classes* below, where it is recorded as **intentional per spec §2.2**, remediated by auditing the codex TOML http shape and filling the matrix row.
+- OpenCode v2-native emission is already `[OPEN]` under **AP-004**, pending a v2 plugin-API audit.
+
+**Scope decision for M2**: M2 is a local event log and requires neither MCP nor OpenCode hooks, so neither surface gates it. This narrows what M2 depends on; it does **not** resolve either surface. `UNKNOWN` stays `UNKNOWN` — it is not converted to `UNSUPPORTED` to make a gate green.
+
+### F5 / F6 — hard capability limits, **not defects**
+Recorded so their absence from the defect rows is not mistaken for an oversight. `session-end` is `UNSUPPORTED` on Antigravity (`matrix.ts:100`) and `opencode@v2` marks every hook `UNSUPPORTED` (`matrix.ts:82`), leaving only `skills` and `knowledge` `NATIVE`. These are **confirmations of AP-004's capability matrix working as designed** — the matrix exists precisely so a missing capability fails loudly instead of degrading silently. They constrain what may be built; they are never "satisfied," so they can never be closed.
+
+### F10 / F11 / F12 — questions about code that did not exist
+F10 (mutation protocol), F11 (write audit) and F12 (delete audit) asked what happens when the kernel writes and deletes. At M1 the kernel did neither — no `node:fs` import anywhere in kernel source — so they could not be closed against it. Absence of I/O is **not** evidence that future I/O is safe; it means the audit runs against the real M2 surface.
+- **F10** is answered by AP-018's kernel row above.
+- **F11/F12** are answered by the seven ownership invariants (`packages/worker-runtime/src/ownership.ts`, `ownership.test.ts`), established **before** the kernel had any I/O — a boundary added after the code it constrains has to argue with existing call sites, and it loses. Five are `PASSED` (single ownership, disjoint ownership, no reverse coupling, no cross-owner deletion, no hidden writers). Two are honestly `ARMED` and close empirically in M2: derived-state rebuildability (no builder and no records exist, so no rebuild has ever run) and transactional deletion (the policy is exercised, the crash-recovery mechanism is not). **ARMED is never reported as PASSED.**
 
 ---
 
