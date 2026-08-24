@@ -327,3 +327,42 @@ cell. Damage classified identically everywhere.
 *survived*; they say nothing about whether it survives a crash or power loss.
 
 **Evidence.** `log/replay-determinism.test.ts` · F18 · U1.
+
+---
+
+## PROCEDURE: FAULT_INJECTION_MUST_HIT
+
+**Trigger.** Any test that injects a fault — process kill, truncation, disconnect, timeout, corruption —
+and cites the result as evidence.
+
+**Why it exists.** F20. A crash harness using 256KB records reported
+`{"NO_WRITES":1,"CLEAN_BOUNDARY":5}`: **zero torn tails in six trials.** It passed, asserted no
+corruption, and exercised nothing. The interesting state is the rarest, and the boring one is
+indistinguishable from success — so the default outcome of a fault-injection test is *vacuous*.
+
+**Steps.**
+
+1. Enumerate the states the fault can produce. For a kill during a single `write()`: before the syscall
+   (nothing), inside it (torn), after it (complete).
+2. Identify which state exercises the property. Usually exactly one, usually the rarest.
+3. **Classify every trial by outcome. Never assert a global pass/fail across trials.** A trial that
+   missed the interesting state must be labelled as having missed it, not counted as a success.
+4. **Measure whether the interesting state is producible at all** before concluding anything. If it never
+   occurs, distinguish *not observed* from *cannot happen* — they license completely different claims.
+   The tuning parameter is usually physical: record size, timing window, buffer boundary.
+5. Assert the **universal** invariants on every trial regardless of outcome (nothing silently wrong,
+   byte accounting exact, replay deterministic).
+6. **Report the outcome distribution rather than asserting it.** How often a fault lands in the
+   interesting window is a property of the platform's scheduler, not of the code — asserting a
+   distribution makes the suite fail for reasons unrelated to the invariant.
+7. Prove the classifier **deterministically**, from a constructed corrupt state — never from an injected
+   one. A probabilistic check of a detector tests the scheduler, not the detector.
+
+**Acceptance.** A reported distribution containing at least one occurrence of the interesting state, or
+an explicit statement that it was not produced and why. Universal invariants asserted on all trials. The
+classifier proven against a constructed false state.
+
+**Measured platform facts (Linux, Node 22).** SIGKILL during `appendFileSync`: 256KB completes
+atomically; ≥1MB tears. Do not assume these hold elsewhere — they are observations, not guarantees.
+
+**Evidence.** `log/crash-resilience.test.ts` · F20 · U1a.
