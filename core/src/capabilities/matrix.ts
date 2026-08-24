@@ -38,10 +38,35 @@ export const DEFAULT_VARIANTS: Record<AgentId, string> = {
  * point: an unrecorded audit date is a real deficit, and a deficit that is
  * counted can be driven down, while one that is merely missing cannot.
  */
+/**
+ * How a verdict was established. Semantics: docs/ai-native/provenance-semantics.md
+ *
+ * This distinction is the load-bearing part. Before it existed, "audited"
+ * covered both *someone read a doc* and *someone ran it against the real
+ * agent* — different epistemic acts with different confidence, and collapsing
+ * them lets a documentation claim silently acquire the authority of an
+ * execution result.
+ *
+ * Enumerated rather than free text so a record cannot be upgraded by writing
+ * more confident prose.
+ */
+export const AUDIT_METHODS = ["DOCUMENTED", "OBSERVED", "DERIVED", "NOT_AUDITED"] as const;
+export type AuditMethod = (typeof AUDIT_METHODS)[number];
+
 export interface CapabilityProvenance {
-  /** What was consulted. Not invented — only what the audit actually used. */
+  /**
+   * What was consulted, in human-readable terms. Deliberately prose: the
+   * underlying audits recorded no resolvable identifier, and inventing a URL
+   * or version hash to fill this field would manufacture evidence.
+   */
   readonly source: string;
-  /** ISO-8601 date (YYYY-MM or YYYY-MM-DD), or "UNKNOWN" if never recorded. */
+  /** How the verdict was established. See docs/ai-native/provenance-semantics.md. */
+  readonly method: AuditMethod;
+  /**
+   * The date the AUDIT ACT was performed — not when the source was published,
+   * not when the agent shipped the behaviour, not when the row was last
+   * reviewed. ISO-8601 (YYYY-MM or YYYY-MM-DD), or "UNKNOWN" if never recorded.
+   */
   readonly observedAt: string;
 }
 
@@ -86,7 +111,7 @@ function all(events: CanonicalEvent[], verdict: (e: CanonicalEvent) => Verdict):
 const MATRIX: Record<string, MatrixRow> = {
   // Claude Code: 33-event superset; .mcp.json supports stdio and http.
   "claude-code@latest": {
-    provenance: { source: "claude-code plugin + hook documentation", observedAt: "UNKNOWN" },
+    provenance: { source: "claude-code plugin + hook documentation", method: "DOCUMENTED", observedAt: "UNKNOWN" },
     capabilities: {
       ...all(HOOK_EVENTS, () => ({ level: "NATIVE", rationale: "claude-code 33-event hook superset, command hooks" })),
       "mcp.stdio": { level: "NATIVE", rationale: ".mcp.json stdio servers" },
@@ -104,7 +129,7 @@ const MATRIX: Record<string, MatrixRow> = {
   "opencode@v1": {
     // The only row whose audit date was ever written down — it survived as prose
     // inside a rationale string, which is exactly why this field now exists.
-    provenance: { source: "opencode official plugin API docs", observedAt: "2026-08" },
+    provenance: { source: "opencode official plugin API docs", method: "DOCUMENTED", observedAt: "2026-08" },
     capabilities: {
       ...all(HOOK_EVENTS, (e) => {
       if (e === "prompt-submit") return { level: "UNSUPPORTED", rationale: "opencode plugin API documents no prompt-submission hook (message.* events are post-hoc); no faithful mapping exists" };
@@ -122,7 +147,10 @@ const MATRIX: Record<string, MatrixRow> = {
   // V2-native emission stays OPEN in the ledger; until audited, anything not
   // explicitly marked below is UNKNOWN and fails closed.
   "opencode@v2": {
-    provenance: { source: "opencode v2 core changelog; no v2 plugin-API audit performed", observedAt: "UNKNOWN" },
+    // DERIVED, not DOCUMENTED: the changelog documents that v1 hooks were
+    // REMOVED. That a replacement surface does not exist is inferred from the
+    // removal, never audited — which is why v2-native emission stays OPEN.
+    provenance: { source: "opencode v2 core changelog; no v2 plugin-API audit performed", method: "DERIVED", observedAt: "UNKNOWN" },
     capabilities: {
       ...all(HOOK_EVENTS, () => ({ level: "UNSUPPORTED", rationale: "opencode v2 core dropped the v1 hook API; no v2 hook surface has been audited" })),
       skills: { level: "NATIVE", rationale: "config skills[] paths are v2-safe" },
@@ -132,7 +160,7 @@ const MATRIX: Record<string, MatrixRow> = {
   // Codex >=0.147: hooks on by default, Claude-plugin-compatible; the plugin
   // surface carries skills + hooks + MCP + AGENTS.md — no command/agent artifacts.
   "codex@>=0.147": {
-    provenance: { source: "codex plugin surface documentation", observedAt: "UNKNOWN" },
+    provenance: { source: "codex plugin surface documentation", method: "DOCUMENTED", observedAt: "UNKNOWN" },
     capabilities: {
       ...all(HOOK_EVENTS, () => ({ level: "NATIVE", rationale: "codex hooks on by default, Claude-plugin-compatible" })),
       "mcp.stdio": { level: "NATIVE", rationale: "config.toml [mcp_servers]" },
@@ -144,7 +172,7 @@ const MATRIX: Record<string, MatrixRow> = {
   },
   // Antigravity: 5-event camelCase protocol; some canonical events fold.
   "antigravity@current": {
-    provenance: { source: "antigravity hook protocol documentation", observedAt: "UNKNOWN" },
+    provenance: { source: "antigravity hook protocol documentation", method: "DOCUMENTED", observedAt: "UNKNOWN" },
     capabilities: {
       ...all(HOOK_EVENTS, (e) => {
       if (e === "session-end") return { level: "UNSUPPORTED", rationale: "antigravity has a 5-event protocol; no SessionEnd — folds are documented, this one has none" };
@@ -187,6 +215,19 @@ export function rationale(agent: AgentId, variant: string, capability: Capabilit
  */
 export function provenance(agent: AgentId, variant: string): CapabilityProvenance | undefined {
   return MATRIX[`${agent}@${variant}`]?.provenance;
+}
+
+/**
+ * Surfaces whose verdicts rest on execution against the real agent.
+ *
+ * Currently EMPTY, and that is the honest headline: every verdict in this
+ * matrix is documentation-derived, so it inherits documentation's failure
+ * modes. A caller that needs "this was actually run" has no rows to use.
+ */
+export function observedSurfaces(): string[] {
+  return Object.entries(MATRIX)
+    .filter(([, row]) => row.provenance.method === "OBSERVED")
+    .map(([key]) => key);
 }
 
 /** Every audited surface key, for coverage guards. */

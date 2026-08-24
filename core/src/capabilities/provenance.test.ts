@@ -18,8 +18,10 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  AUDIT_METHODS,
   DEFAULT_VARIANTS,
   auditedSurfaces,
+  observedSurfaces,
   provenance,
   rationale,
   supports,
@@ -150,5 +152,58 @@ describe("the guards can fail", () => {
       (["mcp.stdio", "skills", "knowledge"] as Capability[]).map((c) => supports("codex", ">=0.147", c)),
     );
     expect(levels.has("UNKNOWN"), "audited capabilities must not report UNKNOWN").toBe(false);
+  });
+});
+
+describe("provenance carries semantics, not just structure", () => {
+  /**
+   * The second-generation failure this guards against: a record that is
+   * structurally present and epistemically meaningless. Semantics are defined
+   * in docs/ai-native/provenance-semantics.md; these assert the parts a test
+   * can hold.
+   */
+  it("every surface states HOW its verdicts were established", () => {
+    for (const key of auditedSurfaces()) {
+      const [agent, variant] = key.split("@") as [string, string];
+      const p = provenance(agent as never, variant)!;
+      expect(AUDIT_METHODS, `${key} has an unrecognized method`).toContain(p.method);
+    }
+  });
+
+  it("NO verdict currently rests on executing the real agent — stated, not hidden", () => {
+    // The honest headline. Every verdict is documentation-derived, so the
+    // matrix inherits documentation's failure modes. If this ever becomes
+    // non-empty, someone genuinely ran something and the claim strengthens.
+    expect(observedSurfaces()).toEqual([]);
+  });
+
+  it("opencode@v2 is DERIVED, not DOCUMENTED", () => {
+    // The changelog documents that v1 hooks were REMOVED. That no replacement
+    // exists is inferred from the removal, never audited. Recording this as
+    // DOCUMENTED would assert an audit of v2's surface that never happened.
+    expect(provenance("opencode", "v2")?.method).toBe("DERIVED");
+    expect(provenance("opencode", "v1")?.method).toBe("DOCUMENTED");
+  });
+
+  it("method cannot be upgraded by writing more confident prose", () => {
+    // Enumerated, not free text — the whole reason for the union. A record
+    // claiming execution must use a value the type admits, which makes the
+    // fabrication visible in review rather than buried in a sentence.
+    const p = provenance("codex", ">=0.147")!;
+    expect(typeof p.method).toBe("string");
+    expect(AUDIT_METHODS).toContain(p.method);
+    expect(p.method).not.toBe("OBSERVED");
+  });
+
+  it("staleness is NOT computable, and nothing pretends otherwise", () => {
+    // No staleAfter policy exists and most rows have no observedAt, so no
+    // caller can ask "is this verdict stale now". Asserted so a future reader
+    // does not assume the capability exists.
+    const withDates = auditedSurfaces().filter((k) => {
+      const [a, v] = k.split("@") as [string, string];
+      return provenance(a as never, v)!.observedAt !== "UNKNOWN";
+    });
+    expect(withDates).toEqual(["opencode@v1"]);
+    expect(surfacesWithoutObservedAt().length).toBeGreaterThan(0);
   });
 });
