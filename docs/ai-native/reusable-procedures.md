@@ -368,3 +368,101 @@ atomically; ≥1MB tears. Do not assume these hold elsewhere — they are observ
 six trials on exact-head CI. Do not port a tuning parameter across platforms without re-measuring it.
 
 **Evidence.** `log/crash-resilience.test.ts` · F20 · U1a.
+
+---
+
+## PROCEDURE: COMPACTION_INTEGRITY_PROTOCOL
+
+**Trigger.** Any point where conversational context is compressed — automatic (the harness's own
+context-window compaction) or manual (a session summary written to hand off work).
+
+**Why it exists.** Every other procedure in this file defends the pipeline `repository → evidence →
+decision → procedure → experience → context`. Compaction inserts a step the others don't cover:
+`context → COMPACTION → compressed context → reasoning`. A bad compaction produces confident
+wrongness with **no code defect at all** — nothing in the repo changed, so none of the tests here would
+ever catch it. This is the same class as F16/F18/F19 (a layer that can be wrong while every layer above
+it stays green) one level higher: the layer above the repository instead of below it.
+
+**The governing invariant.** *Compaction may remove conversational detail. It may never remove
+engineering state.* Engineering state is: decisions, contradictions, UNKNOWNs, negative knowledge
+("X does not exist / must not be assumed"), open blockers, closed gates with their exact evidence
+(SHA + CI cell count, not just "passed"), ownership/security constraints, procedures, and the next
+required action. Losing prose is compression. Losing any of those is data loss wearing compression's
+clothes.
+
+**Specific failure shapes to guard against** (each has a concrete instance in this project's history):
+
+1. **Decision loss** — retaining *what* was decided while dropping *why*, e.g. "F9 resolved" surviving
+   without "resolved by refusing the literal instruction because it contradicted the type system."
+2. **UNKNOWN → FALSE/RESOLVED** — U1a and U1b collapsing into one "durability: done" when U1a is closed
+   for process-crash only and U1b is untouched. This is the highest-risk shape in this repository
+   specifically, because `SupportLevel`/`Validity` already encode UNKNOWN as a first-class state that a
+   sloppy summary can quietly erase.
+3. **Evidence provenance loss** — "Gate 4 passed" surviving without the exact SHA, which CI cells, and
+   what was NOT established (durability). A summary is then treated as primary evidence instead of a
+   pointer to it — exactly the OBSERVED-vs-DOCUMENTED confusion `provenance-semantics.md` exists to
+   prevent, recurring at the context layer instead of the capability-matrix layer.
+4. **Contradiction loss** — keeping the resolution, dropping the fact that spec and repo disagreed. The
+   contradiction is *why* the decision was justified; without it the decision looks arbitrary or, worse,
+   reversible by someone who re-reads only the spec.
+5. **Scope drift** — "U1a: process crash" + "U1b: power loss" merging into "U1: durability," after which
+   future reasoning can claim U1b is covered by U1a evidence. Same failure as collapsing OBSERVED into
+   VERIFIED.
+6. **Negative knowledge disappears** — facts of the form "V5.2.1 does not exist," "UNKNOWN is an absent
+   key, never a value," "CI green ≠ semantic correctness" are asymmetric: forgetting them costs a
+   repeated mistake, not just a repeated lookup. Summaries compress toward what exists; what-must-not-be-
+   assumed has no natural home in a summary and is the first thing lost.
+7. **Procedure degradation** — "anti-vacuity protocol established" is not the same as retaining that a
+   procedure requires PROPERTY, FALSE IMPLEMENTATION, DISCRIMINATION, OBSERVATION BOUNDARY, PROMOTION
+   RULE. A name without its steps cannot be executed, only cited.
+8. **Stale HEAD outliving reality** — a control header asserting a SHA that a later git operation moved
+   past. This is why the header below is a *navigation index into the repository*, never a substitute for
+   reading it.
+9. **Rediscovery cost** — losing *where* something was recorded (not the fact itself) causes
+   `grep → scan → inspect → rediscover → reason again`, which can spend more tokens than the compaction
+   saved. This is the reason the header names artifacts, not conclusions.
+10. **Wrong priority after compaction** — "next: U1a" surviving after U1a closed. Current gate state must
+    be re-derived from the repository at the next decision point, never trusted from memory of a prior
+    turn — this is `ENGINEERING_LEDGER.md`'s job, not the context window's.
+
+**The control header.** Not authoritative — a pointer, discarded the moment it disagrees with the
+repository:
+
+```
+ENGINEERING SESSION STATE (navigation index — repository is authoritative)
+HEAD: <exact SHA>            BRANCH: <name>
+LAST VERIFIED CI: <SHA> — <n>/<total> cells, verified <how: get_commit / get_check_runs>
+CLOSED GATES: <ids only — detail lives in ENGINEERING_LEDGER.md>
+OPEN BLOCKERS / UNKNOWNS: <ids only>
+DECISIONS PENDING AUTHORITY: <one line each>
+NEXT REQUIRED ACTION: <one line>
+```
+
+**The reconciliation rule.** After any compaction — automatic or a fresh session reading a handoff
+summary — the first action is reconciliation, never implementation: re-read `HEAD`, re-verify the last
+CI claim against the repository (not the header's memory of it), re-read the open gates in
+`ENGINEERING_LEDGER.md`, and only then continue. Cheap relative to rediscovering the state from scratch,
+and it is what stops the header from becoming the thing this protocol exists to prevent.
+
+**The anti-vacuity test for compaction**, per `ANTI_VACUITY_ANALYSIS` applied to compaction itself: for
+each candidate fact, construct a compacted context with it removed and ask whether a plausible next
+action changes. If removing "F9 was resolved by correcting a contradictory spec, not by following it"
+changes nothing about what happens next, it may be droppable. If removing it lets a future turn silently
+re-attempt the literal instruction, it is mandatory. This is a discipline to apply when writing a
+handoff, not a mechanism this repository can run as a test — see Acceptance below.
+
+**What this deliberately does not do.** No memory-compression engine, no second ledger. The header is
+a pointer into artifacts this repository already owns (`ENGINEERING_LEDGER.md`, `CURRENT_STATE.md`,
+this file); externalizing state into well-structured repository artifacts is what should make context
+progressively *smaller*, not a better summarizer. Building the latter would be exactly the premature,
+speculative machinery this project's own doctrine argues against.
+
+**Acceptance.** **Not verifiable by this repository's test suite** — compaction happens at the harness
+layer, outside kernel code, so nothing here can assert it mechanically today. This procedure's status is
+`DOCUMENTED`, not `VERIFIED`, on the same ladder `provenance-semantics.md` defines: stated as a discipline
+to follow, not proven by a passing test. Promoting it to `OBSERVED`/`VERIFIED` would require an
+instrumented harness that can compare pre- and post-compaction state — not attempted here, and not
+invented to fill this gap.
+
+**Evidence.** This session's own U1a-classification handoff (the event this procedure generalizes from)
+· `provenance-semantics.md`'s OBSERVED/VERIFIED distinction, applied one layer up.
