@@ -46,6 +46,34 @@ Every PR goes through the same loop — for humans and AI coding agents alike:
 
 The loop's guarantees live in tests: schema changes trip the sync test, event-mapping changes trip the drift guard, installer changes must prove reversibility, and the runtime E2E suite executes the real runner and MCP server. CI enforces all of it mechanically; the loop adds the human/agent judgment on top.
 
+## Branch protection on `main`
+
+The PR review loop above is a convention enforced by discipline, not by GitHub — nothing currently stops a direct push or a merge with red CI. A repo admin should turn on branch protection for `main` to make it durable:
+
+**Settings → Branches → Add branch protection rule** for `main`:
+
+- Require a pull request before merging (no direct pushes)
+- Require status checks to pass before merging, selecting the full CI matrix: `test (ubuntu-latest, 22)`, `test (ubuntu-latest, 24)`, `test (windows-latest, 24)`, `runtime-node-20`
+- Require branches to be up to date before merging
+- Require at least 1 approving review (this is what "Explicit GO" in the loop above formalizes)
+- "Do not allow bypassing the above settings" so it applies to admins too
+
+Equivalently, via the API (requires admin token):
+
+```bash
+gh api repos/LabLaunchPad/anyplugin/branches/main/protection -X PUT --input - <<'EOF'
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": ["test (ubuntu-latest, 22)", "test (ubuntu-latest, 24)", "test (windows-latest, 24)", "runtime-node-20"]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {"required_approving_review_count": 1},
+  "restrictions": null
+}
+EOF
+```
+
 ## Reporting bugs / proposing features
 
 Open an issue using the bug or feature template. For security issues, see [`SECURITY.md`](SECURITY.md) — do not open public issues for vulnerabilities.
