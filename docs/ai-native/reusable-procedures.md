@@ -63,6 +63,63 @@ AP-020.
 
 ---
 
+## PROCEDURE: ANTI_VACUITY_ANALYSIS
+
+**Trigger.** Before citing ANY test, benchmark, audit, or measurement as evidence for a property —
+including in a commit message, a PR body, a gate claim, or the ledger.
+
+**Why it exists.** This class has now bitten three times, and twice it was the *verification machinery*
+rather than the runtime:
+
+- The workspace boundary guard enumerated forbidden packages and silently omitted the most important
+  one. It could not fail for the case it existed to catch.
+- **F16** — the F10 write harness carried no `sequence`. Its clean concurrency numbers proved *set
+  completeness* while being cited for *ordering*. Two different properties; only one was measured.
+- **F18** — Gate 3 replayed twice in one process and was cited for determinism. Injecting
+  `process.pid` into `stateHash` left all **32 in-process tests green** while failing **13 of 15**
+  fresh-process tests.
+
+The through-line: **a harness whose construction excludes the very failure it is cited as evidence
+against.** A non-discriminating test is indistinguishable from a passing one by inspection, which is
+what makes this class recur silently.
+
+**Steps.**
+
+1. **PROPERTY.** State the exact property claimed, in one sentence. If it takes two, they are probably
+   two properties and only one is being tested.
+2. **FALSE IMPLEMENTATION.** Construct the *smallest* change that makes that property false while
+   leaving the code plausible. Not a broken build — a working implementation that lacks the property.
+3. **DISCRIMINATION.** Run the test against it. **It must fail.** If it passes, the test is
+   non-discriminating and may not be promoted to evidence for that property, whatever else it proves.
+4. **OBSERVATION BOUNDARY.** Record what the test can actually observe: same process · fresh process ·
+   concurrent processes · filesystem · machine/OS · crash boundary · network · clock · external state.
+5. **PROMOTION RULE.** Promote it as evidence *only* for the property it discriminates, *only* within
+   the boundary it observes. Never infer a stronger guarantee from a weaker boundary.
+
+**Inferences that are not valid**, each of which has a real counterexample in this repository or is one
+step from one:
+
+| this | does not establish |
+|---|---|
+| in-process replay | cross-process determinism (F18) |
+| successful concurrent execution | durability (U1) |
+| no observed data loss | guaranteed atomicity (F10 — POSIX bounds `O_APPEND` at `PIPE_BUF`) |
+| parser validity | integrity (plain append accepted a tampered, well-formed record) |
+| schema validity | engine correctness (10 contracts, 2 engines) |
+| CI green | semantic correctness |
+| a green run on an earlier SHA | the current head (F17) |
+| test coverage | proof of the covered property |
+
+**Acceptance.** A recorded false-implementation cycle showing the test failing, plus a stated
+observation boundary. Absent either, the claim is `UNKNOWN` — not `PASS`.
+
+**Relationship to the procedure below.** `PROVE_A_GUARD_CAN_FAIL` is this procedure's narrowest special
+case: it covers step 3 for a single guard. This one additionally forces steps 1, 4 and 5 — which is
+where F16 and F18 actually went wrong. Both harnesses *could* fail; they simply could not fail for the
+property being claimed.
+
+---
+
 ## PROCEDURE: PROVE_A_GUARD_CAN_FAIL
 
 **Trigger.** Before claiming any guard, invariant test, or boundary check `PASSED`.

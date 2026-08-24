@@ -82,7 +82,7 @@ Direct search across all `.ts/.mjs/.js/.json/.md`, excluding `node_modules` and 
 |---|---|---|
 | Durable event log | `VERIFIED_TESTED` | `log/event-log.ts` — single-writer framed append (Gate 3) |
 | Production write mechanism | `VERIFIED_TESTED` | framed append chosen from measurement; durability still `UNKNOWN` (U1) |
-| Replay engine (governed state) | `VERIFIED_TESTED` | `log/replay.ts` — byte classification, gap/duplicate detection, deterministic |
+| Replay engine (governed state) | `VERIFIED_TESTED` | `log/replay.ts` — byte classification, gap/duplicate detection; determinism proven **across a process boundary** (Gate 4), incl. varying cwd/TZ/locale. Not durability — see U1 |
 | Worker state store | `VERIFIED_TESTED` | `log/worker-state.ts` — folded from events via `LEGAL_TRANSITIONS` |
 | Evidence ledger engine | `DESIGNED` | `EvidenceSchema` exists; no reader, writer, or store |
 | Decision engine | `DESIGNED` | `DecisionSchema` exists; no engine |
