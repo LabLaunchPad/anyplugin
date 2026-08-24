@@ -46,6 +46,22 @@ Every PR goes through the same loop — for humans and AI coding agents alike:
 
 The loop's guarantees live in tests: schema changes trip the sync test, event-mapping changes trip the drift guard, installer changes must prove reversibility, and the runtime E2E suite executes the real runner and MCP server. CI enforces all of it mechanically; the loop adds the human/agent judgment on top.
 
+## Dependabot PRs stuck on a stale base
+
+Dependabot only auto-rebases a PR when its base branch changes *and* that creates a real merge conflict. If several dependabot PRs merge back-to-back (as in a batch), an unrelated PR can end up with a stale base and failing CI even though it has no conflict — dependabot won't touch it on its own.
+
+Commenting `@dependabot rebase` is the documented trigger, but don't assume it landed — verify the PR's `base.sha` actually advanced afterward before waiting on CI. If it didn't, rebase manually instead of re-commenting:
+
+```bash
+git fetch origin main <dependabot-branch>
+git worktree add /tmp/wt/pr<N> origin/<dependabot-branch> --detach
+cd /tmp/wt/pr<N> && git merge origin/main --no-edit
+# full-scratch build + test before pushing (see Setup above)
+git push origin HEAD:<dependabot-branch>
+```
+
+`rebase-strategy: auto` in `dependabot.yml` (the default) only covers the conflict case above — it does not make this scenario impossible.
+
 ## Branch protection on `main`
 
 The PR review loop above is a convention enforced by discipline, not by GitHub — nothing currently stops a direct push or a merge with red CI. A repo admin should turn on branch protection for `main` to make it durable:
