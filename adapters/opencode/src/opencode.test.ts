@@ -23,8 +23,8 @@ hooks:
   - id: guard-tool
     event: before-tool-use
     handler: ./hooks/guard.mjs
-  - id: on-chat
-    event: prompt-submit
+  - id: on-perm
+    event: permission-request
     handler: ./hooks/guard.mjs
 mcp:
   servers:
@@ -46,7 +46,8 @@ describe("opencode adapter emit", () => {
   it("renders a v1 plugin.ts shim bridging to the runner", async () => {
     const shim = await readFile(join(out, "plugin.ts"), "utf8");
     expect(shim).toContain('"tool.execute.before": "guard-tool"');
-    expect(shim).toContain('"chat.message": "on-chat"');
+    // official docs name is permission.asked (verified 2026-08)
+    expect(shim).toContain('"permission.asked": "on-perm"');
     expect(shim).toContain('ANYPLUGIN_HOST');
     expect(shim).toContain('"shell.env"');
     expect(shim).toContain('export default');
@@ -70,5 +71,32 @@ describe("opencode adapter emit", () => {
     expect(mdAppend).toBeDefined();
     expect(mdAppend!.content).toContain("anyplugin:demo-plugin begin");
     expect(mdAppend!.content).toContain("anyplugin:demo-plugin end");
+  });
+
+  it("drops a prompt-submit hook (UNSUPPORTED, undocumented in OpenCode) with a warning, not a throw", async () => {
+    const psRoot = await mkdtemp(join(tmpdir(), "opencode-prompt-submit-"));
+    await mkdir(join(psRoot, "hooks"), { recursive: true });
+    await writeFile(join(psRoot, "anyplugin.plugin.yaml"), `name: prompt-submit-plugin
+version: 0.1.0
+description: exercises the prompt-submit drop path
+hooks:
+  - id: on-prompt
+    event: prompt-submit
+    handler: ./hooks/guard.mjs
+  - id: on-perm
+    event: permission-request
+    handler: ./hooks/guard.mjs
+`);
+    await writeFile(join(psRoot, "hooks", "guard.mjs"), "export async function run() { return {}; }\n");
+    await writeFile(join(psRoot, "hooks", "runner.js"), "// dummy\n");
+    const psPlugin = await loadPluginManifest(psRoot);
+    const psOut = join(psRoot, "dist");
+    const emitted = await emitOpencode(psPlugin, { pluginRoot: psRoot, outDir: psOut, runnerRelPath: "runner.js", runnerAbsPath: join(psRoot, "hooks", "runner.js") });
+
+    expect(emitted.warnings).toEqual(["hook on-prompt: canonical event prompt-submit has no OpenCode mapping; skipped"]);
+    const shim = await readFile(join(psOut, "plugin.ts"), "utf8");
+    expect(shim).not.toContain("on-prompt");
+    // the mapped hook in the same manifest still emits normally
+    expect(shim).toContain('"permission.asked": "on-perm"');
   });
 });

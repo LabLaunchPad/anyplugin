@@ -37,8 +37,7 @@ export async function emitOpencode(plugin: ParsedPlugin, opts: EmitOptions): Pro
     }
     const kind = native === "tool.execute.before" ? "tool-before"
       : native === "tool.execute.after" ? "tool-after"
-      : native === "chat.message" ? "chat"
-      : native === "permission.ask" ? "permission"
+      : native === "permission.asked" ? "permission"
       : "event";
     bridge.push({ id: hook.id, opencode: native, kind });
   }
@@ -203,11 +202,8 @@ export const ${shimConstName(name)}Plugin = async () => ({
     const out = await maybeRun("tool.execute.after", { ...input, hook_event_name: "tool.execute.after" });
     if (out) Object.assign(output, out);
   },
-  "chat.message": async (input: Record<string, unknown>, _output: unknown) => {
-    await maybeRun("chat.message", { ...input, hook_event_name: "chat.message" });
-  },
-  "permission.ask": async (input: Record<string, unknown>, output: { status: string }) => {
-    const out = await maybeRun("permission.ask", { ...input, hook_event_name: "permission.ask" });
+  "permission.asked": async (input: Record<string, unknown>, output: { status: string }) => {
+    const out = await maybeRun("permission.asked", { ...input, hook_event_name: "permission.asked" });
     if (out && typeof out["permissionDecision"] === "string") {
       output.status = out["permissionDecision"] as string;
     }

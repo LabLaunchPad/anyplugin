@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import { z } from "zod";
+import { INTENSITY_MODES } from "@lablaunchpad/core";
 
 /**
  * Strict CLI contract (spec CORE-INVARIANTS-V2, Pattern C): every command
@@ -14,7 +15,7 @@ const dir = z.string();
 export const CommandArgs = {
   init: z
     .object({
-      name: z.string({ required_error: "init requires --name (kebab-case plugin name)" }),
+      name: z.string({ error: "init requires --name (kebab-case plugin name)" }),
       dir: dir.optional(),
       json: flag.optional(),
     })
@@ -40,6 +41,7 @@ export const CommandArgs = {
       runner: dir.optional(),
       "mcp-runtime": dir.optional(),
       "dry-run": flag.optional(),
+      tier: z.enum(["native", "instruction"]).optional(),
       json: flag.optional(),
     })
     .strict(),
@@ -53,11 +55,24 @@ export const CommandArgs = {
       runner: dir.optional(),
       "mcp-runtime": dir.optional(),
       "dry-run": flag.optional(),
+      tier: z.enum(["native", "instruction"]).optional(),
       json: flag.optional(),
     })
     .strict(),
   "okf-validate": z.object({ plugin: dir.optional(), json: flag.optional() }).strict(),
   "okf-reindex": z.object({ plugin: dir.optional(), json: flag.optional() }).strict(),
+  intensity: z
+    .object({
+      mode: z.enum(INTENSITY_MODES, {
+        error: "intensity requires --mode conservative|balanced|aggressive",
+      }),
+      plugin: dir.optional(),
+      agents: z.string().optional(),
+      home: dir.optional(),
+      project: dir.optional(),
+      json: flag.optional(),
+    })
+    .strict(),
 } as const;
 
 export type CommandName = keyof typeof CommandArgs;
@@ -74,6 +89,8 @@ const ALL_OPTIONS = [
   "mcp-runtime",
   "name",
   "dir",
+  "mode",
+  "tier",
   "json",
 ] as const;
 
@@ -118,5 +135,5 @@ export function parseCliArgv<T extends CommandName>(argv: string[]): ParsedComma
   } else if (parsed.positionals.length > 0) {
     throw new Error(`invalid arguments for ${String(command)}: this command takes no positional arguments (got: ${parsed.positionals.join(" ")}) — use flags, see anyplugin help`);
   }
-  return { command, values: checked.data, positionals: parsed.positionals };
+  return { command, values: checked.data as z.infer<(typeof CommandArgs)[T]>, positionals: parsed.positionals };
 }

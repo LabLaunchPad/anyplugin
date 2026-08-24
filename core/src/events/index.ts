@@ -39,10 +39,12 @@ export const NATIVE_EVENT_MAP: Record<AgentId, Partial<Record<CanonicalEvent, st
     "session-start": "session.created",
     "before-tool-use": "tool.execute.before",
     "after-tool-use": "tool.execute.after",
-    "prompt-submit": "chat.message",
+    // No documented prompt hook exists (message.* events are post-hoc updates);
+    // dropped at emit time per the official plugin API docs (2026-08).
+    "prompt-submit": undefined,
     "turn-stop": "session.idle",
     "session-end": "session.idle",
-    "permission-request": "permission.ask",
+    "permission-request": "permission.asked",
   },
 };
 
