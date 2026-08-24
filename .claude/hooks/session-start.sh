@@ -5,7 +5,7 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-cd "$CLAUDE_PROJECT_DIR"
+cd "${CLAUDE_PROJECT_DIR:?CLAUDE_PROJECT_DIR must be set}"
 
 pnpm install --frozen-lockfile
 
@@ -13,8 +13,7 @@ pnpm install --frozen-lockfile
 # CLI E2E test suite spawns cli/dist/bin.js, which only exists after a build.
 pnpm build
 
-# Global Claude Code plugins used for reviewing this repo's PRs. Both the
-# marketplace add and plugin install are idempotent no-ops when already present.
+# Global Claude Code plugins used for reviewing this repo's PRs.
 # Non-fatal: a GitHub hiccup here must not block the pnpm install/build above,
 # which is what tests and linting actually depend on.
 claude plugin marketplace add anthropics/claude-code || echo "warning: failed to add claude-code-plugins marketplace (non-fatal)" >&2

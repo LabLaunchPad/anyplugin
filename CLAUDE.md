@@ -34,7 +34,7 @@ anyplugin.plugin.yaml ──▶ adapters ──▶ 4 native bundles ──▶ in
 - **`core/src/okf/`** — OKF v0.2 (Open Knowledge Format) parse/serialize/validate library.
 - **`core/src/fs/safe-path.ts`** — the SINGLE way untrusted input becomes a filesystem path (`resolveAuthorizedPath`). Spec: `CORE-INVARIANTS-V2.md` §1.1. Never bypass this with ad hoc path joining/regex checks.
 - **`adapters/<agent>/src/`** — one *pure* emitter per agent (`emit<Agent>(plugin, opts) → EmittedBundle`). No side effects, no touching the user's home/project dirs — they only render into `opts.outDir` and return an install plan; the CLI executes it.
-- **`cli/src/bin.ts`** — CLI entry (`init`, `detect`, `build`, `install`, `uninstall`, `okf-validate`, `okf-reindex`).
+- **`cli/src/bin.ts`** — CLI entry (`init`, `detect`, `build`, `install`, `uninstall`, `intensity`, `okf-validate`, `okf-reindex`).
 - **`cli/src/strict-args.ts`** — the ONLY place argv is parsed; one strict Zod schema per command.
 - **`cli/src/index.ts`** — build orchestration + installer (`TEMPLATES` path whitelist, marker-delimited config merges).
 - **`cli/src/journal.ts`** — transactional install state (`.anyplugin-state.json`): pre-install backups, SHA-256 hashes, conflict detection so uninstall aborts rather than clobbers a user's post-install edits.
