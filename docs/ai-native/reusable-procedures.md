@@ -133,6 +133,86 @@ content" the record never stores.
 
 ---
 
+## PROCEDURE: REUSE_AN_ARCHITECTURAL_PRECEDENT
+
+**Trigger.** Any point where a previous milestone's architecture looks like it answers the current one —
+"Evidence got its own store, so Decision should too", "M7 didn't persist its result, so M9 shouldn't
+either".
+
+**Why it exists.** Three milestones in a row nearly inherited the wrong answer by analogy. M4's preflight
+found `AUTHORITATIVE_SUBDIRS` lists `decisions` and `experience` exactly as it listed `evidence`, and the
+`EventSchema.kind` enum offers `DECISION_RECORDED`/`EXPERIENCE_PROMOTED` exactly as it offered the three
+`EVIDENCE_*` kinds — the same surface that M3 resolved. Copying M3's answer would have modelled
+`Decision.stale` (**reversible** — replacement evidence restores validity, per M6) as a terminal
+transition, and `Experience.rung` (**multi-step** promotion) as a two-outcome one. Both would have been
+structurally incapable of the behaviour the system needs, and nothing would have said so until M6. That
+is F16's shape — machinery whose construction excludes the case it will be relied on for — reached
+through architecture rather than through a test.
+
+**Steps.** A precedent is never reusable because the shapes match. It is reusable when its *reason* still
+holds:
+
+1. State the **property** that made the precedent correct, not the decision it produced.
+2. State the current component's corresponding property.
+3. List what **differs**. Lifecycle shape (terminal vs. reversible vs. multi-step), durability
+   requirement, authority model, replay requirement, and identity semantics are the five that have
+   actually diverged in this repository.
+4. Ask the inverting question: **could the precedent be structurally wrong here?** Construct the failure
+   it would produce. If you cannot name one, you have not yet understood the precedent's reason.
+5. Reuse only if every differing dimension is irrelevant to the precedent's reason. Otherwise reuse the
+   *mechanism* (canonicalization, framing, writer locks, `Anomaly`/`Classification`) and design the
+   *semantics* fresh — M3 reused `recordHash`/`canonicalJson` while rejecting `EventLog` itself.
+
+**Acceptance.** A named property, a named difference, and either a reuse justified by that property or a
+constructed failure showing why reuse is invalid.
+
+### Decision registry
+
+Accepted decisions, with the conditions under which they transfer. Query this **before** opening a new
+architecture question; a matching precedent is an answer, and a non-matching one is not a licence.
+
+| id | decision | the property that made it correct | applies when | does NOT apply when |
+|---|---|---|---|---|
+| **M3-STORE-001** | Evidence gets its own authoritative append store, not a fold off `events.log` | The record is authoritative in its own right (its own `AUTHORITATIVE_SUBDIRS` entry) **and** the event-log route rests on untyped `payload` semantics nothing specifies | A contract has its own authoritative subdir and its lifecycle is **terminal** transitions over an immutable base | The lifecycle is reversible (`Decision.stale`) or multi-step (`Experience.rung`) — the store's shape must then differ even if the storage *location* decision matches |
+| **M7-GT-001** | A verifier takes its ground truth as a caller-supplied observation | It was the only model requiring no change to anything already closed — not that it was the best model available | The needed ground truth can be supplied at call time without new storage, contract change, or execution | Ground truth requires re-execution (M9), persistence (reopens M3), or a new contract field — each is its own L4 boundary |
+| **M7-NOSTORE-001** | `VerificationResult` is computed, never persisted | `WorkerState`'s shipped precedent: a record referenced by `Certificate` by hash, with no `STORAGE_SUBDIRS` entry, is computed on demand | The artifact has no storage subdir **and** no downstream milestone requires retrieving the original | A milestone's own acceptance criterion requires retention — M9's "artifact capture" does, so this precedent does **not** transfer to it |
+
+**A precedent that does not match is not evidence for the opposite answer either.** It simply returns the
+question to a fresh derivation.
+
+**Evidence.** M4 preflight (near-miss on `stale`/`rung`) · M9 preflight (near-miss on the no-storage
+precedent, where the roadmap's "artifact capture" contradicts it) · F16.
+
+---
+
+## RULE: A MILESTONE WITHOUT A FROZEN CONTRACT IS A DESIGN TASK, NOT AN IMPLEMENTATION TASK
+
+**Before implementing any milestone, establish whether the contract it implements actually exists.** The
+ten frozen contracts in `contracts/index.ts` are the complete set; a milestone whose interface is not
+among them is being asked to *invent* semantics, not to satisfy them.
+
+This distinction decides the authority level, and nothing else does. M3 and M7 were each constrained down
+to a single viable answer *because* `EvidenceSchema` and `VerificationResultSchema` already existed and
+already ruled the alternatives out — that is what made them safe to settle without escalation. M9's
+`ExecutionBackend` appears only as one line of roadmap prose (`ROADMAP.md`: "define the `ExecutionBackend`
+abstraction"). There is nothing to derive from, so a confident-sounding derivation there would be
+invention wearing a derivation's clothes — the failure this rule exists to prevent.
+
+**The check**, before any implementation begins:
+
+1. Name the frozen contract this milestone implements. If you cannot name one, stop here.
+2. State exactly what it constrains — and what it leaves to the engine (`EventSchema.payload` is the
+   worked example: explicitly delegated, therefore *not* a specification).
+3. Separate the **implementation** portion (constrained → proceed) from the **contract-design** portion
+   (unconstrained → escalate). A milestone can be both, and usually is.
+
+**Never label a contract-design decision L1/L2.** Being unable to find a constraint is not the same as
+being constrained.
+
+**Evidence.** M9 preflight — no `Execution*` schema exists among the ten frozen contracts.
+
+---
+
 ## PROCEDURE: CROSS_PLATFORM_CANONICALIZATION_CHECK
 
 **Trigger.** Any change to a cryptographic identity, a hash-bearing record, or a generated artifact whose
