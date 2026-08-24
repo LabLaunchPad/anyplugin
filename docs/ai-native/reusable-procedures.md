@@ -167,6 +167,13 @@ immediately after a real 64 KB write, because they count block-device operations
 1. Locate the actual runtime API. Do not reason from its name.
 2. Exercise it against known work — burn measurable CPU, write a file of known size.
 3. Check the **unit** empirically, by ratio against a second known quantity. Never assume bytes.
+3a. Check the **resolution** separately from the unit — they are different properties. Windows accounts
+   process CPU at roughly a 15.6ms tick, so `cpuUsage()` reports microseconds *as a unit* while being
+   unable to resolve work shorter than a tick (F19). A measurement shorter than the accounting interval
+   reads 0, which is indistinguishable from no work.
+3b. Where a test must observe the counter move, size the workload against the **coarsest** resolution
+   supported, and drive it from measured wall clock rather than an iteration count so machine speed
+   cannot change what the test exercises.
 4. Check behaviour on every supported platform via the CI matrix, not locally.
 5. Classify: `MEASURED` · `DERIVED` · `ESTIMATED` · `ATTESTED` · `UNKNOWN`.
 6. If it cannot be measured reliably, it is `UNKNOWN` — and **absent from the record entirely**, never
