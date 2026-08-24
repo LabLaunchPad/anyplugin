@@ -90,6 +90,30 @@ The layers, floor first:
 
 Anything a hook does must remain reachable through the CLI. If a capability exists *only* behind a hook, that is a design defect.
 
+### Locked dependency direction
+
+```
+                 ┌───────────────────────┐
+                 │  Worker Runtime       │   deterministic kernel
+                 │  kernel               │   knows nothing about any agent
+                 └───────────┬───────────┘
+                             ▲
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+       CLI / MCP      Agent adapters       Integrations
+          │                  │                  │
+        human        OpenCode / Claude       AnyPlugin
+```
+
+**Dependencies point inward, never outward.** The kernel knows nothing about OpenCode, Claude Code, Codex, Antigravity, AnyPlugin, MCP transport, or hooks. Everything agent-shaped is a replaceable execution client sitting *above* it.
+
+Two shapes are permanently forbidden:
+
+- `AnyPlugin → Worker Runtime → AnyPlugin` — any cycle back into the distribution layer.
+- `Agent adapter → kernel internals` — adapters use the public contract, never reach inside.
+
+This is the property the whole strategy rests on: **agents are replaceable execution clients; the runtime owns state, evidence, authority, verification, experience, and recovery.** M1 is where these become frozen contracts, which is why they are locked before M1 rather than during it.
+
 ### Package boundary
 
 The runtime lives at `packages/worker-runtime/` — same pnpm workspace (splitting repos now would cost more than it buys), **hard package boundary**:
@@ -97,6 +121,8 @@ The runtime lives at `packages/worker-runtime/` — same pnpm workspace (splitti
 - It **must not** import from `cli/` or `adapters/`.
 - It ships its own standalone CLI.
 - A test asserts it passes its full suite with **no agent installed**.
+
+Enforced by executable guards in `core/src/boundaries/package-boundary.test.ts`, which classify every invariant as **ARMED** (enforcement exists, target absent, invariant *not* exercised), **PASSED** (target exists and was actually checked), or **FAILED**. ARMED is never reported as PASSED — a vacuously-green check manufactures confidence. The three runtime guards are ARMED today and the test **fails deliberately** the moment `packages/worker-runtime/` appears, forcing a conscious flip to PASSED instead of a silent slide from "never checked" to "checked and fine".
 
 ⚠️ **`packages/` is not currently a workspace location — this is a setup step, not an existing property.** `pnpm-workspace.yaml` declares exactly `core`, `adapters/*`, `plugins/*`, `cli`; there is no `packages/*` glob and no `packages/` directory, and root `tsconfig.json` lists seven references, none under `packages/`. **M1's first task** is adding the workspace glob and the tsconfig reference.
 
