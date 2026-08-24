@@ -156,3 +156,40 @@ code.
 absolute, and traversing input, each by its own named reason.
 
 **Evidence.** `ownership.ts` · `ownership.test.ts` · `log/event-log.ts` · AP-018.
+
+---
+
+## PROCEDURE: PROVE_REPLAY_DETERMINISM
+
+**Trigger.** Any change to replay, state folding, canonicalization, or the event
+frame — and before citing any determinism claim as gate evidence.
+
+**Why it exists.** Replaying twice in one process is not proof (F18). It shares module state,
+lazily-initialized schema objects, and every import-time environment read. Measured: injecting
+`process.pid` into `stateHash` left **32 in-process tests green** and failed **13 of 15**
+fresh-process tests.
+
+**Steps.**
+
+1. Write an authoritative history with **interleaved contracts**, so map insertion order depends on
+   traversal rather than on the alphabet, plus one event kind the fold ignores.
+2. Compare by **canonical bytes and content hash**, never object identity — two objects can be
+   deep-equal and serialize differently, and serialization is what certificates bind.
+3. Replay in a process that shares nothing with the writer. Assert it matches in-process.
+4. Replay in **two independent fresh processes**. Assert they match each other.
+5. Vary what a process cannot inherit: **cwd, `TZ`, locale**, the log's location on disk, and the
+   identity of the writing process. Each must not move the hash.
+6. Assert damage replays deterministically too — a corrupted log must give the *same* wrong answer
+   everywhere, or two operators recovering it reach different conclusions about what survived.
+7. Assert each mutation **differs from the clean digest**. One replay cannot distinguish from the
+   original is a silent-acceptance defect.
+8. **Negative-test the harness itself**: inject a process-local value into the hash and confirm the
+   fresh-process tests fail. If they do not, the harness is not evidence.
+
+**Acceptance.** Identical canonical state across process boundaries and environments, on every CI
+cell. Damage classified identically everywhere.
+
+**Explicitly not established.** Durability. These steps prove state rebuilds from a log that
+*survived*; they say nothing about whether it survives a crash or power loss.
+
+**Evidence.** `log/replay-determinism.test.ts` · F18 · U1.
