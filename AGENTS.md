@@ -37,14 +37,21 @@ pnpm clean                       # remove all dist/ output
 ## Repo layout
 
 ```
-core/       @lablaunchpad/core — schema, events, detect, okf, emit helpers, adapter contract
-adapters/   @lablaunchpad/adapter-{claude,opencode,codex,antigravity} — pure emitters, no side effects
-cli/        @lablaunchpad/cli — anyplugin binary: init/detect/build/install/uninstall/okf-validate/okf-reindex
-plugins/    @lablaunchpad/plugin-knowledge — first-party plugin + runtime (runner.js, mcp-server.js)
-knowledge/  this repo's own OKF v0.2 bundle (audited platform intelligence)
-templates/  starter template used by `anyplugin init`
-research/   audit working area (clones of official repos)
+core/                     @lablaunchpad/core — schema, events, detect, okf, emit helpers, adapter contract
+adapters/                 @lablaunchpad/adapter-{claude,opencode,codex,antigravity} — pure emitters, no side effects
+cli/                      @lablaunchpad/cli — anyplugin binary: init/detect/build/install/uninstall/okf-validate/okf-reindex
+plugins/                  @lablaunchpad/plugin-knowledge — first-party plugin + runtime (runner.js, mcp-server.js)
+knowledge/                this repo's own OKF v0.2 bundle (audited platform intelligence)
+templates/                starter template used by `anyplugin init`
+research/                 audit working area (clones of official repos)
+packages/worker-runtime/  a SEPARATE, separately-governed subsystem (the "Worker Runtime" kernel) — see below
 ```
+
+**`packages/worker-runtime/` is not covered by this file.** It has its own frozen contracts, invariants,
+and decision-making rules, none of which are the AnyPlugin rules above. Before touching it, read
+`ENGINEERING_LEDGER.md` (defect/milestone history) and `docs/ai-native/reusable-procedures.md` (the
+decision ladder, evidence rules, and reusable procedures that govern work there) — do not apply this
+file's conventions to it by assumption.
 
 ## How to add an adapter (recipe)
 

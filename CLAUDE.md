@@ -8,6 +8,8 @@ AnyPlugin compiles one canonical plugin manifest (`anyplugin.plugin.yaml`) into 
 
 **`AGENTS.md` is the primary reference for this repo** — repo map, source-of-truth table, hook runtime protocol, and the recipe for adding a new adapter. Read it before making non-trivial changes; this file only adds pointers and things not already there.
 
+**`packages/worker-runtime/` is a second, separately-governed subsystem** (the "Worker Runtime" kernel) — none of the rules below apply to it. Its authorities are `ENGINEERING_LEDGER.md` (defect/milestone history) and `docs/ai-native/reusable-procedures.md` (the decision ladder, evidence rules, and reusable procedures). Read those, not this file, before working there.
+
 ## Commands
 
 ```bash
