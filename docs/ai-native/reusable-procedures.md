@@ -364,5 +364,7 @@ classifier proven against a constructed false state.
 
 **Measured platform facts (Linux, Node 22).** SIGKILL during `appendFileSync`: 256KB completes
 atomically; ≥1MB tears. Do not assume these hold elsewhere — they are observations, not guarantees.
+**Confirmed by evidence, not just caution**: the same 2MB threshold reproduced zero tears on Windows in
+six trials on exact-head CI. Do not port a tuning parameter across platforms without re-measuring it.
 
 **Evidence.** `log/crash-resilience.test.ts` · F20 · U1a.

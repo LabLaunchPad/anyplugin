@@ -35,6 +35,28 @@
  * Deterministic tear handling is separately and non-probabilistically proven by
  * the truncation tests in `event-log.test.ts`. This file adds the missing half:
  * that a real abrupt kill produces states inside that already-handled set.
+ *
+ * ── PLATFORM LIMITATION, measured on exact-head CI (852a7e9) ───────────────
+ *
+ * Live tear reproduction at the 2MB record size below is CONFIRMED ON LINUX
+ * ONLY. The same exact-head CI run that showed torn tails on Linux showed:
+ *
+ *   win32 node24.19.0  outcomes={"NO_WRITES":1,"CLEAN_BOUNDARY":5}
+ *
+ * ZERO torn tails on Windows in six trials — the identical vacuity shape F20
+ * describes, now observed cross-platform. This is NOT evidence that Windows
+ * appends are "more atomic": six trials cannot support a platform comparison,
+ * and a clean-boundary-only run proves nothing either way about what CAN
+ * happen. The only honest statement is narrower: this harness has not yet
+ * reproduced a live tear on Windows at this record size/timing.
+ *
+ * What this gap does NOT weaken: TORN_TAIL classification itself is proven
+ * DETERMINISTICALLY — by constructed truncation, not by a live kill — in "a
+ * torn tail when a record is cut mid-write" below, and that test passes on
+ * all four CI cells including Windows. Replay's handling of a torn tail is
+ * therefore cross-platform proven; only the empirical claim "a live kill can
+ * actually produce one here" is Linux-only. Keep these two apart: neither
+ * substitutes for the other.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { spawn } from "node:child_process";
