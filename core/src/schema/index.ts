@@ -35,10 +35,10 @@ export const McpServerSchema = z.object({
   transport: z.enum(["stdio", "http"]).default("stdio"),
   command: z.string().optional(),
   args: z.array(z.string()).default([]),
-  env: z.record(z.string()).default({}),
+  env: z.record(z.string(), z.string()).default({}),
   cwd: z.string().optional(),
   url: z.string().optional(),
-  headers: z.record(z.string()).default({}),
+  headers: z.record(z.string(), z.string()).default({}),
   timeoutMs: z.number().int().positive().optional(),
 });
 export type McpServer = z.infer<typeof McpServerSchema>;
@@ -63,11 +63,11 @@ export const AnyPluginManifestSchema = z.object({
   /** Subagent markdown files (frontmatter: name, description, model?, tools?, prompt in body). */
   agents: z.array(z.string()).default([]),
   hooks: z.array(HookSchema).default([]),
-  mcp: z.object({ servers: z.record(McpServerSchema) }).default({ servers: {} }),
+  mcp: z.object({ servers: z.record(z.string(), McpServerSchema) }).default({ servers: {} }),
   /** OKF v0.2 knowledge bundle directory shipped inside the plugin. */
   knowledge: z.string().optional(),
   /** Free-form capability gates evaluated against detectEnvironment() by adapters. */
-  capabilities: z.record(z.unknown()).optional(),
+  capabilities: z.record(z.string(), z.unknown()).optional(),
   /** Extra keys are preserved verbatim for adapter-specific needs (like OKF unknown-key preservation). */
 });
 export type AnyPluginManifest = z.infer<typeof AnyPluginManifestSchema>;
