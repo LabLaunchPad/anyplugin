@@ -181,4 +181,8 @@ export const DIRECT_FS_WRITERS: ReadonlyArray<{ readonly module: string; readonl
     module: "log/event-log.ts",
     why: "The kernel's sanctioned write path. It is the module this chokepoint exists to serve rather than to constrain: it calls assertWritable on its target before any filesystem call, and every byte it writes lands inside the validated directory. Routing it through a further indirection would add a layer without adding a check.",
   },
+  {
+    module: "log/evidence-log.ts",
+    why: "The kernel's second sanctioned write path (M3), same reasoning as log/event-log.ts: assertWritable is called on its target before any filesystem call, and it is its own independent authoritative store rather than a rider on the event log (see the module header for why that is a deliberate architecture decision, not an assumption).",
+  },
 ];
