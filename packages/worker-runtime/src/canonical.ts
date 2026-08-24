@@ -46,12 +46,34 @@ function canonicalize(value: unknown, path: string): CanonicalValue {
   if (value === null) return null;
 
   const t = typeof value;
-  if (t === "string" || t === "boolean") return value as string | boolean;
+  if (t === "boolean") return value as boolean;
+
+  if (t === "string") {
+    // Unicode normalization. "café" as NFC (e-acute, one code point) and NFD
+    // (e + combining acute) are DIFFERENT JS strings with different bytes, but
+    // the same logical text — so without this they hash differently. This is
+    // not hypothetical: macOS normalizes filenames toward NFD while Linux
+    // stores NFC, so the same path captured on two machines would produce two
+    // hashes for one logical record. NFC is the interchange form (Unicode
+    // Annex #15) and is what JSON consumers expect.
+    return (value as string).normalize("NFC");
+  }
 
   if (t === "number") {
     const n = value as number;
     if (!Number.isFinite(n)) {
       throw new CanonicalizationError(`non-finite number at ${path}: ${String(n)}`);
+    }
+    // Integers beyond ±(2^53 - 1) are not representable distinctly as f64:
+    // 9007199254740993 silently becomes 9007199254740992, so two DIFFERENT
+    // logical values would produce ONE hash. That is a collision — a false
+    // negative in tamper detection, which is worse than a false positive.
+    // Refuse rather than hash a value we cannot faithfully round-trip.
+    if (Number.isInteger(n) && !Number.isSafeInteger(n)) {
+      throw new CanonicalizationError(
+        `integer outside the safe range at ${path}: ${String(n)} cannot be represented distinctly; ` +
+          `persist large integers as strings`,
+      );
     }
     // -0 and 0 are indistinguishable in JSON; normalize so they cannot produce
     // two hashes for one value.
@@ -82,10 +104,23 @@ function canonicalize(value: unknown, path: string): CanonicalValue {
   if (t === "object") {
     const source = value as Record<string, unknown>;
     const out: Record<string, CanonicalValue> = {};
-    for (const key of Object.keys(source).sort()) {
-      const v = source[key];
+    // Keys are normalized too, then sorted — an NFD key and an NFC key are the
+    // same logical field and must not produce two entries or two orderings.
+    const normalized = new Map<string, unknown>();
+    for (const rawKey of Object.keys(source)) {
+      const v = source[rawKey];
       if (v === undefined) continue; // absent, not null
-      out[key] = canonicalize(v, path ? `${path}.${key}` : key);
+      const key = rawKey.normalize("NFC");
+      if (normalized.has(key)) {
+        throw new CanonicalizationError(
+          `duplicate key after Unicode normalization at ${path ? `${path}.` : ""}${key}: ` +
+            `two differently-encoded keys collapse to one field`,
+        );
+      }
+      normalized.set(key, v);
+    }
+    for (const key of [...normalized.keys()].sort()) {
+      out[key] = canonicalize(normalized.get(key), path ? `${path}.${key}` : key);
     }
     return out;
   }

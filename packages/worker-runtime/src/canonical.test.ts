@@ -24,6 +24,68 @@ describe("canonical serialization", () => {
     expect(canonicalJson({ n: -0 })).toBe(canonicalJson({ n: 0 }));
   });
 
+  /**
+   * F14 — Unicode normalization.
+   *
+   * The same failure shape as the CRLF bug F13: one logical object, two byte
+   * representations, two hashes. macOS normalizes filenames toward NFD while
+   * Linux stores NFC, so a path or source string captured on two machines
+   * would otherwise produce two hashes for one record.
+   */
+  describe("Unicode normalization (F14)", () => {
+    const nfc = "café"; // é as a single code point
+    const nfd = "café"; // e + combining acute
+
+    it("the two forms really are distinct strings", () => {
+      expect(nfc).not.toBe(nfd);
+      expect(nfc.length).toBe(4);
+      expect(nfd.length).toBe(5);
+    });
+
+    it("hashes NFC and NFD values identically", () => {
+      expect(contentHash({ v: nfc })).toBe(contentHash({ v: nfd }));
+    });
+
+    it("hashes NFC and NFD keys identically", () => {
+      expect(contentHash({ [nfc]: 1 })).toBe(contentHash({ [nfd]: 1 }));
+    });
+
+    it("rejects two keys that collapse to one field after normalization", () => {
+      // Silently keeping one would drop data; silently merging would change it.
+      expect(() => canonicalJson({ [nfc]: 1, [nfd]: 2 })).toThrow(/duplicate key after Unicode normalization/);
+    });
+
+    it("normalizes nested values too", () => {
+      expect(contentHash({ a: { b: [nfc] } })).toBe(contentHash({ a: { b: [nfd] } }));
+    });
+  });
+
+  /**
+   * F15 — integers beyond ±(2^53-1) collapse.
+   *
+   * 9007199254740993 becomes 9007199254740992 as an f64, so two DIFFERENT
+   * logical values would produce ONE hash. That is a collision: a false
+   * negative in tamper detection, which is strictly worse than a false
+   * positive. Refuse rather than hash a value we cannot round-trip.
+   */
+  describe("unsafe integers (F15)", () => {
+    it("rejects integers outside the safe range", () => {
+      expect(() => canonicalJson({ n: 9007199254740993 })).toThrow(/safe range/);
+    });
+
+    it("rejects large integral floats, which are equally indistinguishable", () => {
+      // 1e300 is exactly representable, but 1e300 and 1e300+1 are not
+      // distinguishable — so a tamper of +1 could not be detected.
+      expect(() => canonicalJson({ n: 1e300 })).toThrow(/safe range/);
+    });
+
+    it("accepts the safe maximum and ordinary fractional values", () => {
+      expect(() => canonicalJson({ n: 9007199254740991 })).not.toThrow();
+      expect(() => canonicalJson({ n: 0.91 })).not.toThrow();
+      expect(() => canonicalJson({ n: 1.5e10 })).not.toThrow();
+    });
+  });
+
   it("is stable across repeated invocations", () => {
     const record = { id: "EVID-1", tags: ["b", "a"], meta: { nested: { deep: true } } };
     const first = canonicalJson(record);
