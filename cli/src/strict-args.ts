@@ -64,7 +64,7 @@ export const CommandArgs = {
   intensity: z
     .object({
       mode: z.enum(INTENSITY_MODES, {
-        required_error: "intensity requires --mode conservative|balanced|aggressive",
+        error: "intensity requires --mode conservative|balanced|aggressive",
       }),
       plugin: dir.optional(),
       agents: z.string().optional(),
