@@ -185,7 +185,7 @@ Windows note: with long repo paths, run tooling through a short junction with `N
 
 The full roadmap lives in **[ROADMAP.md](ROADMAP.md)**.
 
-Beyond the near-term plugin work (npm publish, `status`/`doctor`, toolkit plugins, import path), the larger direction is a **Worker Runtime**: an agent-agnostic reliability layer that gives any coding agent persistent work contracts, an evidence ledger, decision provenance, dependency-driven invalidation, and deterministic verification — with AnyPlugin as its distribution mechanism rather than its owner. Twelve milestones (M0–M12) with machine-checkable gates, ending in a falsification experiment that decides whether the product is worth packaging at all.
+Beyond the near-term plugin work (npm publish, `status`/`doctor`, toolkit plugins, import path), the larger direction is a **Worker Runtime**: an agent-agnostic reliability layer that gives any coding agent persistent work contracts, an evidence ledger, decision provenance, dependency-driven invalidation, and deterministic verification — with AnyPlugin as its distribution mechanism rather than its owner. Thirteen milestones (M0–M12, plus M7a) with machine-checkable gates, ending in a falsification experiment that decides whether the product is worth packaging at all.
 
 ## Contributing
 

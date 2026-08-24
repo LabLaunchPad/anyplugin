@@ -1,6 +1,6 @@
 # Worker Runtime — kernel domain model
 
-Input to **M1** (freeze the kernel contract). See [`../ROADMAP.md`](../ROADMAP.md) for strategy, milestones, and the audit findings referenced here as F1–F7.
+Input to **M1** (freeze the kernel contract). See [`../ROADMAP.md`](../ROADMAP.md) for strategy, milestones, and the audit findings referenced here as F1–F8.
 
 **Status:** design input, not a specification. M1 turns this into `schemas/*.schema.json` plus executable contract tests, and M1 is free to correct anything here that does not survive contact with implementation.
 
@@ -51,7 +51,9 @@ Deterministic transitions; illegal transitions are rejected, not coerced. Every 
 
 Append-only, ordered, the substrate under Worker State.
 
-**Must use atomic `O_APPEND` single writes.** Per **F3**, the existing `okf-turn-stop.mjs` read-modify-write pattern loses data under concurrent turns and must not be copied. Concurrent agent sessions against one workspace are the normal case, not an edge case.
+**Must use atomic `O_APPEND` single writes.** Per **F3** the read-modify-write pattern loses data under concurrent turns and must not be copied. Concurrent agent sessions against one workspace are the normal case, not an edge case.
+
+F3 is a **class with three instances**, not one bug: `plugins/knowledge/plugin/hooks/okf-turn-stop.mjs:21-36` (the wired hook), `core/src/okf/index.ts:431-451` (`appendLog()`, exported public API, currently callerless), and `core/src/okf/index.ts:350-424` (`regenerateIndexes()`). Per `ENGINEERING_LEDGER.md`'s VERIFY → FIX → **ERADICATE THE CLASS** methodology, M2 must address all three or explicitly defer the `core` ones with a reason — otherwise the copy gets fixed and the original ships.
 
 ## 4. Evidence Ledger
 
@@ -98,6 +100,23 @@ invalidated_by: [package-lock-change, astro-major-version-change]
 ```
 
 `valid_when` and `invalidated_by` are what make an experience *applicable* rather than merely *recalled*.
+
+### Failure classification (the eight classes M8 requires)
+
+Every recorded failure carries exactly one class. M8's exit condition is that all eight are reachable in test.
+
+| Class | Means |
+| --- | --- |
+| `INFRASTRUCTURE` | the machine, network, or runner failed — nothing about the work itself |
+| `TOOL` | a tool was invoked correctly and misbehaved |
+| `ENVIRONMENT` | wrong versions, missing deps, misconfiguration |
+| `KNOWLEDGE` | the worker lacked a fact it needed |
+| `REASONING` | the worker had the facts and drew the wrong conclusion |
+| `EXECUTION` | the plan was right; carrying it out went wrong |
+| `VERIFICATION` | the work was wrong and verification caught it |
+| `USER_CONSTRAINT` | blocked by a contract constraint or an explicit human decision |
+
+**Do not infer root cause automatically unless evidence supports it.** An unclassifiable failure is recorded as unclassified — guessing a class silently corrupts every downstream statistic built on this ledger.
 
 ### The epistemic ladder — the core constraint
 
@@ -151,11 +170,21 @@ REQUIRE  → record + fail the work item
 BLOCK    → deny the agent action outright
 ```
 
-This generalises `runtime.failurePolicy` from `CORE-INVARIANTS-V2.md` §1.3.3, which is specified but unimplemented (**F7**). Policy is per-concern, not global: a verification failure blocks; a memory-retrieval failure warns; a telemetry export failure is observed.
+Policy is per-concern, not global: a verification failure blocks; a memory-retrieval failure warns; a telemetry export failure is observed.
 
-The existing runtime invariant still holds and is not weakened — an *unhandled crash* must never break the host agent. What changes is that a *deliberate policy decision* to block is now expressible per concern.
+⚠️ **Whether this weakens an existing invariant is an open question M7a must answer — do not assume it does not.** Per **F7**, three repo documents currently disagree:
 
-**F1 gates this.** OpenCode currently discards block decisions entirely (`adapters/opencode/src/index.ts:183` gates on exit code 0, but blocks exit 2). `BLOCK` is a lie on that platform until fixed.
+- `CORE-INVARIANTS-V2.md:104` says `failurePolicy: blocking` **"flips handler-throw to exit 2"** — an unhandled crash *does* deny the host action.
+- `CLAUDE.md:49` and `AGENTS.md:63` state the rule **absolutely**, with no exception: *"Runtime failures are always non-blocking … must never break the host agent."*
+
+So `BLOCK` is one of two different mechanisms, and M7a must state which it implements:
+
+1. **The four-mode generalisation of §1.3.3** — `BLOCK` inherits crash-blocks-host, and the absolute rule in `CLAUDE.md`/`AGENTS.md` is genuinely weakened and must be amended in those files.
+2. **A mechanism over *concern outcomes*** (a verifier returned FAIL) rather than over *handler throws* — the crash invariant is untouched, but F7's "extension, not invention" framing is wrong and this is new design needing its own spec.
+
+Reconciling all three documents is **M7a's deliverable**, not a precondition. This document does not pre-judge it.
+
+**F1 constrains this.** OpenCode discards `block: true` on tool execution (`adapters/opencode/src/index.ts:183` gates on exit code 0; blocks exit 2), so `BLOCK` is unenforceable there until fixed. Note the narrower scope: permission *denial* still works via the separate `permissionDecision` channel (`adapters/opencode/src/index.ts:205-210`) — do not rebuild a working channel.
 
 ## 10. Execution Backend
 
@@ -182,7 +211,9 @@ Cryptographically binds: work contract · worker state · evidence · decisions 
 
 **Verification is implemented independently of creation.** Tampering with any referenced artifact must fail verification — proven by golden tests plus mutation tests.
 
-Reuse `cli/src/journal.ts` here: `preInstallHash` / `postInstallHash` / `classifyJournalEntry` is already exactly this pattern (hash, compare, detect third-party modification, refuse to proceed on conflict). Do not reinvent it.
+**Copy the shape of `cli/src/journal.ts`; do not import it.** `preInstallHash` / `postInstallHash` / `classifyJournalEntry` (`cli/src/journal.ts:19,21,75`) is already exactly this pattern — hash, compare, detect third-party modification, refuse to proceed on conflict — and it is proven in production use. Reimplement that *design* against certificate records.
+
+The package boundary in `ROADMAP.md` §2 forbids importing from `cli/`, and it wins: the runtime must not depend on AnyPlugin's installer. If genuine code sharing is later wanted, extracting the hashing/conflict primitives into `core/` is an explicit **M10 prerequisite task** that has to be written down and scheduled — not something to do implicitly while implementing the Certificate.
 
 ## 12. Agent Adapter
 
@@ -202,11 +233,12 @@ Implementations: `AnyPluginAdapter` · `ClaudeCodeAdapter` · `OpenCodeAdapter` 
 
 ### Binding constraints from the audit
 
-- **Record at `turn-stop`, not `session-end`.** Antigravity marks `session-end` `UNSUPPORTED` — a *hard build error* (**F5**, `core/src/capabilities/matrix.ts:100`). `turn-stop` maps everywhere.
+- **Record at `turn-stop`, not `session-end`.** Antigravity marks `session-end` `UNSUPPORTED` (**F5**, `core/src/capabilities/matrix.ts:100`). `turn-stop` maps everywhere. Note the two-layer behaviour in F5: a hard error at the CLI gate, but a **silent warn-and-drop** at the pure adapter layer — so a passing `emitAntigravity(...)` call is *not* evidence the hook survived.
 - **Never require `prompt-submit`.** `UNSUPPORTED` on OpenCode (**F6**, `matrix.ts:69`).
-- **Hooks may be entirely unavailable.** `opencode@v2` marks *every* hook `UNSUPPORTED` (`matrix.ts:82`); only `skills` and `knowledge` survive. The runtime must be fully usable via **CLI + MCP with zero hooks** — an M11 acceptance test.
+- **The CLI is the floor — not CLI + MCP.** `opencode@v2` marks every hook `UNSUPPORTED` (`matrix.ts:82`) **and omits `mcp.stdio`/`mcp.http` from its row entirely**, which `supports()` resolves to `UNKNOWN` (`matrix.ts:118-122`) and `cli/src/index.ts:84` turns into a hard build error. A plugin declaring MCP therefore cannot build for that target at all. The runtime must be **fully operable through its own CLI with neither hooks nor MCP** — that is the M11 acceptance test. Extending the matrix row to cover `mcp.*` is a separate capability-audit task.
 - **Fix F2 before shipping the adapter.** `turn-stop` and `session-end` both map to `session.idle` and the OpenCode bridge is keyed by native name (`adapters/opencode/src/index.ts:142`), so one hook is silently lost.
-- **Fix F4 before shipping the adapter.** `core/src/events/index.ts:121` and `runner.js:160` implement `result.raw` handling differently; the runner payload is also missing fields core declares. Needs one shared conformance test, not a one-sided patch.
+- **Fix F4 before shipping the adapter.** `core/src/events/index.ts:121` and `runner.js:160` implement `result.raw` with opposite precedence (core: raw discards all; runner: `block` overrides raw at `:162-170`). The payload diverges both ways — the runner omits `event`/`nativeEvent`, which `HookPayload` declares **required** (`core/src/events/index.ts:54-55`), and adds `hookId`/`pluginRoot`/`intensityMode` it does not declare. Needs one shared conformance test.
+- **Resolve F8 before shipping the adapter.** `AGENTS.md:62` says Antigravity uses **exit 0** semantics for a block, but `runner.js:175` exits 2 unconditionally with no platform branch — while `:162-170` right above it *does* branch on Antigravity. Either the runner is wrong or the docs are; M0 determines which.
 
 ### Command surface
 
@@ -234,4 +266,6 @@ Small and boring. The runtime records underneath while the agent works normally.
 
 Authoritative state lives here — **never** inside AnyPlugin's install journal or `.anyplugin-mode`. Those are AnyPlugin's own concerns, and per the non-negotiable rule in `ROADMAP.md` §2, AnyPlugin never owns worker truth.
 
-Adding this path requires a new `TEMPLATES` whitelist entry plus a test proving uninstall fully reverses it, including the conflict-abort path (`AGENTS.md`, installer safety rules).
+⚠️ **`.anyplugin/worker/` must NOT be a `TEMPLATES` install destination.** `TEMPLATES` (`cli/src/index.ts:218-227`) is the whitelist of *install* destinations, and everything reached through it is journaled with pre-install backups and **restored to pre-install bytes on uninstall** (`AGENTS.md`, installer safety rules). Registering the worker ledger there would mean `anyplugin uninstall` either **deletes or reverts the authoritative state**, or aborts on conflict — which it would do on essentially every run, because the runtime legitimately modifies these files constantly.
+
+This directory is **runtime-created state**, the same category as `.anyplugin-mode` (`cli/src/state.ts`), which is deliberately disjoint from the install journal for exactly this reason. It needs no TEMPLATES entry and no uninstall-reversibility test. Its lifecycle is owned by the runtime, not the installer.
