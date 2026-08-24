@@ -177,4 +177,8 @@ export const DIRECT_FS_WRITERS: ReadonlyArray<{ readonly module: string; readonl
     module: "log/candidates.ts",
     why: "F10 evaluation harness: candidate mechanisms under measurement, not the kernel's write path. Writes only into caller-supplied temporary directories.",
   },
+  {
+    module: "log/event-log.ts",
+    why: "The kernel's sanctioned write path. It is the module this chokepoint exists to serve rather than to constrain: it calls assertWritable on its target before any filesystem call, and every byte it writes lands inside the validated directory. Routing it through a further indirection would add a layer without adding a check.",
+  },
 ];

@@ -1,0 +1,158 @@
+# Reusable procedures
+
+Procedures whose reasoning has already been done, so it is not done again.
+
+Each entry exists because a past session spent real model reasoning deriving it, and the derivation
+would otherwise survive only in a conversation transcript. A future session should be able to **retrieve
+and execute** one of these instead of re-investigating the original problem.
+
+**This file owns nothing else.** Finding ids, defect taxonomy, statuses, and the
+VERIFY → FIX → ERADICATE THE CLASS protocol belong to
+[`ENGINEERING_LEDGER.md`](../../ENGINEERING_LEDGER.md); milestones and constraints belong to
+[`ROADMAP.md`](../../ROADMAP.md); current subsystem state belongs to
+[`CURRENT_STATE.md`](../../CURRENT_STATE.md). Entries here reference those; they never restate them.
+
+A procedure earns a place here only when it is **executable** — a checklist a future session can run and
+get a pass/fail from. Advice belongs in prose; this file is for steps.
+
+---
+
+## PROCEDURE: CROSS_PLATFORM_CANONICALIZATION_CHECK
+
+**Trigger.** Any change to a cryptographic identity, a hash-bearing record, or a generated artifact whose
+bytes are compared — including adding a field to a contract, changing a serializer, or emitting a new
+generated file.
+
+**Why it exists.** This was derived the expensive way. F13 began as a Windows-only CI failure that looked
+like a flake; generalizing it to *"cryptographic identity must be platform-independent"* then exposed F14
+(Unicode NFC) and F15 (unsafe integers) in code already declared frozen — F15 being a hash **collision**,
+a false negative in tamper detection. See AP-020 in the ledger. The class, not the symptom, is the
+finding: **one logical value with two byte representations, or two logical values with one.**
+
+**Preconditions.** `packages/worker-runtime/src/canonical.ts` and its contract test exist.
+
+**Steps.**
+
+1. Ask the governing question for every accepted value — not *"is this valid JSON?"* but **"can two
+   materially different semantic values collapse into the same canonical representation?"** If yes, the
+   value must be refused, not encoded.
+2. Confirm the canonicalizer still rejects what `JSON.stringify` silently corrupts: `NaN`, `Infinity`,
+   `undefined` array elements, `Date`, `BigInt`, function, symbol.
+3. Confirm Unicode normalization applies to **values and keys**, and that keys colliding after
+   normalization are refused rather than merged or dropped.
+4. Confirm integers outside ±(2^53−1) are refused — they are not distinctly representable as f64.
+5. Confirm `-0` normalizes to `0`, and that key ordering is by UTF-16 code unit rather than locale
+   collation.
+6. Run the golden vectors. A change to any of them invalidates every previously issued hash and must be
+   a deliberate, versioned migration — never a refactor side effect.
+7. Verify line endings: `git ls-files --eol` must report `i/lf` for every tracked file. A CRLF checkout
+   silently changes generated-artifact bytes.
+8. Run the full CI matrix. **A local green run is not cross-platform evidence** — Windows has already
+   caught one class-level defect that local runs could not.
+
+**Acceptance.** Identical canonical bytes and identical SHA-256 on every matrix cell; no
+platform-specific representation anywhere in a hashed record.
+
+**Known caveat, deliberately not fixed.** The canonicalizer does **not** normalize path semantics —
+separator variants hash differently. That is correct at this layer, but any future record that stores a
+path must POSIX-normalize *before* hashing. No frozen contract stores one today;
+`canonical-contract.test.ts` carries the tripwire.
+
+**Evidence.** `canonical.ts` · `canonical.test.ts` · `canonical-contract.test.ts` · `.gitattributes` ·
+AP-020.
+
+---
+
+## PROCEDURE: PROVE_A_GUARD_CAN_FAIL
+
+**Trigger.** Before claiming any guard, invariant test, or boundary check `PASSED`.
+
+**Why it exists.** Two real defects in this repository were guards that could not fail. The workspace
+boundary guard enumerated forbidden packages individually and silently omitted `@lablaunchpad/core` — the
+single most important one to block. The F10 concurrency harness used `spawnSync` in a loop, so its
+"concurrent" writers ran **sequentially**; it would have passed for a mechanism with no concurrency
+safety whatsoever. Both were found by trying to make them fail, not by reading them.
+
+**Steps.**
+
+1. Name the property the guard asserts, in one sentence.
+2. Break that property in the source — remove the check, weaken the rule, delete the constraint.
+3. Run the guard. **It must fail, and the failure must name the offending thing**, not merely report a
+   mismatch.
+4. Confirm it fails for the *right reason*: assert the specific cause, not just that something threw. A
+   test that only checks "it threw" still passes when the check it targets is deleted and a neighbouring
+   check catches the input by accident.
+5. Restore the source and re-run. Verify the restoration is byte-exact.
+6. If the guard cannot be made to fail, it is **not a guard**. Either it targets nothing, or its target
+   does not exist — in which case report it `ARMED`, never `PASSED`.
+
+**Acceptance.** A recorded broken-then-restored cycle, with the exact tests that failed.
+
+**Evidence.** `core/src/boundaries/package-boundary.test.ts` (5 violation classes) ·
+`packages/worker-runtime/src/ownership.test.ts` (I5 caught an undeclared writer by name) ·
+`log/event-log.test.ts` (three guards independently falsified).
+
+---
+
+## PROCEDURE: MEASURE_BEFORE_DEFINING_A_TELEMETRY_FIELD
+
+**Trigger.** Before adding any field recording tokens, latency, memory, CPU, disk, or cost.
+
+**Why it exists.** Defining fields first produces a plausible list, and the unmeasurable ones then get
+filled with an estimate, a default, or a zero — and the metric is computed from numbers nobody observed.
+Probing the real APIs first caught two fields that would have become silently wrong: `maxRSS` is
+**kilobytes on Linux** (measured: `maxRSS × 1024 === memoryUsage().rss`) but **bytes on macOS**, so
+`peakMemoryBytes: maxRSS` would be wrong by 1024× on one of them; and `fsRead`/`fsWrite` read **zero**
+immediately after a real 64 KB write, because they count block-device operations the page cache absorbs.
+
+**Steps.**
+
+1. Locate the actual runtime API. Do not reason from its name.
+2. Exercise it against known work — burn measurable CPU, write a file of known size.
+3. Check the **unit** empirically, by ratio against a second known quantity. Never assume bytes.
+4. Check behaviour on every supported platform via the CI matrix, not locally.
+5. Classify: `MEASURED` · `DERIVED` · `ESTIMATED` · `ATTESTED` · `UNKNOWN`.
+6. If it cannot be measured reliably, it is `UNKNOWN` — and **absent from the record entirely**, never
+   present with a zero.
+
+**Acceptance.** Every authoritative field traces to an API that was exercised, with its unit
+demonstrated. `UNKNOWN` fields are absent rather than defaulted.
+
+**Why absence matters more than it looks.** A missing token count defaulted to 0 makes an execution look
+free, so the amortization ratio improves exactly when instrumentation is lost — the metric would report
+success as a consequence of going blind. Coverage therefore travels with every ratio.
+
+**Evidence.** `resource/telemetry.ts` · `resource/telemetry.test.ts` · `resource/measurement.ts`.
+
+---
+
+## PROCEDURE: ADD_A_WRITE_PATH_TO_THE_KERNEL
+
+**Trigger.** Any new kernel code that creates, modifies, or deletes a file.
+
+**Why it exists.** The kernel's storage must never collide with AnyPlugin's install destinations, which
+are journaled and restored to pre-install bytes on uninstall — a collision would mean
+`anyplugin uninstall` reverting or deleting the authoritative ledger, silently and with a clean exit
+code.
+
+**Steps.**
+
+1. Call `assertWritable` from `ownership.ts` on the target path **before any filesystem call**. It is the
+   only sanctioned validation; do not add a second ad hoc check.
+2. If the module calls `node:fs` mutators directly, add it to `DIRECT_FS_WRITERS` **with a stated
+   reason**. The I5 guard fails otherwise, by design, and will name the module.
+3. Confirm the target lies under a declared `STORAGE_SUBDIRS` entry. An undeclared subdirectory is a
+   hidden writer.
+4. For deletion, use `assertDeletable` — strictly narrower than writing. Authoritative records are not
+   deletable at all; supersession is how the ledger changes its mind, and it preserves history by
+   construction.
+5. Confirm exactly one authoritative writer for the target root (I1). If a second is possible, refuse it
+   at the filesystem with `openSync(..., "wx")` and **never auto-break a stale claim** — from inside the
+   process, a stale lock and a live second writer are indistinguishable.
+6. Re-run the ownership suite. All of I1–I6 must stay `PASSED`; I7 flips only against a real deletion of
+   governed state.
+
+**Acceptance.** I5 reports zero undeclared writers; the new path is refused for every foreign-owned,
+absolute, and traversing input, each by its own named reason.
+
+**Evidence.** `ownership.ts` · `ownership.test.ts` · `log/event-log.ts` · AP-018.

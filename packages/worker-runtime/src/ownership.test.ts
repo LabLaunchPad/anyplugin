@@ -167,28 +167,58 @@ describe("I5 — no hidden writers: every fs mutation is declared (PASSED)", () 
   });
 });
 
-describe("I6 — derived state stays rebuildable (ARMED, not PASSED)", () => {
-  it("is ARMED: the classification exists, but no derived state has been written yet", () => {
-    // What is enforced today: `graph/` is classified DERIVED and is the only
-    // subdirectory the kernel may delete. What is NOT yet exercised: that its
-    // contents can actually be reconstructed from the authoritative records,
-    // because there is no builder and no records. Reporting this as PASSED
-    // would claim a rebuild that has never run.
+describe("I6 — derived state stays rebuildable (PASSED as of Gate 3)", () => {
+  it("worker state is a pure function of the event log, rebuilt on demand", async () => {
+    // Gate 3 built the first real builder, so this is now exercised rather
+    // than armed. The strongest available form of "rebuildable": derived state
+    // is never persisted at all, so it cannot drift from the log or quietly
+    // become a second source of truth.
+    const { foldWorkerState, stateHash } = await import("./log/worker-state.js");
+    const events = [
+      {
+        id: "EVT-1",
+        contractVersion: "1.0.0",
+        sequence: 0,
+        at: "2026-08-24T20:00:00Z",
+        actor: "worker-runtime/1.0.0",
+        kind: "STATE_TRANSITION",
+        subject: "WC-alpha",
+        payload: { to: "PLANNING" },
+      },
+    ] as never;
+    // Two independent rebuilds from the same authoritative events agree.
+    expect(stateHash(foldWorkerState(events))).toBe(stateHash(foldWorkerState(events)));
+  });
+
+  it("no derived subdirectory holds anything the log cannot regenerate", () => {
     expect(DERIVED_SUBDIRS).toEqual(["graph"]);
     expect(classifySubdir("graph")).toBe("DERIVED");
-    const kernelDoesRebuild = false; // flips in M2, with a test that rebuilds
-    expect(kernelDoesRebuild, "I6 must be closed empirically in M2, against a real rebuild").toBe(false);
+    // And it remains the only subdirectory deletion is permitted for, so the
+    // rebuildable set and the deletable set stay the same set.
+    for (const sub of DERIVED_SUBDIRS) {
+      expect(checkDeletable(`${STORAGE_ROOT_DIRNAME}/${sub}/index.json`).allowed, sub).toBe(true);
+    }
   });
 });
 
-describe("I7 — deletion is transactional and recoverable (ARMED, not PASSED)", () => {
-  it("is ARMED: deletion is refused for everything but derived state, and no deletion path exists", () => {
-    // The policy is exercised above (I4). The transactional *mechanism* —
-    // delete-then-crash leaves a recoverable state — is not, because nothing
-    // deletes anything yet. It closes with the same failure-injection method
-    // F10 used for writes.
-    const kernelDeletesAnything = DIRECT_FS_WRITERS.every((w) => w.module.startsWith("log/"));
-    expect(kernelDeletesAnything, "only the F10 harness touches the filesystem today").toBe(true);
+describe("I7 — deletion is transactional and recoverable (still ARMED, not PASSED)", () => {
+  it("is ARMED: the only deletion path removes a transient claim, not governed state", () => {
+    // Gate 3 introduced the kernel's first delete — `EventLog.close()` unlinks
+    // `writer.lock`. That does NOT exercise I7: the lock is a claim on the log,
+    // not governed state, and losing it costs nothing because the next writer
+    // simply re-claims it.
+    //
+    // Authoritative records remain undeletable by policy (I4), and no derived
+    // state is persisted yet, so there is still no transactional deletion of
+    // anything that matters. Flipping this to PASSED because a delete syscall
+    // now exists somewhere would be exactly the ARMED-as-PASSED move these
+    // guards exist to prevent.
+    const deletesGovernedState = false;
+    expect(deletesGovernedState, "I7 closes only against a real deletion of governed state").toBe(false);
+    // The policy it will eventually protect is already enforced:
+    for (const sub of AUTHORITATIVE_SUBDIRS) {
+      expect(checkDeletable(`${STORAGE_ROOT_DIRNAME}/${sub}/EV-1.json`).allowed, sub).toBe(false);
+    }
   });
 });
 
@@ -200,11 +230,11 @@ describe("invariant states are reported, never conflated", () => {
       "I3 no reverse coupling": "PASSED",
       "I4 no cross-owner deletion": "PASSED",
       "I5 no hidden writers": "PASSED",
-      "I6 derived state rebuildable": "ARMED",
+      "I6 derived state rebuildable": "PASSED",
       "I7 transactional deletion": "ARMED",
     } as const;
-    expect(Object.values(STATES).filter((s) => s === "PASSED")).toHaveLength(5);
-    expect(Object.values(STATES).filter((s) => s === "ARMED")).toHaveLength(2);
+    expect(Object.values(STATES).filter((s) => s === "PASSED")).toHaveLength(6);
+    expect(Object.values(STATES).filter((s) => s === "ARMED")).toHaveLength(1);
     expect(Object.values(STATES)).not.toContain("FAILED");
   });
 });

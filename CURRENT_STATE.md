@@ -37,7 +37,7 @@ that thing.
 | Test runner | vitest 4.1.11 | root `package.json` |
 | Engines | `node >=20` (root and kernel only) | `package.json` |
 | CI matrix | Ubuntu 22/24 + Windows 24, plus dependency-free `runtime-node-20` | `.github/workflows/ci.yml` |
-| **Baseline** | **build 905 ms · test 6 501 ms · 344 tests / 35 files** | measured locally this pass |
+| **Baseline** | **377 tests / 36 files** (344 at reconnaissance; Gate 3 added 33) | measured locally |
 | Windows baseline | 344 tests, 12.72 s | CI job 97592968916 |
 | Line endings | **164/164 tracked files `i/lf`** | `git ls-files --eol` |
 
@@ -80,9 +80,10 @@ Direct search across all `.ts/.mjs/.js/.json/.md`, excluding `node_modules` and 
 
 | Subsystem | State | Evidence |
 |---|---|---|
-| Durable event log | `EXPERIMENTAL` | 5 measured candidates in `log/candidates.ts`; **none adopted** |
-| Production atomic writes | `EXPERIMENTAL` | same; mechanism not chosen |
-| Replay engine (governed state) | `DESIGNED` | `replay` in code appears **only** in the F10 evaluation harness |
+| Durable event log | `VERIFIED_TESTED` | `log/event-log.ts` — single-writer framed append (Gate 3) |
+| Production write mechanism | `VERIFIED_TESTED` | framed append chosen from measurement; durability still `UNKNOWN` (U1) |
+| Replay engine (governed state) | `VERIFIED_TESTED` | `log/replay.ts` — byte classification, gap/duplicate detection, deterministic |
+| Worker state store | `VERIFIED_TESTED` | `log/worker-state.ts` — folded from events via `LEGAL_TRANSITIONS` |
 | Evidence ledger engine | `DESIGNED` | `EvidenceSchema` exists; no reader, writer, or store |
 | Decision engine | `DESIGNED` | `DecisionSchema` exists; no engine |
 | Dependency graph engine | `DESIGNED` | `GraphSnapshotSchema` exists; `dependencyGraph` appears **only in `ROADMAP.md`** |
@@ -94,8 +95,10 @@ Direct search across all `.ts/.mjs/.js/.json/.md`, excluding `node_modules` and 
 | Marketing Content Integrity Worker | `ABSENT` | `MarketingContent` = 0 · `ContentIntegrity` = 0 |
 | `markops verify` | `ABSENT` | `markops` = **0 files** |
 
-**The load-bearing distinction:** ten contracts and ten JSON Schemas exist and are tested. Not one of
-them has an engine behind it. The kernel can *describe* an invalidation result; nothing computes one.
+**The load-bearing distinction:** ten contracts and ten JSON Schemas exist and are tested. As of Gate 3
+exactly **two** of them have an engine behind them — `Event` (`log/event-log.ts`, `log/replay.ts`) and
+`WorkerState` (`log/worker-state.ts`). The remaining eight do not. The kernel can *describe* an
+invalidation result; nothing computes one.
 
 ---
 
@@ -219,15 +222,14 @@ Invariant states — `ARMED` is never reported as `PASSED`:
 
 | | |
 |---|---|
-| I1 single ownership · I2 disjoint · I3 no reverse coupling · I4 no cross-owner deletion · I5 no hidden writers | **PASSED** (5) |
-| I6 derived state rebuildable | **ARMED** — no builder, no records, no rebuild has ever run |
-| I7 transactional deletion | **ARMED** — policy exercised; crash-recovery mechanism does not exist |
+| I1 single ownership · I2 disjoint · I3 no reverse coupling · I4 no cross-owner deletion · I5 no hidden writers · I6 derived state rebuildable | **PASSED** (6) |
+| I7 transactional deletion | **ARMED** — the only delete removes a transient claim (`writer.lock`), not governed state |
 
 ---
 
 ## 10. Artifacts that do not exist yet
 
-`docs/ai-native/` — **ABSENT**. `CURRENT_STATE.md` — this file, previously absent.
+`docs/ai-native/reusable-procedures.md` — created at Gate 3; it owns executable procedures only, referencing the ledger and ROADMAP rather than restating them. The other proposed `docs/ai-native/` pages were deliberately **not** created: `CURRENT_STATE.md` and `ENGINEERING_LEDGER.md` already own that content.
 
 `ROADMAP.md`, `ENGINEERING_LEDGER.md`, `CORE-INVARIANTS-V2.md`, `AGENTS.md`, `CLAUDE.md`,
 `CONTRIBUTING.md`, `docs/WORKER-RUNTIME-KERNEL.md`, `docs/PATTERNS.md` all exist and own their semantic

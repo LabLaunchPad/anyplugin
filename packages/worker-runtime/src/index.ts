@@ -78,3 +78,22 @@ export {
   type KnownBy,
   type TelemetryCapability,
 } from "./resource/telemetry.js";
+
+export {
+  EventLog,
+  EventLogError,
+  EVENT_LOG_RELPATH,
+  LOG_FILENAME,
+  WRITER_LOCK_FILENAME,
+  frameOf,
+  type WriterIdentity,
+} from "./log/event-log.js";
+export { REPLAY_ANOMALIES, isClean, replay, replayDigest, type ReplayReport } from "./log/replay.js";
+export {
+  foldFromReplay,
+  foldWorkerState,
+  stateHash,
+  stateJson,
+  type FoldResult,
+  type RejectedTransition,
+} from "./log/worker-state.js";
