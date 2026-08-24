@@ -1,9 +1,29 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { mkdtemp, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installInstructions, uninstallInstructions, buildAll, executeInstall, executeUninstall } from "./index.js";
 import { pathExists } from "@lablaunchpad/core";
+
+/**
+ * These tests run full install/uninstall cycles across four agents: many small
+ * files, repeated JSON/TOML merges, and byte-exact restore checks. On Windows
+ * that work is several times more expensive than on Linux, and vitest runs test
+ * FILES concurrently — so this suite competes with the process-spawning suites
+ * elsewhere in the workspace.
+ *
+ * vitest's default 5s bound is calibrated for unit tests, not for that. Two of
+ * these crossed it on a loaded Windows runner while passing comfortably on a
+ * quiet one, which makes the pass a property of runner speed rather than of the
+ * code (F17). The bound is therefore stated explicitly, matching the 30s already
+ * used by plugins/knowledge/src/e2e.runtime.test.ts for the same reason.
+ *
+ * This changes no assertion. A timeout is a liveness bound, not a correctness
+ * claim: every behavioural check in this file is unchanged, and a genuine hang
+ * still fails.
+ */
+vi.setConfig({ testTimeout: 30_000 });
+
 
 async function makePlugin(): Promise<{ root: string; project: string }> {
   const root = await mkdtemp(join(tmpdir(), "tier-"));
