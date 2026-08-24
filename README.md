@@ -183,15 +183,9 @@ Windows note: with long repo paths, run tooling through a short junction with `N
 
 ## Roadmap
 
-Planned — not yet implemented:
+The full roadmap lives in **[ROADMAP.md](ROADMAP.md)**.
 
-- [ ] npm publish — `anyplugin` CLI + `@lablaunchpad/*` packages
-- [x] `anyplugin init` — scaffold a new plugin from `templates/starter`
-- [ ] `anyplugin status` / `doctor` — installed-plugin report, agent trust diagnostics
-- [ ] Toolkit plugins — git workflow, test orchestration as second-party examples
-- [ ] Import path — convert an existing Claude Code plugin to the canonical manifest
-- [ ] Codex marketplace emission, per-agent capability gating, HTTP-MCP auth fields
-- [ ] Logo, demo GIF, docs site, i18n
+Beyond the near-term plugin work (npm publish, `status`/`doctor`, toolkit plugins, import path), the larger direction is a **Worker Runtime**: an agent-agnostic reliability layer that gives any coding agent persistent work contracts, an evidence ledger, decision provenance, dependency-driven invalidation, and deterministic verification — with AnyPlugin as its distribution mechanism rather than its owner. Twelve milestones (M0–M12) with machine-checkable gates, ending in a falsification experiment that decides whether the product is worth packaging at all.
 
 ## Contributing
 
