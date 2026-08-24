@@ -4,5 +4,24 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../adapters/claude"
+    },
+    {
+      "path": "../adapters/opencode"
+    },
+    {
+      "path": "../adapters/codex"
+    },
+    {
+      "path": "../adapters/antigravity"
+    }
+  ]
 }
