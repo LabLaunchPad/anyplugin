@@ -1,0 +1,23 @@
+{
+  "name": "@lablaunchpad/worker-runtime",
+  "version": "0.0.1",
+  "description": "Deterministic worker runtime kernel: contracts, state, evidence, decisions, experience, verification. Agent-agnostic — depends on no agent, no adapter, and no AnyPlugin package.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "bin": {
+    "worker-runtime": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

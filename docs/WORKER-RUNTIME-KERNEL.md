@@ -9,7 +9,7 @@ Input to **M1** (freeze the kernel contract). See [`../ROADMAP.md`](../ROADMAP.m
 1. **Every field must have a concrete runtime purpose.** No field exists because it sounds useful. If nothing reads it, it does not ship.
 2. **Records are immutable.** Correction and invalidation append new events; history is never mutated in place.
 3. **Persisted input is untrusted.** Every record is zod-`safeParse`d on read and yields `null` on anything malformed, following the precedent in `cli/src/state.ts`.
-4. **Every path goes through `resolveAuthorizedPath`** (`core/src/fs/safe-path.ts`). Repo invariant.
+4. **Untrusted input must never become a path unchecked.** ⚠️ *Open decision, deliberately unresolved.* The repo invariant names `resolveAuthorizedPath` (`core/src/fs/safe-path.ts`) as the single way this happens — but the kernel **may not import `core`**, which carries agent-specific knowledge (`NATIVE_EVENT_MAP`, agent detection, the adapter contract), so the boundary in `ROADMAP.md` §2 forbids it. Three options, none chosen yet: (a) the kernel reimplements the primitive — duplicating ~130 lines of security-critical code, with divergence risk in a security boundary; (b) `safe-path` is extracted into a tiny dependency-free package both `core` and the kernel depend on — clean, but a refactor of shipped code; (c) the kernel depends on `core` — violates the locked direction. **M1 does not decide this**, because M1's boundary commit accepts no untrusted input; the first record ID the kernel accepts forces the choice. Do not resolve it by accident.
 5. **Deterministic serialization.** Same logical record → byte-identical output → identical hash. Required for the Certificate (M10) to mean anything.
 6. **No LLM inference inside the kernel.** The kernel records and verifies; it never infers. Anything probabilistic lives above it.
 
@@ -251,10 +251,10 @@ Small and boring. The runtime records underneath while the agent works normally.
 
 ---
 
-## Storage layout (proposed, M1 confirms)
+## Storage layout (settled in M1)
 
 ```
-.anyplugin/worker/
+.worker-runtime/
 ├── contracts/     work contracts
 ├── events/        append-only log (atomic O_APPEND)
 ├── evidence/      evidence ledger
@@ -264,8 +264,12 @@ Small and boring. The runtime records underneath while the agent works normally.
 └── certificates/  issued certificates
 ```
 
-Authoritative state lives here — **never** inside AnyPlugin's install journal or `.anyplugin-mode`. Those are AnyPlugin's own concerns, and per the non-negotiable rule in `ROADMAP.md` §2, AnyPlugin never owns worker truth.
+Declared in `packages/worker-runtime/src/storage.ts` as `STORAGE_ROOT_DIRNAME`.
 
-⚠️ **`.anyplugin/worker/` must NOT be a `TEMPLATES` install destination.** `TEMPLATES` (`cli/src/index.ts:218-227`) is the whitelist of *install* destinations, and everything reached through it is journaled with pre-install backups and **restored to pre-install bytes on uninstall** (`AGENTS.md`, installer safety rules). Registering the worker ledger there would mean `anyplugin uninstall` either **deletes or reverts the authoritative state**, or aborts on conflict — which it would do on essentially every run, because the runtime legitimately modifies these files constantly.
+**It is deliberately not under `.anyplugin/`.** An earlier draft proposed `.anyplugin/worker/`; that was wrong. The kernel is agent-agnostic *and* AnyPlugin-agnostic, so naming its authoritative state after the distribution layer invites the shared-ownership mistake — and `.anyplugin/instruction` **is** a real install destination, which would leave the ledger one careless whitelist entry away from being reverted.
 
-This directory is **runtime-created state**, the same category as `.anyplugin-mode` (`cli/src/state.ts`), which is deliberately disjoint from the install journal for exactly this reason. It needs no TEMPLATES entry and no uninstall-reversibility test. Its lifecycle is owned by the runtime, not the installer.
+⚠️ **It must never be a `TEMPLATES` install destination.** `TEMPLATES` (`cli/src/index.ts:218-227`) is the whitelist of *install* destinations, and everything reached through it is journaled with pre-install backups and **restored to pre-install bytes on uninstall** (`AGENTS.md`, installer safety rules). Registering the ledger there would mean `anyplugin uninstall` deletes or reverts authoritative state — or aborts on conflict, which it would do on essentially every run, because the runtime modifies these files constantly.
+
+This is **runtime-created state**, the same category as `.anyplugin-mode` (`cli/src/state.ts`), which is deliberately disjoint from the install journal for exactly this reason. No TEMPLATES entry, no uninstall-reversibility test; its lifecycle belongs to the runtime.
+
+**Single ownership is enforced mechanically**, not merely documented: `core/src/boundaries/package-boundary.test.ts` parses the real `TEMPLATES` table and the kernel's real `STORAGE_ROOT_DIRNAME`, and fails if they ever intersect. `storage.ts` additionally declares `FOREIGN_OWNED_PATHS` — the paths the kernel must never write, because another component owns them — with a test asserting the two sets stay strictly disjoint. If both sides could write one ledger, the invalidation engine could not trust its own inputs.
