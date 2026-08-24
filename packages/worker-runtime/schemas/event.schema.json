@@ -1,0 +1,67 @@
+{
+  "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/event.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Worker Runtime frozen contract: Event (contract version 1.0.0).",
+  "properties": {
+    "actor": {
+      "pattern": "^(human:|process:)[^\\s]+$|^[A-Za-z0-9_.\\-]+\\/[A-Za-z0-9_.\\-]+$",
+      "type": "string"
+    },
+    "at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "type": "string"
+    },
+    "contractVersion": {
+      "const": "1.0.0",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^EVT-[A-Za-z0-9_-]{1,64}$",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "STATE_TRANSITION",
+        "EVIDENCE_ADDED",
+        "EVIDENCE_INVALIDATED",
+        "EVIDENCE_SUPERSEDED",
+        "DECISION_RECORDED",
+        "DECISION_STALED",
+        "EXPERIENCE_RECORDED",
+        "EXPERIENCE_PROMOTED",
+        "VERIFICATION_RUN",
+        "CERTIFICATE_ISSUED"
+      ],
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": {},
+      "default": {},
+      "propertyNames": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "sequence": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "subject": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "contractVersion",
+    "sequence",
+    "at",
+    "actor",
+    "kind",
+    "subject"
+  ],
+  "title": "Event",
+  "type": "object"
+}

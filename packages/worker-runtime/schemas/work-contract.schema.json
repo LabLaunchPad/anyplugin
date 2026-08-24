@@ -1,0 +1,81 @@
+{
+  "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/work-contract.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Worker Runtime frozen contract: WorkContract (contract version 1.0.0).",
+  "properties": {
+    "constraints": {
+      "default": [],
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "contractVersion": {
+      "const": "1.0.0",
+      "type": "string"
+    },
+    "goal": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^WC-[A-Za-z0-9_-]{1,64}$",
+      "type": "string"
+    },
+    "provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+          "type": "string"
+        },
+        "by": {
+          "pattern": "^(human:|process:)[^\\s]+$|^[A-Za-z0-9_.\\-]+\\/[A-Za-z0-9_.\\-]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "at"
+      ],
+      "type": "object"
+    },
+    "riskLevel": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "type": "string"
+    },
+    "scope": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "successConditions": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "contractVersion",
+    "goal",
+    "scope",
+    "successConditions",
+    "riskLevel",
+    "provenance"
+  ],
+  "title": "WorkContract",
+  "type": "object"
+}

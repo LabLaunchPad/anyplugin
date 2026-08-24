@@ -1,0 +1,61 @@
+{
+  "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/verification-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Worker Runtime frozen contract: VerificationResult (contract version 1.0.0).",
+  "properties": {
+    "at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "type": "string"
+    },
+    "contractVersion": {
+      "const": "1.0.0",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^VER-[A-Za-z0-9_-]{1,64}$",
+      "type": "string"
+    },
+    "inputHashes": {
+      "items": {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "observations": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "outcome": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "BLOCKED"
+      ],
+      "type": "string"
+    },
+    "reason": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "verifierId": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "contractVersion",
+    "verifierId",
+    "outcome",
+    "inputHashes",
+    "at"
+  ],
+  "title": "VerificationResult",
+  "type": "object"
+}

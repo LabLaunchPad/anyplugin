@@ -1,0 +1,96 @@
+{
+  "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/graph-snapshot.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Worker Runtime frozen contract: GraphSnapshot (contract version 1.0.0).",
+  "properties": {
+    "at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "type": "string"
+    },
+    "contractVersion": {
+      "const": "1.0.0",
+      "type": "string"
+    },
+    "edges": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "pattern": "^ND-[A-Za-z0-9_-]{1,64}$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "IMPORTS",
+              "MODIFIES",
+              "TESTS",
+              "SUPPORTS",
+              "DEPENDS_ON",
+              "DERIVED_FROM",
+              "LEARNED_FROM",
+              "INVALIDATES",
+              "SUPERSEDES"
+            ],
+            "type": "string"
+          },
+          "to": {
+            "pattern": "^ND-[A-Za-z0-9_-]{1,64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "nodes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^ND-[A-Za-z0-9_-]{1,64}$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "FILE",
+              "SYMBOL",
+              "TEST",
+              "CONFIG",
+              "EVIDENCE",
+              "CLAIM",
+              "DECISION",
+              "EXPERIENCE",
+              "WORK_ITEM"
+            ],
+            "type": "string"
+          },
+          "ref": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "ref"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "contractVersion",
+    "at",
+    "nodes",
+    "edges"
+  ],
+  "title": "GraphSnapshot",
+  "type": "object"
+}

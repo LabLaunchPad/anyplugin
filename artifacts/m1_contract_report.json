@@ -1,0 +1,222 @@
+{
+  "milestone": "M1",
+  "generatedAt": "2026-08-24T19:18:23.933Z",
+  "commit": "3eb3a99be70492ca99f1cdba0ca5093585d0d511",
+  "branch": "feat/m1-kernel-contracts",
+  "contractVersion": "1.0.0",
+  "changedFiles": [
+    "core/src/boundaries/package-boundary.test.ts",
+    "docs/WORKER-RUNTIME-KERNEL.md",
+    "packages/worker-runtime/package.json",
+    "packages/worker-runtime/src/index.ts",
+    "packages/worker-runtime/src/storage.test.ts",
+    "packages/worker-runtime/src/storage.ts",
+    "packages/worker-runtime/tsconfig.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "tsconfig.json",
+    "vitest.config.ts"
+  ],
+  "schemas": [
+    {
+      "file": "certificate.schema.json",
+      "title": "Certificate",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "requiredFields": [
+        "id",
+        "contractVersion",
+        "runtimeVersion",
+        "contractId",
+        "finalPhase",
+        "contractHash",
+        "stateHash",
+        "graphSnapshotHash",
+        "issuedAt",
+        "provenance"
+      ],
+      "hash": "sha256:a0beff80aa57ea77bea4944f1cfea1e15097f9ed9929a2e098e5555755ad5052"
+    },
+    {
+      "file": "decision.schema.json",
+      "title": "Decision",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "requiredFields": [
+        "id",
+        "contractVersion",
+        "contractId",
+        "selected",
+        "supportingEvidence",
+        "provenance",
+        "validity"
+      ],
+      "hash": "sha256:98f61a5dba635f0c5d33eebde570b43e0fdef8c9369de71eba8ef5b58ef7f6f2"
+    },
+    {
+      "file": "event.schema.json",
+      "title": "Event",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "requiredFields": [
+        "id",
+        "contractVersion",
+        "sequence",
+        "at",
+        "actor",
+        "kind",
+        "subject"
+      ],
+      "hash": "sha256:2f5e26ae2e00f9fcbe673e7e75ea6734858b17b3b4bd63badf08142f4d336624"
+    },
+    {
+      "file": "evidence.schema.json",
+      "title": "Evidence",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "requiredFields": [
+        "id",
+        "contractVersion",
+        "kind",
+        "source",
+        "contentHash",
+        "authority",
+        "provenance",
+        "validity"
+      ],
+      "hash": "sha256:01452b99c00f9d9738fefcf976fd447f2d46037f0b2beaf38776564272d629d8"
+    },
+    {
+      "file": "experience.schema.json",
+      "title": "Experience",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "requiredFields": [
+        "id",
+        "contractVersion",
+        "contractId",
+        "action",
+        "outcome",
+        "lesson",
+        "rung",
+        "confidence",
+        "provenance"
+      ],
+      "hash": "sha256:f1538a2b4e78023e1488b56cec0bd307475ee1ad7fb2d77412aad931d1c61562"
+    },
+    {
+      "file": "graph-snapshot.schema.json",
+      "title": "GraphSnapshot",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "requiredFields": [
+        "contractVersion",
+        "at",
+        "nodes",
+        "edges"
+      ],
+      "hash": "sha256:e9944807066c9ef7af3e7767de997dc432a325599a643ef7157d28d36c092dc0"
+    },
+    {
+      "file": "invalidation-result.schema.json",
+      "title": "InvalidationResult",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "requiredFields": [
+        "contractVersion",
+        "trigger",
+        "at"
+      ],
+      "hash": "sha256:d02563ee4eee4a1e2ba7674166fb9e067d7be94b6ce355398121db13ab449a1a"
+    },
+    {
+      "file": "verification-result.schema.json",
+      "title": "VerificationResult",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "requiredFields": [
+        "id",
+        "contractVersion",
+        "verifierId",
+        "outcome",
+        "inputHashes",
+        "at"
+      ],
+      "hash": "sha256:9dbcc1ffc943108c0a45fd4574329edbbc43bd24158ab20d6db19fa5e7718ea9"
+    },
+    {
+      "file": "work-contract.schema.json",
+      "title": "WorkContract",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "requiredFields": [
+        "id",
+        "contractVersion",
+        "goal",
+        "scope",
+        "successConditions",
+        "riskLevel",
+        "provenance"
+      ],
+      "hash": "sha256:6bc571695813a740b9e1d73d330b55f102bb8d6bf8a8b6251a03ee555d1f5aad"
+    },
+    {
+      "file": "worker-state.schema.json",
+      "title": "WorkerState",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "requiredFields": [
+        "id",
+        "contractVersion",
+        "contractId",
+        "phase",
+        "revision",
+        "updatedAt"
+      ],
+      "hash": "sha256:c62cada3b6d955245b2b5a11ed2f22d9df19efd2d6b794fe17cd1a9386251c5b"
+    }
+  ],
+  "invariantChecks": {
+    "kernelDeclaresNoWorkspaceDependency": {
+      "pass": true,
+      "declaredDependencies": [
+        "zod"
+      ],
+      "workspaceScopedDependencies": []
+    },
+    "kernelImportsNothingFromWorkspace": {
+      "pass": true,
+      "violations": [],
+      "filesScanned": 10
+    },
+    "storageSingleOwnership": {
+      "pass": true,
+      "kernelStorageRoot": ".worker-runtime",
+      "anyPluginInstallDestinations": [
+        "{{PROJECT}}/opencode.json",
+        "{{PROJECT}}/AGENTS.md",
+        "{{PROJECT}}/.agents/mcp_config.json",
+        "{{CODEX_HOME}}/config.toml",
+        "{{PROJECT}}/.opencode/skills",
+        "{{PROJECT}}/.opencode/commands",
+        "{{PROJECT}}/.opencode/agent",
+        "{{PROJECT}}/.anyplugin/instruction"
+      ],
+      "collisions": []
+    },
+    "kernelRunsWithoutAgent": {
+      "pass": true,
+      "evidence": "kernel suite passes with CLAUDECODE/CODEX_SANDBOX/ANTIGRAVITY_AGENT/ANYPLUGIN_* unset; dist/index.js imports under bare node with no workspace resolution"
+    }
+  },
+  "dependencyBoundary": {
+    "direction": "inward: CLI/MCP, adapters, and integrations depend on the kernel; the kernel depends on none of them",
+    "kernelExternalDependencies": [
+      "zod"
+    ],
+    "forbiddenScope": "@lablaunchpad/",
+    "note": "core is forbidden too — it carries NATIVE_EVENT_MAP, agent detection, and the adapter contract"
+  },
+  "anyPluginCoupling": {
+    "packageDependency": "NONE",
+    "sourceImports": "NONE",
+    "storageOverlap": "NONE"
+  },
+  "testResults": " Test Files 28 passed (28) Tests 206 passed (206) ",
+  "remainingM1Blockers": [],
+  "knownLimitations": [
+    "JSON Schema mirror is STRUCTURAL only: zod .refine() cross-field constraints (e.g. FAIL/BLOCKED must state a reason) do not survive export. zod remains the authority. Asserted explicitly in schema-sync.test.ts so it cannot be assumed away.",
+    "SafePath ownership is an OPEN DECISION (kernel doc design rule 4): the repo invariant names core's resolveAuthorizedPath, but the kernel may not import core. Deferred deliberately — M1 accepts no untrusted input. The first record id the kernel accepts forces the choice.",
+    "Test files compile into dist/, matching the pre-existing repo-wide pattern (core ships 12, cli 7). Not introduced here; not fixed here."
+  ]
+}
