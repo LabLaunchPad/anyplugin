@@ -122,6 +122,60 @@ describe("verifyEvidence — case C: the ground-truth proof (anti-vacuity)", () 
   });
 });
 
+describe("verifyEvidence — case D: malformed observation", () => {
+  it("BLOCKs (not FAILs, not PASSes) when observedContent cannot be canonicalized at all", () => {
+    // A non-finite number is exactly what canonical.ts refuses (it would
+    // otherwise let JSON.stringify silently turn NaN into null, colliding
+    // two different values onto one hash) — a real failure mode of
+    // contentHash(), not a contrived one. (undefined-valued properties, by
+    // contrast, are silently OMITTED by canonical.ts, not rejected — that
+    // was this test's first, wrong assumption, caught by running it.)
+    const result = verifyEvidence({
+      id: "VER-8",
+      verifierId: "v/1",
+      evidence: evidence({ a: 1 }),
+      observedContent: { a: NaN },
+      at: AT,
+    });
+    expect(result.outcome).toBe("BLOCKED");
+    expect(result.reason).toBeDefined();
+    expect(result.reason).toContain("could not be hashed");
+  });
+
+  it("negatively tests the BLOCKED path: a verifier that let this throw would crash the caller instead of returning a result", () => {
+    // Anti-vacuity for the BLOCKED branch itself: prove the malformed input
+    // really would throw from contentHash() directly, so BLOCKED is doing
+    // real work catching it, not handling a case that could never occur.
+    expect(() => contentHash({ a: () => 1 })).toThrow();
+    const result = verifyEvidence({
+      id: "VER-9",
+      verifierId: "v/1",
+      evidence: evidence({ a: 1 }),
+      observedContent: { a: () => 1 },
+      at: AT,
+    });
+    expect(result.outcome).toBe("BLOCKED");
+  });
+});
+
+describe("verifyEvidence — schema validation is separate from engine correctness", () => {
+  it("a malformed result id is rejected by VerificationResultSchema.parse, independent of the hash comparison outcome", () => {
+    // The engine's own hash-comparison logic is correct (a genuine match),
+    // but the CONTRACT still refuses a badly-shaped id — proving these are
+    // two independent checks, not one conflated pass/fail.
+    const content = "x";
+    expect(() =>
+      verifyEvidence({
+        id: "not-a-valid-verification-id", // missing the VER- prefix idSchema requires
+        verifierId: "v/1",
+        evidence: evidence(content),
+        observedContent: content, // engine logic would say PASS
+        at: AT,
+      }),
+    ).toThrow(/verification id must look like VER-/);
+  });
+});
+
 describe("verifyEvidence — contract conformance", () => {
   it("PASS never carries a reason; FAIL always does (schema-enforced, asserted directly)", () => {
     const content = "x";

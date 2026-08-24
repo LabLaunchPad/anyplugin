@@ -37,7 +37,7 @@
  * - Does not execute `evidence.source`, create a content store, modify
  *   `EvidenceSchema`, or touch M9/AP-017.
  */
-import { contentHash } from "../canonical.js";
+import { CanonicalizationError, contentHash } from "../canonical.js";
 import { VerificationResultSchema, type Evidence } from "../contracts/index.js";
 import type { z } from "zod";
 
@@ -60,11 +60,34 @@ export interface VerifyEvidenceInput {
 
 /**
  * PASS iff a hash of `observedContent` matches `evidence.contentHash`.
- * Otherwise FAIL, with a reason (the schema requires one for any non-PASS
- * outcome — silence is not a result).
+ * FAIL if it was hashable but does not match — a real comparison happened
+ * and disagreed. BLOCKED if `observedContent` could not be canonicalized at
+ * all — a verifier must never fabricate a hash for something it could not
+ * establish, and it must never fabricate a comparison result either (the
+ * same reasoning `VerificationOutcomeSchema`'s own comment states BLOCKED
+ * exists for: absence of a usable observation is not evidence of failure,
+ * nor of success).
  */
 export function verifyEvidence(input: VerifyEvidenceInput): VerificationResult {
-  const observedHash = contentHash(input.observedContent);
+  let observedHash: string;
+  try {
+    observedHash = contentHash(input.observedContent);
+  } catch (err) {
+    if (!(err instanceof CanonicalizationError)) throw err;
+    return VerificationResultSchema.parse({
+      id: input.id,
+      contractVersion: input.evidence.contractVersion,
+      verifierId: input.verifierId,
+      outcome: "BLOCKED",
+      // Nothing new was computed; the only real hash on hand is the claim
+      // itself, cited so this result is still traceable to what it concerns.
+      inputHashes: [input.evidence.contentHash],
+      observations: [`observedContent could not be canonicalized: ${err.message}`],
+      at: input.at,
+      reason: `observed content could not be hashed: ${err.message}`,
+    });
+  }
+
   const outcome: VerificationOutcome = observedHash === input.evidence.contentHash ? "PASS" : "FAIL";
 
   return VerificationResultSchema.parse({
