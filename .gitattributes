@@ -1,0 +1,23 @@
+# Line-ending policy.
+#
+# Generated artifacts are compared BYTE FOR BYTE by drift tests, and their
+# sha256 hashes are recorded in artifacts/m1_contract_report.json. Without an
+# explicit policy, a Windows checkout applies core.autocrlf and rewrites LF to
+# CRLF, which changes those bytes and therefore those hashes — making a
+# "deterministic" artifact platform-dependent and failing the drift test on
+# Windows while passing on Linux.
+#
+# Normalize everything textual to LF in the working tree on every platform.
+* text=auto eol=lf
+
+# Belt and braces for the artifacts whose bytes are load-bearing.
+*.schema.json  text eol=lf
+*.json         text eol=lf
+
+# Binary: never touch.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

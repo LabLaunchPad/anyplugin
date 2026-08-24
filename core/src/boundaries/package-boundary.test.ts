@@ -36,15 +36,23 @@ interface GuardResult {
   detail: string;
 }
 
-/** Packages the Worker Runtime kernel may never depend on. */
-const FORBIDDEN_FOR_RUNTIME = [
-  "@lablaunchpad/cli",
-  "@lablaunchpad/adapter-claude",
-  "@lablaunchpad/adapter-opencode",
-  "@lablaunchpad/adapter-codex",
-  "@lablaunchpad/adapter-antigravity",
-  "@lablaunchpad/plugin-knowledge",
-];
+/**
+ * Packages the Worker Runtime kernel may never depend on.
+ *
+ * This is an ALLOWLIST-style rule expressed as a scope: the kernel may not
+ * reference ANY `@lablaunchpad/*` workspace package — `@lablaunchpad/core`
+ * emphatically included, since it carries agent-specific knowledge
+ * (NATIVE_EVENT_MAP, agent detection, the adapter contract). Enumerating
+ * packages individually was the original form of this guard and it silently
+ * missed `core`; a scope rule cannot be outgrown by adding a new package.
+ */
+const FORBIDDEN_SCOPE = "@lablaunchpad/";
+
+function isForbiddenSpecifier(spec: string): boolean {
+  if (spec.startsWith(FORBIDDEN_SCOPE)) return true;
+  // relative escape out of the package into a sibling workspace package
+  return spec.startsWith(".") && /(^|\/)(cli|adapters|core|plugins)\//.test(spec);
+}
 
 function readPackageJson(dir: string): { name?: string; dependencies?: Record<string, string> } | null {
   const file = join(dir, "package.json");
@@ -93,10 +101,7 @@ function guardRuntimeImports(): GuardResult {
   const violations: string[] = [];
   for (const file of collectSourceFiles(RUNTIME_PKG)) {
     for (const spec of moduleSpecifiers(readFileSync(file, "utf8"))) {
-      const escapesIntoForbiddenDir = /(^|\/)(cli|adapters)\//.test(spec) && spec.startsWith(".");
-      if (FORBIDDEN_FOR_RUNTIME.includes(spec) || escapesIntoForbiddenDir) {
-        violations.push(`${file.slice(REPO_ROOT.length + 1)} → ${spec}`);
-      }
+      if (isForbiddenSpecifier(spec)) violations.push(`${file.slice(REPO_ROOT.length + 1)} → ${spec}`);
     }
   }
   return violations.length > 0
@@ -110,17 +115,66 @@ function guardRuntimeDependencies(): GuardResult {
   if (!pkg) {
     return { guard, state: "ARMED", detail: "packages/worker-runtime/package.json does not exist; invariant NOT exercised" };
   }
-  const forbidden = Object.keys(pkg.dependencies ?? {}).filter((d) => FORBIDDEN_FOR_RUNTIME.includes(d));
+  const forbidden = Object.keys(pkg.dependencies ?? {}).filter((d) => d.startsWith(FORBIDDEN_SCOPE));
   return forbidden.length > 0
     ? { guard, state: "FAILED", detail: `declares ${forbidden.join(", ")}` }
     : { guard, state: "PASSED", detail: "declares no AnyPlugin package" };
 }
 
 function guardRuntimeStandalone(): GuardResult {
-  const guard = "worker-runtime: suite passes with no agent installed";
-  return existsSync(RUNTIME_PKG)
-    ? { guard, state: "ARMED", detail: "package exists but its standalone suite is not yet wired into vitest include globs" }
-    : { guard, state: "ARMED", detail: "packages/worker-runtime/ does not exist; nothing to execute" };
+  const guard = "worker-runtime: wired into the workspace and the test globs";
+  if (!existsSync(RUNTIME_PKG)) {
+    return { guard, state: "ARMED", detail: "packages/worker-runtime/ does not exist; nothing to execute" };
+  }
+  const workspace = readFileSync(join(REPO_ROOT, "pnpm-workspace.yaml"), "utf8");
+  const vitest = readFileSync(join(REPO_ROOT, "vitest.config.ts"), "utf8");
+  const missing: string[] = [];
+  if (!/^\s*-\s*packages\/\*\s*$/m.test(workspace)) missing.push("pnpm-workspace.yaml lacks a packages/* glob");
+  if (!/packages/.test(vitest)) missing.push("vitest include glob omits packages");
+  return missing.length > 0
+    ? { guard, state: "FAILED", detail: missing.join("; ") }
+    : { guard, state: "PASSED", detail: "declared in pnpm-workspace.yaml and covered by the vitest include glob" };
+}
+
+/**
+ * Single-ownership guard. The kernel's authoritative state must never be an
+ * AnyPlugin install destination: TEMPLATES targets are journaled and restored
+ * to pre-install bytes on uninstall, which would revert or delete the ledger.
+ * Exercised against the REAL TEMPLATES table in cli/src/index.ts.
+ */
+function guardStorageOwnershipDisjoint(): GuardResult {
+  const guard = "single ownership: kernel storage root is not an AnyPlugin install destination";
+  const cliSource = join(REPO_ROOT, "cli", "src", "index.ts");
+  if (!existsSync(cliSource)) return { guard, state: "FAILED", detail: "cli/src/index.ts missing" };
+
+  const source = readFileSync(cliSource, "utf8");
+  const block = /const TEMPLATES[\s\S]*?\n\};/.exec(source);
+  if (!block) return { guard, state: "FAILED", detail: "could not locate the TEMPLATES table in cli/src/index.ts" };
+
+  const destinations = [...block[0].matchAll(/"([^"]+)":\s*\(o\)/g)].map((m) => m[1] ?? "");
+  if (destinations.length === 0) return { guard, state: "FAILED", detail: "TEMPLATES table parsed but yielded no destinations" };
+
+  // Read the kernel's declared storage root from its own source, so the two
+  // sides cannot silently drift apart.
+  const storageFile = join(RUNTIME_PKG, "src", "storage.ts");
+  if (!existsSync(storageFile)) {
+    return { guard, state: "ARMED", detail: `TEMPLATES parsed (${destinations.length} destinations) but the kernel declares no storage root yet` };
+  }
+  const rootMatch = /STORAGE_ROOT_DIRNAME\s*=\s*"([^"]+)"/.exec(readFileSync(storageFile, "utf8"));
+  if (!rootMatch?.[1]) return { guard, state: "FAILED", detail: "STORAGE_ROOT_DIRNAME not found in the kernel's storage.ts" };
+  const kernelRoot = rootMatch[1];
+
+  const collisions = destinations.filter((d) => {
+    const tail = d.replace(/^\{\{[A-Z_]+\}\}\//, "");
+    return tail === kernelRoot || tail.startsWith(`${kernelRoot}/`);
+  });
+  return collisions.length > 0
+    ? { guard, state: "FAILED", detail: `TEMPLATES targets kernel-owned storage: ${collisions.join(", ")}` }
+    : {
+        guard,
+        state: "PASSED",
+        detail: `${destinations.length} install destinations checked; none touch "${kernelRoot}"`,
+      };
 }
 
 // ── Guards exercisable today against real packages: PASSED/FAILED ────────────
@@ -159,6 +213,7 @@ export function evaluateBoundaryGuards(): GuardResult[] {
     guardRuntimeImports(),
     guardRuntimeDependencies(),
     guardRuntimeStandalone(),
+    guardStorageOwnershipDisjoint(),
   ];
 }
 
@@ -190,21 +245,31 @@ describe("workspace package boundaries", () => {
     expect(r?.state).toBe("PASSED");
   });
 
-  it("worker-runtime guards are ARMED until M1 creates the package", () => {
-    // This test is the ARMED/PASSED firewall. When M1 creates
-    // packages/worker-runtime/, these flip to PASSED and this expectation
-    // fails — forcing a deliberate update rather than silently sliding from
-    // "never checked" to "checked and fine".
+  it("worker-runtime guards are exercised, not ARMED (M1 created the package)", () => {
+    // The ARMED/PASSED firewall, now on the far side. The package exists, so
+    // every runtime guard must have actually run against real files. An ARMED
+    // result here would mean an invariant silently stopped being checked.
+    expect(existsSync(RUNTIME_PKG)).toBe(true);
+
     const runtimeGuards = results.filter((r) => r.guard.startsWith("worker-runtime:"));
     expect(runtimeGuards.length).toBe(3);
-
-    if (existsSync(RUNTIME_PKG)) {
-      throw new Error(
-        "packages/worker-runtime/ now exists. The boundary guards are no longer ARMED — " +
-          "update this test to assert PASSED, and wire the package into vitest include globs " +
-          "and pnpm-workspace.yaml (see ROADMAP.md §2).",
-      );
+    for (const r of runtimeGuards) {
+      expect(r.state, `${r.guard} must be exercised, got ${r.state}: ${r.detail}`).toBe("PASSED");
     }
-    for (const r of runtimeGuards) expect(r.state).toBe("ARMED");
+  });
+
+  it("kernel storage ownership is disjoint from AnyPlugin install destinations (exercised)", () => {
+    const r = results.find((x) => x.guard.startsWith("single ownership:"));
+    expect(r?.state, r?.detail).toBe("PASSED");
+  });
+
+  it("kernel declares no workspace dependency at all, not even core", () => {
+    // core carries agent-specific knowledge (NATIVE_EVENT_MAP, agent
+    // detection, the adapter contract). Depending on it would make the kernel
+    // agent-aware, violating the locked dependency direction.
+    const pkg = readPackageJson(RUNTIME_PKG);
+    expect(pkg).not.toBeNull();
+    const workspaceDeps = Object.keys(pkg?.dependencies ?? {}).filter((d) => d.startsWith("@lablaunchpad/"));
+    expect(workspaceDeps).toEqual([]);
   });
 });

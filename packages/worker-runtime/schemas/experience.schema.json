@@ -1,0 +1,159 @@
+{
+  "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/experience.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "failureClass"
+        ]
+      },
+      "then": {
+        "properties": {
+          "outcome": {
+            "const": "FAILURE"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "rung": {
+            "const": "VERIFIED_KNOWLEDGE"
+          }
+        },
+        "required": [
+          "rung"
+        ]
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "minItems": 1
+          }
+        },
+        "required": [
+          "evidence"
+        ]
+      }
+    }
+  ],
+  "description": "Worker Runtime frozen contract: Experience (contract version 1.0.0).",
+  "properties": {
+    "action": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "contractId": {
+      "pattern": "^WC-[A-Za-z0-9_-]{1,64}$",
+      "type": "string"
+    },
+    "contractVersion": {
+      "const": "1.0.0",
+      "type": "string"
+    },
+    "evidence": {
+      "default": [],
+      "items": {
+        "pattern": "^EV-[A-Za-z0-9_-]{1,64}$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "failureClass": {
+      "enum": [
+        "INFRASTRUCTURE",
+        "TOOL",
+        "ENVIRONMENT",
+        "KNOWLEDGE",
+        "REASONING",
+        "EXECUTION",
+        "VERIFICATION",
+        "USER_CONSTRAINT"
+      ],
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^EXP-[A-Za-z0-9_-]{1,64}$",
+      "type": "string"
+    },
+    "invalidatedBy": {
+      "default": [],
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "lesson": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "outcome": {
+      "enum": [
+        "SUCCESS",
+        "FAILURE"
+      ],
+      "type": "string"
+    },
+    "provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+          "type": "string"
+        },
+        "by": {
+          "pattern": "^(human:|process:)[^\\s]+$|^[A-Za-z0-9_.\\-]+\\/[A-Za-z0-9_.\\-]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "at"
+      ],
+      "type": "object"
+    },
+    "rung": {
+      "enum": [
+        "OBSERVATION",
+        "LESSON",
+        "HYPOTHESIS",
+        "VERIFIED_KNOWLEDGE"
+      ],
+      "type": "string"
+    },
+    "validWhen": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "propertyNames": {
+        "type": "string"
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "contractVersion",
+    "contractId",
+    "action",
+    "outcome",
+    "lesson",
+    "rung",
+    "confidence",
+    "provenance"
+  ],
+  "title": "Experience",
+  "type": "object",
+  "x-semanticAuthority": "@lablaunchpad/worker-runtime contracts (zod)",
+  "x-validationMode": "STRUCTURAL_SCHEMA_VALID"
+}

@@ -75,6 +75,12 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  packages/worker-runtime:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
   plugins/knowledge:
     dependencies:
       '@lablaunchpad/core':

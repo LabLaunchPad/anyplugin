@@ -1,0 +1,61 @@
+{
+  "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/invalidation-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Worker Runtime frozen contract: InvalidationResult (contract version 1.0.0).",
+  "properties": {
+    "affectedNodes": {
+      "default": [],
+      "items": {
+        "pattern": "^ND-[A-Za-z0-9_-]{1,64}$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "type": "string"
+    },
+    "contractVersion": {
+      "const": "1.0.0",
+      "type": "string"
+    },
+    "reopenedWork": {
+      "default": [],
+      "items": {
+        "pattern": "^WC-[A-Za-z0-9_-]{1,64}$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "requiresReverification": {
+      "default": [],
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "staleDecisions": {
+      "default": [],
+      "items": {
+        "pattern": "^DEC-[A-Za-z0-9_-]{1,64}$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "trigger": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "contractVersion",
+    "trigger",
+    "at"
+  ],
+  "title": "InvalidationResult",
+  "type": "object",
+  "x-semanticAuthority": "@lablaunchpad/worker-runtime contracts (zod)",
+  "x-validationMode": "STRUCTURAL_SCHEMA_VALID"
+}

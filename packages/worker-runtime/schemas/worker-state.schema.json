@@ -1,0 +1,63 @@
+{
+  "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/worker-state.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Worker Runtime frozen contract: WorkerState (contract version 1.0.0).",
+  "properties": {
+    "assumptions": {
+      "default": [],
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "contractId": {
+      "pattern": "^WC-[A-Za-z0-9_-]{1,64}$",
+      "type": "string"
+    },
+    "contractVersion": {
+      "const": "1.0.0",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^WS-[A-Za-z0-9_-]{1,64}$",
+      "type": "string"
+    },
+    "phase": {
+      "enum": [
+        "NEW",
+        "PLANNING",
+        "EXECUTING",
+        "WAITING",
+        "VERIFYING",
+        "BLOCKED",
+        "COMPLETED",
+        "FAILED",
+        "REOPENED"
+      ],
+      "type": "string"
+    },
+    "revision": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "updatedAt": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "contractVersion",
+    "contractId",
+    "phase",
+    "revision",
+    "updatedAt"
+  ],
+  "title": "WorkerState",
+  "type": "object",
+  "x-semanticAuthority": "@lablaunchpad/worker-runtime contracts (zod)",
+  "x-validationMode": "STRUCTURAL_SCHEMA_VALID"
+}

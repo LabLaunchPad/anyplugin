@@ -1,0 +1,124 @@
+{
+  "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/certificate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "properties": {
+        "finalPhase": {
+          "enum": [
+            "COMPLETED",
+            "FAILED"
+          ]
+        }
+      }
+    }
+  ],
+  "description": "Worker Runtime frozen contract: Certificate (contract version 1.0.0).",
+  "properties": {
+    "contractHash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "contractId": {
+      "pattern": "^WC-[A-Za-z0-9_-]{1,64}$",
+      "type": "string"
+    },
+    "contractVersion": {
+      "const": "1.0.0",
+      "type": "string"
+    },
+    "decisionHashes": {
+      "default": [],
+      "items": {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "evidenceHashes": {
+      "default": [],
+      "items": {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "finalPhase": {
+      "enum": [
+        "NEW",
+        "PLANNING",
+        "EXECUTING",
+        "WAITING",
+        "VERIFYING",
+        "BLOCKED",
+        "COMPLETED",
+        "FAILED",
+        "REOPENED"
+      ],
+      "type": "string"
+    },
+    "graphSnapshotHash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^CERT-[A-Za-z0-9_-]{1,64}$",
+      "type": "string"
+    },
+    "issuedAt": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "type": "string"
+    },
+    "provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+          "type": "string"
+        },
+        "by": {
+          "pattern": "^(human:|process:)[^\\s]+$|^[A-Za-z0-9_.\\-]+\\/[A-Za-z0-9_.\\-]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "at"
+      ],
+      "type": "object"
+    },
+    "runtimeVersion": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "stateHash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "verificationHashes": {
+      "default": [],
+      "items": {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "contractVersion",
+    "runtimeVersion",
+    "contractId",
+    "finalPhase",
+    "contractHash",
+    "stateHash",
+    "graphSnapshotHash",
+    "issuedAt",
+    "provenance"
+  ],
+  "title": "Certificate",
+  "type": "object",
+  "x-semanticAuthority": "@lablaunchpad/worker-runtime contracts (zod)",
+  "x-validationMode": "STRUCTURAL_SCHEMA_VALID"
+}

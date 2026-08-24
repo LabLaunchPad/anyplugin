@@ -3,5 +3,6 @@ packages:
   - adapters/*
   - plugins/*
   - cli
+  - packages/*
 allowBuilds:
   esbuild: true

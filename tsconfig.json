@@ -7,6 +7,7 @@
     { "path": "./adapters/codex" },
     { "path": "./adapters/antigravity" },
     { "path": "./plugins/knowledge" },
-    { "path": "./cli" }
+    { "path": "./cli" },
+    { "path": "./packages/worker-runtime" }
   ]
 }

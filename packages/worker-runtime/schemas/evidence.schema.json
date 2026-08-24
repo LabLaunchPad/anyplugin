@@ -1,0 +1,144 @@
+{
+  "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/evidence.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "else": {
+        "not": {
+          "required": [
+            "supersededBy"
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "validity": {
+            "const": "SUPERSEDED"
+          }
+        },
+        "required": [
+          "validity"
+        ]
+      },
+      "then": {
+        "required": [
+          "supersededBy"
+        ]
+      }
+    },
+    {
+      "else": {
+        "not": {
+          "required": [
+            "invalidationReason"
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "validity": {
+            "const": "INVALIDATED"
+          }
+        },
+        "required": [
+          "validity"
+        ]
+      },
+      "then": {
+        "required": [
+          "invalidationReason"
+        ]
+      }
+    }
+  ],
+  "description": "Worker Runtime frozen contract: Evidence (contract version 1.0.0).",
+  "properties": {
+    "authority": {
+      "enum": [
+        "AUTHORITATIVE",
+        "DERIVED",
+        "REPORTED"
+      ],
+      "type": "string"
+    },
+    "contentHash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "contractVersion": {
+      "const": "1.0.0",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^EV-[A-Za-z0-9_-]{1,64}$",
+      "type": "string"
+    },
+    "invalidationReason": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "GIT_DIFF",
+        "TEST_RESULT",
+        "BUILD_RESULT",
+        "API_RESPONSE",
+        "DOCUMENTATION",
+        "PACKAGE_METADATA",
+        "HUMAN_APPROVAL",
+        "SECURITY_SCAN",
+        "RUNTIME_OBSERVATION"
+      ],
+      "type": "string"
+    },
+    "provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+          "type": "string"
+        },
+        "by": {
+          "pattern": "^(human:|process:)[^\\s]+$|^[A-Za-z0-9_.\\-]+\\/[A-Za-z0-9_.\\-]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "at"
+      ],
+      "type": "object"
+    },
+    "source": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "supersededBy": {
+      "pattern": "^EV-[A-Za-z0-9_-]{1,64}$",
+      "type": "string"
+    },
+    "validity": {
+      "enum": [
+        "VALID",
+        "INVALIDATED",
+        "SUPERSEDED"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "contractVersion",
+    "kind",
+    "source",
+    "contentHash",
+    "authority",
+    "provenance",
+    "validity"
+  ],
+  "title": "Evidence",
+  "type": "object",
+  "x-semanticAuthority": "@lablaunchpad/worker-runtime contracts (zod)",
+  "x-validationMode": "STRUCTURAL_SCHEMA_VALID"
+}
