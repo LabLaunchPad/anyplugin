@@ -54,7 +54,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 20
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: anyplugin-runtime
       - name: Hook runner E2E (claude-code translation)
