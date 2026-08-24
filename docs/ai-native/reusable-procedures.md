@@ -151,42 +151,74 @@ safety whatsoever. Both were found by trying to make them fail, not by reading t
 
 ---
 
-## PROCEDURE: MEASURE_BEFORE_DEFINING_A_TELEMETRY_FIELD
+## PROCEDURE: MEASUREMENT_EVIDENCE_PROTOCOL
 
-**Trigger.** Before adding any field recording tokens, latency, memory, CPU, disk, or cost.
+**Trigger.** Before adding, asserting on, or citing ANY measurement — tokens, latency, memory, CPU,
+disk, cost, counts, durations. Supersedes the earlier `MEASURE_BEFORE_DEFINING_A_TELEMETRY_FIELD`,
+which covered only the field's definition and not the evidence drawn from it.
 
-**Why it exists.** Defining fields first produces a plausible list, and the unmeasurable ones then get
-filled with an estimate, a default, or a zero — and the metric is computed from numbers nobody observed.
-Probing the real APIs first caught two fields that would have become silently wrong: `maxRSS` is
-**kilobytes on Linux** (measured: `maxRSS × 1024 === memoryUsage().rss`) but **bytes on macOS**, so
-`peakMemoryBytes: maxRSS` would be wrong by 1024× on one of them; and `fsRead`/`fsWrite` read **zero**
-immediately after a real 64 KB write, because they count block-device operations the page cache absorbs.
+**Why it exists.** F19. `telemetry.test.ts` asserted `cpuUserMicros + cpuSystemMicros > 0` after a
+3M-iteration loop. It passed on Linux and returned **0** on Windows, which accounts process CPU via
+`GetProcessTimes` at roughly a 15.6ms tick — the loop finished inside one tick. The inventory had
+recorded the field as *"microseconds on every supported platform"*: true of the **unit**, silently wrong
+about the **resolution**.
+
+The dangerous part was never the failing test. It was the shape underneath it:
+
+```
+real work happened → measurement returned 0 → test read 0 as "no work" → false evidence
+```
+
+A defective measurement layer lets everything above it be confidently wrong while staying green. That
+is F16/F18's structure one level lower down — the instrument, rather than the harness.
+
+**The stack, where each layer fails independently:**
+
+```
+REAL SYSTEM → INSTRUMENTATION → HARNESS → EVIDENCE → DECISION
+              unit/resolution/   can it     what was
+              accounting/        discrim-   actually
+              availability       inate?     established?
+```
 
 **Steps.**
 
-1. Locate the actual runtime API. Do not reason from its name.
-2. Exercise it against known work — burn measurable CPU, write a file of known size.
-3. Check the **unit** empirically, by ratio against a second known quantity. Never assume bytes.
-3a. Check the **resolution** separately from the unit — they are different properties. Windows accounts
-   process CPU at roughly a 15.6ms tick, so `cpuUsage()` reports microseconds *as a unit* while being
-   unable to resolve work shorter than a tick (F19). A measurement shorter than the accounting interval
-   reads 0, which is indistinguishable from no work.
-3b. Where a test must observe the counter move, size the workload against the **coarsest** resolution
-   supported, and drive it from measured wall clock rather than an iteration count so machine speed
-   cannot change what the test exercises.
-4. Check behaviour on every supported platform via the CI matrix, not locally.
-5. Classify: `MEASURED` · `DERIVED` · `ESTIMATED` · `ATTESTED` · `UNKNOWN`.
-6. If it cannot be measured reliably, it is `UNKNOWN` — and **absent from the record entirely**, never
-   present with a zero.
+1. **PROPERTY** — what exactly is being measured? Not the field name; the physical quantity.
+2. **UNIT** — what unit is returned? Verify empirically, by ratio against a second known quantity.
+   Never assume bytes. (`maxRSS` is kilobytes on Linux, bytes on macOS — wrong by 1024× if assumed.)
+3. **RESOLUTION** — the smallest change the mechanism can distinguish. **A different property from the
+   unit**, and the one F19 turned on.
+4. **ACCOUNTING METHOD** — how the platform computes it. Page-cache-absorbed block I/O, timer-tick
+   sampling, and direct counters fail in different ways.
+5. **PLATFORM MATRIX** — where behaviour differs. Verify on the CI matrix, not locally.
+6. **AVAILABILITY** — can the measurement legitimately be absent or zero *while the work happened*? If
+   yes, zero is not evidence of nothing.
+7. **FALSE-RESULT TEST** — can real activity produce the reported value? This is anti-vacuity aimed at
+   the instrument: construct the case where work occurs and the number does not move.
+8. **BOUNDARY TEST** — does the test stimulus exceed the measurement's resolution? Size it against the
+   **coarsest** resolution supported, and drive it from measured wall clock rather than an iteration
+   count — otherwise a faster machine does a *shorter* burn and is *more* likely to fail (F17 applied to
+   a measurement instead of a timeout).
+9. **PROMOTION RULE** — state the claim the measurement actually justifies, and no more.
 
-**Acceptance.** Every authoritative field traces to an API that was exercised, with its unit
-demonstrated. `UNKNOWN` fields are absent rather than defaulted.
+**Inferences that are not valid:**
 
-**Why absence matters more than it looks.** A missing token count defaulted to 0 makes an execution look
-free, so the amortization ratio improves exactly when instrumentation is lost — the metric would report
-success as a consequence of going blind. Coverage therefore travels with every ratio.
+| this | does not establish |
+|---|---|
+| returns microseconds | detects microsecond-scale work |
+| the API exists | it has equivalent semantics on every OS |
+| the counter reads 0 | no work occurred |
+| the test passes | the property is proven |
+| measured on Linux | measured anywhere else |
 
-**Evidence.** `resource/telemetry.ts` · `resource/telemetry.test.ts` · `resource/measurement.ts`.
+**Acceptance.** Each of the nine answered, with unit and resolution answered *separately*. Anything
+unestablished is `UNKNOWN` and **absent from the record**, never present as a zero — a missing token
+count defaulted to 0 makes an execution look free, so the amortization ratio improves exactly when
+instrumentation is lost, reporting success as a consequence of going blind. Coverage therefore travels
+with every ratio.
+
+**Evidence.** `resource/telemetry.ts` · `resource/telemetry.test.ts` · `resource/measurement.ts` ·
+F19 · the `maxRSS` and `fsRead`/`fsWrite` findings.
 
 ---
 
