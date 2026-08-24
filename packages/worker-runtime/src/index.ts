@@ -34,3 +34,47 @@ export {
   isForeignOwned,
   type StorageSubdir,
 } from "./storage.js";
+
+export {
+  OwnershipError,
+  assertWritable,
+  assertDeletable,
+  checkWritable,
+  checkDeletable,
+  classifySubdir,
+  AUTHORITATIVE_SUBDIRS,
+  DERIVED_SUBDIRS,
+  type OwnershipVerdict,
+  type RefusalReason,
+} from "./ownership.js";
+
+export {
+  EVENT_WRITE_CONTRACT_VERSION,
+  GUARANTEES,
+  PIPE_BUF,
+  recordHash,
+  type Anomaly,
+  type Classification,
+  type CommittedEntry,
+  type EventLogWriter,
+  type LogRecord,
+  type ReplayResult,
+} from "./log/write-contract.js";
+
+export {
+  RESOURCE_MEASUREMENT_VERSION,
+  ResourceMeasurementSchema,
+  coverageOf,
+  type Coverage,
+  type ResourceMeasurement,
+} from "./resource/measurement.js";
+export {
+  KNOWN_BY,
+  MEASURABLE_FIELDS,
+  TELEMETRY_INVENTORY,
+  UNOBSERVABLE_FIELDS,
+  measure,
+  type KernelSample,
+  type KnownBy,
+  type TelemetryCapability,
+} from "./resource/telemetry.js";
