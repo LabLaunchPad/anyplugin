@@ -145,6 +145,10 @@ const report = {
       "M1 accepts no untrusted input. The first record id the kernel accepts forces the choice.",
     "Test files compile into dist/, matching the pre-existing repo-wide pattern (core ships 12, cli 7). " +
       "Not introduced here; not fixed here.",
+    "Schema hashes below are LF-normalized. Without .gitattributes a Windows checkout applies " +
+      "core.autocrlf, rewriting LF to CRLF, which changes these bytes and therefore these hashes — " +
+      "making a 'deterministic' artifact platform-dependent. Caught by CI on Windows and fixed by " +
+      "an explicit `* text=auto eol=lf` policy; the hashes here are only meaningful under it.",
   ],
 };
 
