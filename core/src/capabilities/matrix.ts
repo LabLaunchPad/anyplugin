@@ -60,9 +60,15 @@ const MATRIX: Record<string, Partial<Record<Capability, Verdict>>> = {
     "agents.subagent": { level: "NATIVE", rationale: "subagent markdown" },
     knowledge: { level: "NATIVE", rationale: "bundle dir ships with the plugin root" },
   },
-  // OpenCode v1: TS plugin API; the emitted shim spawns the canonical runner.
+  // OpenCode (official plugin API docs, verified 2026-08: hook-based, no
+  // documented v1/v2 split): session.created, tool.execute.before/after,
+  // session.idle, permission.asked. No prompt hook exists — prompt-submit is
+  // UNSUPPORTED (fail-closed) rather than mapped to an undocumented event.
   "opencode@v1": {
-    ...all(HOOK_EVENTS, () => ({ level: "NATIVE", rationale: "v1 TS hook API via faithful runner shim" })),
+    ...all(HOOK_EVENTS, (e) => {
+      if (e === "prompt-submit") return { level: "UNSUPPORTED", rationale: "opencode plugin API documents no prompt-submission hook (message.* events are post-hoc); no faithful mapping exists" };
+      return { level: "NATIVE", rationale: "opencode official plugin API hook (docs verified 2026-08) via the runner shim" };
+    }),
     "mcp.stdio": { level: "NATIVE", rationale: "opencode.json mcp with argv commands" },
     "mcp.http": { level: "NATIVE", rationale: "opencode.json mcp url servers" },
     skills: { level: "NATIVE", rationale: "skills[] paths" },

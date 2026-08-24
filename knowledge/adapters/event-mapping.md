@@ -31,9 +31,9 @@ Canonical handlers are ALWAYS `node <dist>/hooks/runner.js <handler-id>` reading
 | session-start | SessionStart | event `session.created` | SessionStart | PreInvocation |
 | before-tool-use | PreToolUse | `tool.execute.before` | PreToolUse | PreToolUse |
 | after-tool-use | PostToolUse | `tool.execute.after` | PostToolUse | PostToolUse |
-| prompt-submit | UserPromptSubmit | `chat.message` | UserPromptSubmit | PreInvocation |
+| prompt-submit | UserPromptSubmit | — | UserPromptSubmit | PreInvocation |
 | turn-stop | Stop / SessionEnd | event `session.idle` | Stop | Stop |
-| permission-request | PermissionRequest | `permission.ask` | PermissionRequest | PreToolUse decision |
+| permission-request | PermissionRequest | `permission.asked` | PermissionRequest | PreToolUse decision |
 | session-end | SessionEnd | event `session.idle` (fallback) | SessionEnd | — |
 
 ## Payload translation notes

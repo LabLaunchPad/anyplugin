@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, mkdir, writeFile, readFile, copyFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, copyFile, unlink as removeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -99,6 +99,37 @@ describe("runner.js E2E (real process, real handler)", () => {
     const r = await runNode([runnerCopy, "boom"], { input: "{}", cwd: tmp });
     expect(r.code).toBe(0);
     expect(r.stderr).toMatch(/failed: boom/);
+  }, 30000);
+
+  it("intensityMode reaches the handler payload — valid, missing, and corrupt .anyplugin-mode", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "runner-mode-"));
+    const runnerCopy = join(tmp, "runner.js");
+    await copyFile(RUNNER, runnerCopy);
+    await mkdir(join(tmp, "handlers"), { recursive: true });
+    await writeFile(
+      join(tmp, "handlers", "echo-mode.mjs"),
+      "export async function run(payload) { return { additionalContext: JSON.stringify({ intensityMode: payload.intensityMode }) }; }\n",
+    );
+    const pluginRoot = join(tmp, "plugin-root");
+    await mkdir(pluginRoot, { recursive: true });
+
+    // valid flag → mode reaches the payload
+    await writeFile(join(pluginRoot, ".anyplugin-mode"), JSON.stringify({ pluginId: "p", version: "1.0.0", mode: "aggressive", timestamp: 1 }));
+    let r = await runNode([runnerCopy, "echo-mode"], { input: "{}", env: { ANYPLUGIN_HOST: "claude-code", ANYPLUGIN_PLUGIN_ROOT: pluginRoot } });
+    expect(r.code).toBe(0);
+    expect(JSON.parse(JSON.parse(r.stdout).hookSpecificOutput.additionalContext).intensityMode).toBe("aggressive");
+
+    // missing flag file → fails open to null, hook still runs, exit 0
+    await removeFile(join(pluginRoot, ".anyplugin-mode"));
+    r = await runNode([runnerCopy, "echo-mode"], { input: "{}", env: { ANYPLUGIN_HOST: "claude-code", ANYPLUGIN_PLUGIN_ROOT: pluginRoot } });
+    expect(r.code).toBe(0);
+    expect(JSON.parse(JSON.parse(r.stdout).hookSpecificOutput.additionalContext).intensityMode).toBe(null);
+
+    // corrupt JSON → same fail-open guarantee, never surfaced as an error
+    await writeFile(join(pluginRoot, ".anyplugin-mode"), "{ not valid json");
+    r = await runNode([runnerCopy, "echo-mode"], { input: "{}", env: { ANYPLUGIN_HOST: "claude-code", ANYPLUGIN_PLUGIN_ROOT: pluginRoot } });
+    expect(r.code).toBe(0);
+    expect(JSON.parse(JSON.parse(r.stdout).hookSpecificOutput.additionalContext).intensityMode).toBe(null);
   }, 30000);
 
   it("turn-stop appends a session heartbeat to the bundle's log.md", async () => {
@@ -209,6 +240,86 @@ describe.skipIf(!existsSync(DIST_BIN))("CLI --json E2E (cli/dist/bin.js)", () =>
     expect(out.files).toContain("anyplugin.plugin.yaml");
     const manifestText = await readFile(join(out.dir, "anyplugin.plugin.yaml"), "utf8");
     expect(manifestText).toContain("name: json-init-plugin");
+  }, 30000);
+
+  it("install --tier instruction honors --json and reports dry-run accurately", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "tier-e2e-"));
+    const pluginDir = join(tmp, "tier-plugin");
+    const project = join(tmp, "project");
+    const initR = await runNode([DIST_BIN, "init", "--name", "tier-plugin", "--dir", pluginDir, "--json"]);
+    expect(initR.code).toBe(0);
+
+    // --dry-run must not write AGENTS.md, and must say "would append", not "appended".
+    const dryRunText = await runNode([DIST_BIN, "install", "--plugin", pluginDir, "--project", project, "--tier", "instruction", "--dry-run"]);
+    expect(dryRunText.code).toBe(0);
+    expect(dryRunText.stdout).toMatch(/would append/);
+    expect(dryRunText.stdout).not.toMatch(/\bappended →/);
+    expect(existsSync(join(project, "AGENTS.md"))).toBe(false);
+
+    // --json must actually emit JSON, not the human-readable text.
+    const jsonR = await runNode([DIST_BIN, "install", "--plugin", pluginDir, "--project", project, "--tier", "instruction", "--json"]);
+    expect(jsonR.code, jsonR.stderr).toBe(0);
+    const out = JSON.parse(jsonR.stdout);
+    expect(out.command).toBe("install");
+    expect(out.tier).toBe("instruction");
+    expect(out.dryRun).toBe(false);
+    expect(out.agentsMd).toBe(join(project, "AGENTS.md"));
+    expect(existsSync(out.agentsMd)).toBe(true);
+
+    const uninstallJsonR = await runNode([DIST_BIN, "uninstall", "--plugin", pluginDir, "--project", project, "--tier", "instruction", "--json"]);
+    expect(uninstallJsonR.code, uninstallJsonR.stderr).toBe(0);
+    const uOut = JSON.parse(uninstallJsonR.stdout);
+    expect(uOut.command).toBe("uninstall");
+    expect(uOut.tier).toBe("instruction");
+    expect(Array.isArray(uOut.touched)).toBe(true);
+    expect(existsSync(join(project, "AGENTS.md"))).toBe(false);
+  }, 30000);
+
+  it("intensity writes .anyplugin-mode into the INSTALLED root, not the source --plugin dir", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "intensity-e2e-"));
+    const pluginDir = join(tmp, "intensity-plugin");
+    const home = join(tmp, "home");
+    const project = join(tmp, "project");
+    const initR = await runNode([DIST_BIN, "init", "--name", "intensity-plugin", "--dir", pluginDir, "--json"]);
+    expect(initR.code).toBe(0);
+
+    const installR = await runNode([
+      DIST_BIN, "install", "--plugin", pluginDir, "--agents", "claude-code",
+      "--home", home, "--project", project,
+    ]);
+    expect(installR.code).toBe(0);
+
+    const installedRoot = join(home, ".claude", "plugins", "intensity-plugin");
+    expect(existsSync(join(installedRoot, ".anyplugin-mode"))).toBe(false);
+    expect(existsSync(join(pluginDir, ".anyplugin-mode"))).toBe(false);
+
+    const intensityR = await runNode([
+      DIST_BIN, "intensity", "--mode", "aggressive", "--plugin", pluginDir, "--agents", "claude-code",
+      "--home", home, "--project", project, "--json",
+    ]);
+    expect(intensityR.code, intensityR.stderr).toBe(0);
+    const out = JSON.parse(intensityR.stdout);
+    expect(out.written).toEqual([{ agent: "claude-code", file: join(installedRoot, ".anyplugin-mode") }]);
+
+    // The flag landed where the runtime actually reads it from...
+    const state = JSON.parse(await readFile(join(installedRoot, ".anyplugin-mode"), "utf8"));
+    expect(state.mode).toBe("aggressive");
+    expect(state.pluginId).toBe("intensity-plugin");
+    // ...and NOT in the developer's source tree, which the runtime never reads.
+    expect(existsSync(join(pluginDir, ".anyplugin-mode"))).toBe(false);
+  }, 30000);
+
+  it("intensity errors clearly when the plugin isn't installed anywhere yet", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "intensity-uninstalled-"));
+    const pluginDir = join(tmp, "never-installed");
+    const initR = await runNode([DIST_BIN, "init", "--name", "never-installed", "--dir", pluginDir, "--json"]);
+    expect(initR.code).toBe(0);
+    const r = await runNode([
+      DIST_BIN, "intensity", "--mode", "balanced", "--plugin", pluginDir,
+      "--home", join(tmp, "home"), "--project", join(tmp, "project"),
+    ]);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/not installed for any of/);
   }, 30000);
 
   it("invalid manifest error names the failing field", async () => {

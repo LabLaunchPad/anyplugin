@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { assertSafeRelative } from "../fs/safe-path.js";
+import { INTENSITY_MODES } from "../tiers/intensity.js";
 
 /** Canonical hook events — the platform-neutral names every adapter maps FROM. */
 export const CanonicalEvent = z.enum([
@@ -66,6 +67,19 @@ export const AnyPluginManifestSchema = z.object({
   mcp: z.object({ servers: z.record(z.string(), McpServerSchema) }).default({ servers: {} }),
   /** OKF v0.2 knowledge bundle directory shipped inside the plugin. */
   knowledge: z.string().optional(),
+  /** Behavioral decision ladder injected into instructions ("stop at the first rung that holds"). */
+  ladder: z.array(z.string().min(1)).min(1).max(12).optional(),
+  /** Named intensity modes the plugin distinguishes at runtime (ponytail pattern). */
+  intensity: z
+    .object({
+      conservative: z.string().optional(),
+      balanced: z.string().optional(),
+      aggressive: z.string().optional(),
+    })
+    .refine((v) => INTENSITY_MODES.some((mode) => v[mode] !== undefined), {
+      message: "intensity requires at least one mode description (conservative, balanced, or aggressive)",
+    })
+    .optional(),
   /** Free-form capability gates evaluated against detectEnvironment() by adapters. */
   capabilities: z.record(z.string(), z.unknown()).optional(),
   /** Extra keys are preserved verbatim for adapter-specific needs (like OKF unknown-key preservation). */

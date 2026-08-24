@@ -9,6 +9,9 @@ import {
   executeInstall,
   executeUninstall,
   scaffoldPlugin,
+  installInstructions,
+  uninstallInstructions,
+  installedRoot,
   detectAgent,
   detectInstalledAgents,
   detectEnvironment,
@@ -17,8 +20,9 @@ import {
   regenerateIndexes,
 } from "./index.js";
 import type { AgentId } from "@lablaunchpad/core";
-import { ALL_AGENTS, removeTree } from "@lablaunchpad/core";
+import { ALL_AGENTS, removeTree, pathExists } from "@lablaunchpad/core";
 import { parseCliArgv, type CommandName } from "./strict-args.js";
+import { setIntensityMode, getActivePlugin } from "./state.js";
 
 const HELP = `anyplugin — agent-agnostic plugin development for Claude Code, OpenCode, Codex, Antigravity
 
@@ -30,10 +34,12 @@ commands:
   anyplugin detect                   show detected agent + environment + installed agents
   anyplugin build [--plugin DIR] [--out DIR] [--agents LIST]
                                      emit native bundles per agent (default all four)
-  anyplugin install [--plugin DIR] [--agents LIST] [--home DIR] [--project DIR] [--dry-run]
+  anyplugin install [--plugin DIR] [--agents LIST] [--home DIR] [--project DIR] [--dry-run] [--tier native|instruction]
                                      install emitted bundles into agent locations
-  anyplugin uninstall [--plugin DIR] [--agents LIST] [--home DIR] [--project DIR] [--dry-run]
+  anyplugin uninstall [--plugin DIR] [--agents LIST] [--home DIR] [--project DIR] [--dry-run] [--tier native|instruction]
                                        reverse an install
+  anyplugin intensity --mode conservative|balanced|aggressive [--plugin DIR] [--agents LIST] [--home DIR] [--project DIR]
+                                     switch the active intensity mode for every currently-installed root of this plugin
   anyplugin okf-validate [DIR]       validate an OKF v0.2 bundle (default ./knowledge)
   anyplugin okf-reindex [DIR]        regenerate bundle index.md files
   anyplugin help                     this help
@@ -45,6 +51,9 @@ options:
   --name NAME      plugin name for init (kebab-case)
   --dir DIR        target directory for init (default: ./NAME)
   --runner PATH    hook runner script copied into bundles (default: bundled runner)
+  --tier native|instruction  install/uninstall as a native bundle (default) or as a
+                   marked AGENTS.md section for agents with no plugin API (ponytail pattern)
+  --mode MODE      intensity command: conservative|balanced|aggressive
   --mcp-runtime DIR  MCP server runtime dir copied into bundles
   --json           machine-readable JSON output for every command
 `;
@@ -60,6 +69,8 @@ interface ParsedFlags {
   "mcp-runtime"?: string;
   name?: string;
   dir?: string;
+  mode?: string;
+  tier?: string;
   json?: boolean;
 }
 
@@ -91,6 +102,42 @@ async function main(): Promise<void> {
       console.log(`scaffolded ${result.name} → ${result.dir} (${result.files.length} files)`);
       for (const f of result.files) console.log(`  ${f}`);
       console.log(`\nnext: implement hooks/, then run anyplugin build --plugin ${result.dir}`);
+    }
+    return;
+  }
+
+  if (command === "intensity") {
+    const pluginRoot = requireDir(resolve(values.plugin ?? "."), "--plugin");
+    const manifest = await loadPluginSafe(pluginRoot);
+    const mode = values.mode as "conservative" | "balanced" | "aggressive";
+    // The runtime (runner.js) reads .anyplugin-mode from the INSTALLED root
+    // at hook-execution time, not the source --plugin dir a developer points
+    // this at — so the flag has to be written into each agent's actual
+    // installed root for it to have any effect, not just the source tree.
+    const codexHome = process.env["CODEX_HOME"] ?? join(home, ".codex");
+    const ctx = { home, projectDir, codexHome };
+    const targets = agents ?? [...ALL_AGENTS];
+    const written: { agent: AgentId; root: string; file: string }[] = [];
+    for (const agent of targets) {
+      const root = installedRoot(agent, { ...ctx, pluginName: manifest.name });
+      if (!(await pathExists(root))) continue;
+      const file = await setIntensityMode(root, mode, { pluginId: manifest.name, version: manifest.version });
+      written.push({ agent, root, file });
+    }
+    if (written.length === 0) {
+      throw new Error(
+        `"${manifest.name}" is not installed for any of: ${targets.join(", ")} — run "anyplugin install" first, then set intensity`,
+      );
+    }
+    if (values.json) {
+      console.log(JSON.stringify({ command: "intensity", plugin: manifest.name, mode, written: written.map((w) => ({ agent: w.agent, file: w.file })) }, null, 2));
+    } else {
+      console.log(`${manifest.name}: intensity mode → ${mode}`);
+      for (const w of written) {
+        console.log(`  ${w.agent}: ${w.file}`);
+        const current = await getActivePlugin(w.root);
+        if (current) console.log(`    active: ${current.pluginId} v${current.version} mode=${current.mode}`);
+      }
     }
     return;
   }
@@ -135,6 +182,31 @@ async function main(): Promise<void> {
 
   if (command === "build" || command === "install" || command === "uninstall") {
     const pluginRoot = requireDir(resolve(values.plugin ?? "."), "--plugin");
+
+    // Instruction-tier installs bypass bundle emission entirely: the plugin's
+    // contract is injected as a marked AGENTS.md section (ponytail pattern).
+    if (values.tier === "instruction" && (command === "install" || command === "uninstall")) {
+      const dryRun = values["dry-run"] === true;
+      if (command === "install") {
+        const result = await installInstructions({ pluginRoot, projectDir, dryRun });
+        if (values.json) {
+          console.log(JSON.stringify({ command: "install", tier: "instruction", plugin: pluginRoot, dryRun, ...result }, null, 2));
+          return;
+        }
+        console.log(`\n[instruction] ${dryRun ? "dry-run install" : "install"}\n  ${dryRun ? "would append" : "appended"} → ${result.agentsMd}`);
+        for (const n of result.notes) console.log(`  note: ${n}`);
+      } else {
+        const touched = await uninstallInstructions({ pluginRoot, projectDir, dryRun });
+        if (values.json) {
+          console.log(JSON.stringify({ command: "uninstall", tier: "instruction", plugin: pluginRoot, dryRun, touched }, null, 2));
+          return;
+        }
+        console.log(`\n[instruction] ${dryRun ? "dry-run uninstall" : "uninstalled"}`);
+        for (const t of touched) console.log(`  ${dryRun ? "" : "cleaned "}${t}`);
+      }
+      return;
+    }
+
     const manifest = await loadPluginSafe(pluginRoot);
     const dryRun = values["dry-run"] === true;
     let outRoot = resolve(values.out ?? join(pluginRoot, ".anyplugin-build"));
