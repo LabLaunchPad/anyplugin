@@ -50,8 +50,30 @@ export const DEFAULT_VARIANTS: Record<AgentId, string> = {
  * Enumerated rather than free text so a record cannot be upgraded by writing
  * more confident prose.
  */
-export const AUDIT_METHODS = ["DOCUMENTED", "OBSERVED", "DERIVED", "NOT_AUDITED"] as const;
+export const AUDIT_METHODS = ["NOT_AUDITED", "DERIVED", "DOCUMENTED", "OBSERVED", "VERIFIED"] as const;
 export type AuditMethod = (typeof AUDIT_METHODS)[number];
+
+/**
+ * Confidence order, weakest first. The array order IS the ladder.
+ *
+ *   NOT_AUDITED  nothing was established
+ *   DERIVED      follows from documented facts — an inference, so weaker than
+ *                the document it rests on
+ *   DOCUMENTED   the source explicitly says it
+ *   OBSERVED     we executed it and saw the behaviour
+ *   VERIFIED     it survived an independent verification procedure
+ *
+ * DERIVED sits BELOW DOCUMENTED deliberately: "the changelog says v1 hooks were
+ * removed" is a documented fact, while "therefore no replacement exists" is an
+ * inference from it and can be wrong while the document stays true.
+ *
+ * OBSERVED and VERIFIED are distinct for the same reason a passing test is not
+ * proof: executing something once shows it happened, not that a procedure
+ * capable of falsifying it was run against it.
+ */
+export function auditStrength(method: AuditMethod): number {
+  return AUDIT_METHODS.indexOf(method);
+}
 
 export interface CapabilityProvenance {
   /**

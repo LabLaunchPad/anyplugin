@@ -36,12 +36,34 @@ Before this existed, "audited" covered both *someone read a doc* and *someone ra
 agent*. Those are different epistemic acts producing different confidence, and collapsing them is how a
 documentation claim silently acquires the authority of an execution result.
 
+Weakest first — the array order in `AUDIT_METHODS` is the ladder.
+
 | value | means | does NOT mean |
 |---|---|---|
-| `DOCUMENTED` | A vendor doc or published API reference states this | that anyone ran it |
-| `OBSERVED` | The behaviour was executed against the real agent and seen | that it holds for other versions |
-| `DERIVED` | Inferred from an adjacent verified fact (e.g. a documented protocol shared with another agent) | independent confirmation |
-| `NOT_AUDITED` | No audit was performed; the row exists for other capabilities | anything about the unaudited capability |
+| `NOT_AUDITED` | No audit was performed; the row exists for other capabilities | anything at all about this capability |
+| `DERIVED` | Follows as an inference from documented facts | that anyone stated it, or that the inference holds |
+| `DOCUMENTED` | A vendor doc or published API reference explicitly states it | that anyone ran it |
+| `OBSERVED` | The behaviour was executed against the real agent and seen | that a procedure capable of falsifying it was run |
+| `VERIFIED` | It survived an independent verification procedure | that it holds for other versions or environments |
+
+**`DERIVED` sits below `DOCUMENTED` deliberately.** "The changelog says v1 hooks were removed" is a
+documented fact; "therefore no replacement exists" is an inference from it, and the inference can be
+wrong while the document stays true. An inference is never stronger than its weakest premise.
+
+**`OBSERVED` and `VERIFIED` are distinct for the same reason a passing test is not proof.** Executing
+something once shows that it happened. It does not show that a procedure capable of falsifying it was
+run against it — which is the whole content of `ANTI_VACUITY_ANALYSIS`.
+
+The worked example this ladder came from:
+
+```
+"v1 hooks were removed"                    → DOCUMENTED
+"therefore v2 has no replacement"          → DERIVED
+"v2 actually exposes no replacement"       → OBSERVED
+"an independent capability test confirms"  → VERIFIED
+```
+
+Only the first two are claimed anywhere in this repository.
 
 **Today every row is `DOCUMENTED` or weaker.** No capability verdict in this repository rests on having
 executed anything against a real third-party agent. That is worth stating plainly: the matrix is a

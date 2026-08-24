@@ -17,6 +17,44 @@ get a pass/fail from. Advice belongs in prose; this file is for steps.
 
 ---
 
+## THE GOVERNING PRINCIPLE — evidence-producing machinery is itself an object of verification
+
+> **Every mechanism that produces, transforms, measures, validates, or promotes evidence must itself
+> produce evidence of its discriminating power.**
+
+Verification usually points downward — procedure verifies test verifies system. F16 through F19 showed
+the upper layers failing while the layer below them was perfectly correct:
+
+```
+SYSTEM → PROCEDURE → HARNESS → MEASUREMENT → EVIDENCE → DECISION
+```
+
+Each layer can be independently defective, and a defect at any of them produces **confident wrongness
+rather than visible failure**. The instrument returns 0 for real work (F19). The harness cannot observe
+the property it is cited for (F16, F18). The procedure covers the field's definition but not the
+evidence drawn from it (the gap F19 came through). In every case the test passed, the number was
+present, and the claim looked established.
+
+So assurance must run **upward as well**, and every layer answers one question:
+
+> **What false reality could this layer let me believe?**
+
+That is `ANTI_VACUITY_ANALYSIS` applied recursively — not only to `tests/`, but to harnesses,
+measurements, procedures, evidence transformations, provenance records, and promotion rules.
+
+**Why this matters beyond correctness.** The goal is converting experience into verified reusable state
+so future work needs less reasoning. That only pays off if the chain
+`experience → observation → evidence → verification → promotion` is trustworthy. If it is not, the
+system is not amortizing intelligence — **it is amortizing mistakes**, and doing so with increasing
+confidence and decreasing scrutiny. A wrong belief that has been promoted to executable state is worse
+than one that has to be re-derived, because nothing will re-examine it.
+
+Both findings that produced these protocols came from applying an existing procedure **to the thing that
+produced the evidence** rather than to the code. That is the generalized method: run the protocols on
+the procedures themselves.
+
+---
+
 ## PROCEDURE: CROSS_PLATFORM_CANONICALIZATION_CHECK
 
 **Trigger.** Any change to a cryptographic identity, a hash-bearing record, or a generated artifact whose
