@@ -11,3 +11,30 @@ research/reports/raw/
 .zcode/
 .prism-build/
 .anyplugin-build/
+
+# ── Worker Runtime state boundary ───────────────────────────────────────────
+#
+# Classification of everything the runtime touches. Only RUNTIME STATE is
+# ignored; the directory is NOT ignored wholesale, because most of what lives
+# under packages/worker-runtime/ must stay tracked.
+#
+#   SOURCE               packages/worker-runtime/src/**        TRACKED
+#   CONTRACT             packages/worker-runtime/src/contracts TRACKED
+#   GENERATED ARTIFACT   packages/worker-runtime/schemas/**    TRACKED — hashes
+#                                                              are recorded in
+#                                                              the M1 report, so
+#                                                              they must be
+#                                                              reviewable in diff
+#   TEST FIXTURE         packages/worker-runtime/src/*.test.ts TRACKED
+#   BUILD OUTPUT         packages/worker-runtime/dist/         ignored via dist/
+#   RUNTIME STATE        .worker-runtime/**                    IGNORED (below)
+#   AUTHORITATIVE LEDGER .worker-runtime/{evidence,decisions,…} IGNORED here
+#
+# On the ledger: it is authoritative, not disposable. It is ignored in THIS
+# repository because anything the kernel writes here is our own transient
+# development state. A downstream project decides for itself whether to commit
+# its ledger — that is their call, and this rule does not travel to them.
+#
+# Anchored to the repository root only: a nested .worker-runtime/ inside a test
+# fixture would be a deliberate fixture and must not be silently ignored.
+/.worker-runtime/

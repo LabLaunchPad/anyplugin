@@ -2,6 +2,28 @@
   "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/verification-result.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "FAIL",
+              "BLOCKED"
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "reason"
+        ]
+      }
+    }
+  ],
   "description": "Worker Runtime frozen contract: VerificationResult (contract version 1.0.0).",
   "properties": {
     "at": {
@@ -57,5 +79,7 @@
     "at"
   ],
   "title": "VerificationResult",
-  "type": "object"
+  "type": "object",
+  "x-semanticAuthority": "@lablaunchpad/worker-runtime contracts (zod)",
+  "x-validationMode": "STRUCTURAL_SCHEMA_VALID"
 }

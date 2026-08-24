@@ -2,6 +2,18 @@
   "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/certificate.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "allOf": [
+    {
+      "properties": {
+        "finalPhase": {
+          "enum": [
+            "COMPLETED",
+            "FAILED"
+          ]
+        }
+      }
+    }
+  ],
   "description": "Worker Runtime frozen contract: Certificate (contract version 1.0.0).",
   "properties": {
     "contractHash": {
@@ -106,5 +118,7 @@
     "provenance"
   ],
   "title": "Certificate",
-  "type": "object"
+  "type": "object",
+  "x-semanticAuthority": "@lablaunchpad/worker-runtime contracts (zod)",
+  "x-validationMode": "STRUCTURAL_SCHEMA_VALID"
 }

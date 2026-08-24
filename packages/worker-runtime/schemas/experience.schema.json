@@ -2,6 +2,44 @@
   "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/experience.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "failureClass"
+        ]
+      },
+      "then": {
+        "properties": {
+          "outcome": {
+            "const": "FAILURE"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "rung": {
+            "const": "VERIFIED_KNOWLEDGE"
+          }
+        },
+        "required": [
+          "rung"
+        ]
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "minItems": 1
+          }
+        },
+        "required": [
+          "evidence"
+        ]
+      }
+    }
+  ],
   "description": "Worker Runtime frozen contract: Experience (contract version 1.0.0).",
   "properties": {
     "action": {
@@ -115,5 +153,7 @@
     "provenance"
   ],
   "title": "Experience",
-  "type": "object"
+  "type": "object",
+  "x-semanticAuthority": "@lablaunchpad/worker-runtime contracts (zod)",
+  "x-validationMode": "STRUCTURAL_SCHEMA_VALID"
 }

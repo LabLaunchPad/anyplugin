@@ -63,5 +63,7 @@
     "subject"
   ],
   "title": "Event",
-  "type": "object"
+  "type": "object",
+  "x-semanticAuthority": "@lablaunchpad/worker-runtime contracts (zod)",
+  "x-validationMode": "STRUCTURAL_SCHEMA_VALID"
 }

@@ -2,6 +2,56 @@
   "$id": "https://lablaunchpad.dev/worker-runtime/1.0.0/evidence.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "allOf": [
+    {
+      "else": {
+        "not": {
+          "required": [
+            "supersededBy"
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "validity": {
+            "const": "SUPERSEDED"
+          }
+        },
+        "required": [
+          "validity"
+        ]
+      },
+      "then": {
+        "required": [
+          "supersededBy"
+        ]
+      }
+    },
+    {
+      "else": {
+        "not": {
+          "required": [
+            "invalidationReason"
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "validity": {
+            "const": "INVALIDATED"
+          }
+        },
+        "required": [
+          "validity"
+        ]
+      },
+      "then": {
+        "required": [
+          "invalidationReason"
+        ]
+      }
+    }
+  ],
   "description": "Worker Runtime frozen contract: Evidence (contract version 1.0.0).",
   "properties": {
     "authority": {
@@ -88,5 +138,7 @@
     "validity"
   ],
   "title": "Evidence",
-  "type": "object"
+  "type": "object",
+  "x-semanticAuthority": "@lablaunchpad/worker-runtime contracts (zod)",
+  "x-validationMode": "STRUCTURAL_SCHEMA_VALID"
 }
