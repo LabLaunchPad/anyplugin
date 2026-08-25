@@ -74,7 +74,7 @@ export async function emitAntigravity(plugin: ParsedPlugin, opts: EmitOptions): 
         hooks: list.map((h) => ({
           type: "command",
           command: `node "${PLUGIN_ROOT_TOKEN}/hooks/${opts.runnerRelPath}" ${h.id}`,
-          timeout: Math.min(h.timeoutSec ?? 30, 30),
+          timeout: Math.min(h.timeoutSec ?? plugin.runtime?.hookTimeoutSec ?? 30, 30),
         })),
       }));
     }

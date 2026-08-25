@@ -13,14 +13,44 @@ import { MEASURABLE_FIELDS, TELEMETRY_INVENTORY, UNOBSERVABLE_FIELDS, measure } 
 
 describe("what the kernel can actually measure", () => {
   it("wall clock and CPU move for work that really happened", () => {
+    // Burn past the platform's CPU-ACCOUNTING RESOLUTION, not just past zero.
+    // Windows accounts process CPU via GetProcessTimes at roughly the 15.6ms
+    // timer tick, so a short loop can finish inside one tick and report 0
+    // microseconds of CPU for work that definitely happened (F19). The unit is
+    // microseconds everywhere; the resolution is not.
+    //
+    // Looping on measured wall clock rather than a fixed iteration count keeps
+    // this independent of machine speed — a faster runner does fewer
+    // iterations, not a shorter burn (F17's lesson applied to a measurement).
     const { result, sample } = measure(() => {
+      const started = process.hrtime.bigint();
       let x = 0;
-      for (let i = 0; i < 3e6; i += 1) x += Math.sqrt(i);
+      let i = 0;
+      while (Number(process.hrtime.bigint() - started) / 1e6 < 120) {
+        for (let j = 0; j < 2e5; j += 1) x += Math.sqrt(i + j);
+        i += 1;
+      }
       return x;
     });
     expect(result).toBeGreaterThan(0);
-    expect(sample.wallClockMs).toBeGreaterThan(0);
-    expect(sample.cpuUserMicros + sample.cpuSystemMicros).toBeGreaterThan(0);
+    expect(sample.wallClockMs).toBeGreaterThan(100);
+    expect(
+      sample.cpuUserMicros + sample.cpuSystemMicros,
+      "120ms of busy work must register on any accounting resolution we support",
+    ).toBeGreaterThan(0);
+  });
+
+  it("CPU counters are non-negative and never run backwards", () => {
+    // The universally-true properties, asserted separately from the
+    // resolution-dependent one above so a resolution change cannot mask a
+    // genuinely broken counter.
+    const a = measure(() => 1).sample;
+    const b = measure(() => 1).sample;
+    for (const s of [a, b]) {
+      expect(s.cpuUserMicros).toBeGreaterThanOrEqual(0);
+      expect(s.cpuSystemMicros).toBeGreaterThanOrEqual(0);
+      expect(s.wallClockMs).toBeGreaterThanOrEqual(0);
+    }
   });
 
   it("reports no field it cannot observe — absent, not zero", () => {

@@ -1,6 +1,28 @@
 # CURRENT_STATE.md
 
-Repository ground truth, established by reconnaissance. **No code was modified to produce this.**
+> ## ⚠ THIS IS A PINNED HISTORICAL SNAPSHOT, NOT CURRENT STATE
+>
+> Everything below describes the repository **as of commit `77729f8`** and has not been regenerated
+> since. It is accurate for that commit and **misleading for any later one** — it predates Gate 3,
+> Gate 4, U1a, F9, F17–F20, M3 (Evidence ledger engine, which it still lists as `DESIGNED`), and M7.
+>
+> **Do not use this file to establish current state, and do not cite it as authority for one.** For
+> that, use the artifacts that cannot silently go stale:
+>
+> | question | authority |
+> |---|---|
+> | What is closed, and what did it cost? | `ENGINEERING_LEDGER.md` — append-only, entries are dated by commit |
+> | What procedures govern execution? | `docs/ai-native/reusable-procedures.md` |
+> | What is the code actually doing? | The source, and `pnpm test` |
+> | What is verified right now? | `git rev-parse HEAD` plus CI at that exact SHA |
+>
+> **Why this file is not simply updated:** a "current state" document is stale the moment the next
+> commit lands, so regenerating it converts a permanent defect into a recurring one. It is kept as a
+> dated snapshot — useful as history, never as authority. See `ENGINEERING_LEDGER.md`'s entry on
+> governance staleness for the class this belongs to.
+
+Repository ground truth **as of `77729f8`**, established by reconnaissance. **No code was modified to
+produce this.**
 
 - **Commit**: `77729f8` on `lablp/relaxed-johnson-vq396s` · working tree clean
 - **Base**: `6403f94` on `main` (M1 kernel, merged)
@@ -82,7 +104,7 @@ Direct search across all `.ts/.mjs/.js/.json/.md`, excluding `node_modules` and 
 |---|---|---|
 | Durable event log | `VERIFIED_TESTED` | `log/event-log.ts` — single-writer framed append (Gate 3) |
 | Production write mechanism | `VERIFIED_TESTED` | framed append chosen from measurement; durability still `UNKNOWN` (U1) |
-| Replay engine (governed state) | `VERIFIED_TESTED` | `log/replay.ts` — byte classification, gap/duplicate detection, deterministic |
+| Replay engine (governed state) | `VERIFIED_TESTED` | `log/replay.ts` — byte classification, gap/duplicate detection; determinism proven **across a process boundary** (Gate 4), incl. varying cwd/TZ/locale. Not durability — see U1 |
 | Worker state store | `VERIFIED_TESTED` | `log/worker-state.ts` — folded from events via `LEGAL_TRANSITIONS` |
 | Evidence ledger engine | `DESIGNED` | `EvidenceSchema` exists; no reader, writer, or store |
 | Decision engine | `DESIGNED` | `DecisionSchema` exists; no engine |

@@ -67,7 +67,7 @@ export async function emitClaude(plugin: ParsedPlugin, opts: EmitOptions): Promi
         hooks: list.map((h) => ({
           type: "command",
           command: `node "\${CLAUDE_PLUGIN_ROOT}/hooks/${opts.runnerRelPath}" ${h.id}`,
-          ...(h.timeoutSec ? { timeout: h.timeoutSec } : {}),
+          ...(h.timeoutSec ?? plugin.runtime?.hookTimeoutSec ? { timeout: h.timeoutSec ?? plugin.runtime?.hookTimeoutSec } : {}),
         })),
       }));
     }

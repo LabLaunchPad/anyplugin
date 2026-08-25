@@ -4,8 +4,9 @@
 external corpus contains, what of it is relevant, and what evidence each mechanism would need before
 admission. It is **not** authoritative over anything.
 [`ENGINEERING_LEDGER.md`](../../ENGINEERING_LEDGER.md) owns findings and taxonomy,
-[`CURRENT_STATE.md`](../../CURRENT_STATE.md) owns current system state, and the contracts, canonicalization
-rules and CI results own behavioural truth.
+and the contracts, canonicalization rules and CI results own behavioural truth. (An earlier version of
+this line named `CURRENT_STATE.md` as owning current system state; it is a pinned snapshot of `77729f8`
+and owns only that commit's history.)
 
 | | |
 |---|---|

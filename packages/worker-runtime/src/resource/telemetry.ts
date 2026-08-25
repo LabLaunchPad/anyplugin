@@ -67,13 +67,13 @@ export const TELEMETRY_INVENTORY: readonly TelemetryCapability[] = [
     field: "cpuUserMicros",
     knownBy: "MEASURED",
     source: "process.cpuUsage().user",
-    note: "microseconds on every supported platform; verified by test",
+    note: "microseconds on every supported platform, but RESOLUTION is platform-dependent — Windows accounts process CPU via GetProcessTimes at roughly the 15.6ms timer tick, so short work reports 0. The unit is not the resolution (F19)",
   },
   {
     field: "cpuSystemMicros",
     knownBy: "MEASURED",
     source: "process.cpuUsage().system",
-    note: "microseconds on every supported platform; verified by test",
+    note: "as cpuUserMicros: microseconds everywhere, resolution platform-dependent; a measurement shorter than the accounting tick reports 0 (F19)",
   },
   {
     field: "storageBytes",

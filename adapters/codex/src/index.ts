@@ -85,7 +85,7 @@ export async function emitCodex(plugin: ParsedPlugin, opts: EmitOptions): Promis
           type: "command",
           // Codex sets PLUGIN_ROOT + CLAUDE_PLUGIN_ROOT for plugin hooks.
           command: `node "\${CLAUDE_PLUGIN_ROOT}/hooks/${opts.runnerRelPath}" ${h.id}`,
-          ...(h.timeoutSec ? { timeout: h.timeoutSec } : {}),
+          ...(h.timeoutSec ?? plugin.runtime?.hookTimeoutSec ? { timeout: h.timeoutSec ?? plugin.runtime?.hookTimeoutSec } : {}),
         })),
       }));
     }

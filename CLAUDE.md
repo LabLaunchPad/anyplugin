@@ -8,6 +8,8 @@ AnyPlugin compiles one canonical plugin manifest (`anyplugin.plugin.yaml`) into 
 
 **`AGENTS.md` is the primary reference for this repo** — repo map, source-of-truth table, hook runtime protocol, and the recipe for adding a new adapter. Read it before making non-trivial changes; this file only adds pointers and things not already there.
 
+**`packages/worker-runtime/` is a second, separately-governed subsystem** (the "Worker Runtime" kernel) — none of the rules below apply to it. Its authorities are `ENGINEERING_LEDGER.md` (defect/milestone history) and `docs/ai-native/reusable-procedures.md` (the decision ladder, evidence rules, and reusable procedures). Read those, not this file, before working there.
+
 ## Commands
 
 ```bash
@@ -46,7 +48,7 @@ anyplugin.plugin.yaml ──▶ adapters ──▶ 4 native bundles ──▶ in
 
 - **SafePath**: any path derived from untrusted input (hook ids, manifest paths, MCP bundle args, install-plan relative paths) goes through `resolveAuthorizedPath` — never a second, ad hoc validation path. Hook ids additionally must match `^[a-zA-Z0-9_-]+$`.
 - **Installer**: destination paths come ONLY from the `TEMPLATES` whitelist plus validated segments — never token substitution into paths. A new install destination requires a new TEMPLATES entry AND a test proving uninstall fully reverses it (including the conflict-abort path).
-- **Runtime failures are always non-blocking**: a plugin hook or stdin failure must exit 0 with a stderr note — it must never break the host agent.
+- **Runtime failures are non-blocking by default**: a plugin hook or stdin failure must exit 0 with a stderr note — it must never break the host agent, unless the manifest explicitly opts in via `runtime.failurePolicy: blocking` (`CORE-INVARIANTS-V2.md` §1.3.3), for plugins whose contract is fail-closed (guards, policy checks). Exit 0 never means "the handler succeeded" either way — that's observable only on the mandatory stderr diagnostic.
 - Full detail: `CORE-INVARIANTS-V2.md` (design spec) and `ENGINEERING_LEDGER.md` (defect-eradication history, VERIFY → FIX → ERADICATE THE CLASS → TEST → UPDATE LEDGER).
 
 ## Conventions
