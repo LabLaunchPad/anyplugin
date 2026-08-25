@@ -67,7 +67,7 @@ file's conventions to it by assumption.
 - Handler resolution order: `./handlers/<id>.mjs` next to the runner → `../plugin/hooks/<id>.mjs` → `$PLUGIN_ROOT/hooks/<id>.mjs`. Handler files MUST be named `<hook-id>.mjs` and export `async function run(payload)`.
 - Handler returns `HookResult`: `{ block?, reason?, additionalContext?, permissionDecision?, systemMessage?, raw? }`.
 - Output translation: `additionalContext` → `hookSpecificOutput.additionalContext` (Claude/Codex/OpenCode) or `injectSteps` (Antigravity). `block` → `decision: "block"` + **exit code 2** (Antigravity: `decision: "deny"`, exit 0 semantics per its protocol).
-- Handler or stdin failures are ALWAYS non-blocking (exit 0, stderr note) — a plugin must never break the host agent.
+- Handler or stdin failures are non-blocking by default (exit 0, stderr note) — a plugin must never break the host agent, unless it declares `runtime.failurePolicy: blocking` (§1.3.3), which flips a handler throw / malformed result to exit 2 with `reason: "hook failed"`. Either way, exit 0 never means "the handler succeeded" — check the stderr diagnostic, not the exit code, for that.
 - Host detection: `ANYPLUGIN_HOST` self-marker → `CLAUDECODE` → `CODEX_SANDBOX/CODEX_CI` → `ANTIGRAVITY_AGENT`. Plugin root: `ANYPLUGIN_PLUGIN_ROOT` → `CLAUDE_PLUGIN_ROOT` → `PLUGIN_ROOT` → runner's parent.
 
 ## Installer safety rules (do not weaken)

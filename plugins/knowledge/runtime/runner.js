@@ -72,6 +72,17 @@ try {
   /* no mode set — handlers treat null as the default/balanced behavior */
 }
 
+// Runtime failure policy (CORE-INVARIANTS-V2.md §1.3): a sibling flag file,
+// same tolerant-read discipline as .anyplugin-mode — absent/unreadable/
+// invalid always resolves to the safe "non-blocking" default, never throws.
+let failurePolicy = "non-blocking";
+try {
+  const policy = JSON.parse(readFileSync(join(pluginRoot, ".anyplugin-runtime.json"), "utf8"));
+  if (policy && policy.failurePolicy === "blocking") failurePolicy = "blocking";
+} catch {
+  /* no policy file — non-blocking is the only safe default */
+}
+
 // --- execute handler -------------------------------------------------------
 const payload = {
   platform,
@@ -120,12 +131,23 @@ try {
   const fn = mod.run ?? mod.default?.run ?? mod.default;
   if (typeof fn !== "function") {
     process.stderr.write(`anyplugin runner: handler ${hookId} exports no run()`);
-    process.exit(0);
+    exitOnHandlerFailure(failurePolicy);
   }
   result = (await fn(payload)) ?? {};
 } catch (err) {
   process.stderr.write(`anyplugin runner ${hookId} failed: ${err && err.message ? err.message : err}`);
-  process.exit(0); // handler failure must not break the host agent
+  exitOnHandlerFailure(failurePolicy); // non-blocking: must not break the host agent; blocking: an explicit opt-in fail-closed
+}
+
+// Exit 0 means "host may proceed" — never "handler succeeded" (§1.3, invariant
+// 1); success/failure is observable only on the stderr diagnostic above,
+// which every call site here has already written before calling this.
+function exitOnHandlerFailure(policy) {
+  if (policy === "blocking") {
+    process.stdout.write(JSON.stringify({ decision: "block", reason: "hook failed" }));
+    process.exit(2);
+  }
+  process.exit(0);
 }
 
 // --- translate to platform output -------------------------------------------

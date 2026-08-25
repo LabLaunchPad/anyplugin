@@ -82,6 +82,20 @@ export const AnyPluginManifestSchema = z.object({
     .optional(),
   /** Free-form capability gates evaluated against detectEnvironment() by adapters. */
   capabilities: z.record(z.string(), z.unknown()).optional(),
+  /**
+   * Layer 1 runtime policy (CORE-INVARIANTS-V2.md §1.3). `failurePolicy` default
+   * is `non-blocking`: a crashed/malformed hook result must never break the host
+   * agent. `blocking` is an explicit opt-in for plugins whose contract is fail-
+   * closed (guards, policy checks) — a handler failure then becomes exit 2 with
+   * reason "hook failed", never a silent exit 0. `hookTimeoutSec` is a manifest-
+   * level default that falls back into each hook's own `timeoutSec` where unset.
+   */
+  runtime: z
+    .object({
+      failurePolicy: z.enum(["non-blocking", "blocking"]).default("non-blocking"),
+      hookTimeoutSec: z.number().int().positive().max(600).optional(),
+    })
+    .optional(),
   /** Extra keys are preserved verbatim for adapter-specific needs (like OKF unknown-key preservation). */
 });
 export type AnyPluginManifest = z.infer<typeof AnyPluginManifestSchema>;

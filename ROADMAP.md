@@ -263,6 +263,8 @@ So `OBSERVE / WARN / REQUIRE / BLOCK` is one of two different things, and which 
 
 **M7a owns reconciling all three documents** and must state which reading it implements. This roadmap does not pre-judge it.
 
+**Resolved.** Reading 1's core switch — `CORE-INVARIANTS-V2.md` §1.3.3's `runtime.failurePolicy: blocking`, literally: a handler throw or malformed result becomes exit 2 with `reason: "hook failed"`, opt-in, default stays `non-blocking`. `CLAUDE.md`/`AGENTS.md` amended to state the default with its exception rather than an absolute. **Not resolved and explicitly deferred**: whether this generalizes into a four-mode `OBSERVE`/`WARN`/`REQUIRE`/`BLOCK` ladder, and whether `BLOCK` there means the same thing as this switch or a distinct mechanism over verification outcomes (reading 2) — that remains open, unimplemented, and undecided.
+
 ### Existing machinery to reuse, not rebuild
 
 - `cli/src/journal.ts` — `preInstallHash` / `postInstallHash` / `classifyJournalEntry` is *already* the Certificate and Checkpoint model. Reuse the pattern; do not reinvent hashing and tamper detection.

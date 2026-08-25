@@ -119,6 +119,25 @@
       "type": "object",
       "description": "Free-form capability gates evaluated against detectEnvironment() by adapters.",
       "additionalProperties": true
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "failurePolicy": {
+          "type": "string",
+          "enum": ["non-blocking", "blocking"],
+          "default": "non-blocking",
+          "description": "non-blocking (default): a crashed/malformed hook result must never break the host agent. blocking: an explicit opt-in for fail-closed plugins (guards, policy checks) — a handler failure becomes exit 2 with reason \"hook failed\", never a silent exit 0."
+        },
+        "hookTimeoutSec": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600,
+          "description": "Manifest-level default timeout, used as a fallback where a hook does not set its own timeoutSec."
+        }
+      },
+      "description": "Layer 1 runtime policy (CORE-INVARIANTS-V2.md §1.3)."
     }
   }
 }

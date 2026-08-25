@@ -38,6 +38,7 @@ import {
   classifyJournalEntry,
   applyJournalEntry,
 } from "./journal.js";
+import { setRuntimePolicy, type RuntimePolicy } from "./runtime-policy.js";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -129,6 +130,8 @@ export interface InstallOptions {
   /** Plugin version (recorded in the install journal). */
   version?: string;
   dryRun?: boolean;
+  /** Manifest's `runtime` block (CORE-INVARIANTS-V2.md §1.3); absent = non-blocking default. */
+  runtime?: Partial<RuntimePolicy>;
 }
 
 export interface ScaffoldResult {
@@ -426,6 +429,12 @@ export async function executeInstall(
       files: journalFiles,
     });
     notes.push(`state journal: ${journalPath}`);
+    // Runtime state, same class as .anyplugin-mode — not journal-tracked
+    // (reversibility is owned by the journal above; this is what runner.js
+    // reads at hook-execution time, written fresh on every install).
+    await setRuntimePolicy(root, opts.runtime);
+  } else if (opts.runtime?.failurePolicy === "blocking") {
+    notes.push(`would set runtime.failurePolicy=blocking at ${root}`);
   }
 
   if (agent === "claude-code") {
@@ -621,9 +630,9 @@ function removeKeys(target: Record<string, unknown>, patch: Record<string, unkno
 }
 
 /** Validated plugin manifest access for the CLI: root must exist, be a directory, contain no traversal. */
-export async function loadPluginSafe(pluginRoot: string): Promise<{ name: string; version: string }> {
+export async function loadPluginSafe(pluginRoot: string): Promise<{ name: string; version: string; runtime?: RuntimePolicy }> {
   const manifest = await loadPluginManifest(pluginRoot);
-  return { name: manifest.name, version: manifest.version };
+  return { name: manifest.name, version: manifest.version, runtime: manifest.runtime };
 }
 
 /**

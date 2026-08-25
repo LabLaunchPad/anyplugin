@@ -88,3 +88,44 @@ describe("claude adapter emit", () => {
     expect(mcp).toEqual({ demo: { command: "node", args: ["server.js"] } });
   });
 });
+
+describe("claude adapter — runtime.hookTimeoutSec fallback", () => {
+  it("a hook's own timeoutSec wins when set; runtime.hookTimeoutSec fills in only when it's not", async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "claude-adapter-timeout-"));
+    await mkdir(join(fixtureRoot, "hooks"), { recursive: true });
+    await writeFile(
+      join(fixtureRoot, "anyplugin.plugin.yaml"),
+      `name: demo-plugin
+version: 0.1.0
+description: Demo plugin for timeout fallback test
+runtime:
+  hookTimeoutSec: 45
+hooks:
+  - id: has-own-timeout
+    event: session-start
+    handler: ./hooks/a.mjs
+    timeoutSec: 10
+  - id: no-own-timeout
+    event: session-start
+    handler: ./hooks/b.mjs
+`,
+    );
+    await writeFile(join(fixtureRoot, "hooks", "a.mjs"), "export async function run() { return {}; }\n");
+    await writeFile(join(fixtureRoot, "hooks", "b.mjs"), "export async function run() { return {}; }\n");
+    await writeFile(join(fixtureRoot, "hooks", "runner.js"), "// dummy runner\n");
+    const fixturePlugin = await loadPluginManifest(fixtureRoot);
+    const fixtureOut = join(fixtureRoot, "dist", "claude");
+    await emitClaude(fixturePlugin, {
+      pluginRoot: fixtureRoot,
+      outDir: fixtureOut,
+      runnerRelPath: "runner.js",
+      runnerAbsPath: join(fixtureRoot, "hooks", "runner.js"),
+    });
+    const hooks = JSON.parse(await readFile(join(fixtureOut, "hooks", "hooks.json"), "utf8"));
+    const sessionStart = hooks["hooks"]["SessionStart"][0]["hooks"];
+    const own = sessionStart.find((h: { command: string }) => h.command.includes("has-own-timeout"));
+    const fallback = sessionStart.find((h: { command: string }) => h.command.includes("no-own-timeout"));
+    expect(own.timeout).toBe(10);
+    expect(fallback.timeout).toBe(45);
+  });
+});

@@ -40,4 +40,33 @@ describe("parsePluginManifest", () => {
       }),
     ).toThrow(/manifest/);
   });
+
+  describe("runtime (CORE-INVARIANTS-V2.md §1.3)", () => {
+    const base = { name: "p", version: "0.0.1", description: "d" };
+
+    it("is absent by default — no runtime block means the implicit non-blocking default, not a filled-in object", () => {
+      const m = parsePluginManifest(base);
+      expect(m.runtime).toBeUndefined();
+    });
+
+    it("defaults failurePolicy to non-blocking when the block is present but the field is omitted", () => {
+      const m = parsePluginManifest({ ...base, runtime: {} });
+      expect(m.runtime?.failurePolicy).toBe("non-blocking");
+    });
+
+    it("accepts an explicit blocking opt-in", () => {
+      const m = parsePluginManifest({ ...base, runtime: { failurePolicy: "blocking" } });
+      expect(m.runtime?.failurePolicy).toBe("blocking");
+    });
+
+    it("rejects a failurePolicy value outside the closed set — never silently coerced", () => {
+      expect(() => parsePluginManifest({ ...base, runtime: { failurePolicy: "always" } })).toThrow(/manifest/);
+    });
+
+    it("accepts hookTimeoutSec within [1, 600] and rejects outside it", () => {
+      expect(() => parsePluginManifest({ ...base, runtime: { hookTimeoutSec: 30 } })).not.toThrow();
+      expect(() => parsePluginManifest({ ...base, runtime: { hookTimeoutSec: 0 } })).toThrow(/manifest/);
+      expect(() => parsePluginManifest({ ...base, runtime: { hookTimeoutSec: 601 } })).toThrow(/manifest/);
+    });
+  });
 });

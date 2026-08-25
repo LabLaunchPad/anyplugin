@@ -241,7 +241,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    const opts = { home, projectDir, pluginName: manifest.name, version: manifest.version, dryRun };
+    const opts = { home, projectDir, pluginName: manifest.name, version: manifest.version, dryRun, runtime: manifest.runtime };
     if (values.json) {
       const payload: Record<string, unknown> = {};
       for (const [agentKey, bundle] of Object.entries(bundles)) {
