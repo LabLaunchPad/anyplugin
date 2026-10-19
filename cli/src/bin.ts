@@ -469,9 +469,13 @@ async function loadBackendCatalog(
     }
     return { error: `cannot read backend registry ${registryPath}: ${(err as Error).message}` };
   }
+  // A UTF-8 BOM is what many Windows editors and shells write by default, and
+  // `JSON.parse` rejects it. Stripping it is the difference between "the
+  // registry works" and "the registry mysteriously does not".
+  const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(text);
   } catch (err) {
     return { error: `backend registry ${registryPath} is not valid JSON: ${(err as Error).message}` };
   }

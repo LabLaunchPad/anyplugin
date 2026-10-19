@@ -142,8 +142,29 @@ export interface ParsedCommand<T extends CommandName> {
   positionals: string[];
 }
 
-/** Commands that accept exactly one optional positional (the bundle directory). */
-const POSITIONAL_COMMANDS = new Set<string>(["okf-validate", "okf-reindex"]);
+/**
+ * How many positionals each command accepts.
+ *
+ * Positionals are part of the contract: silently ignoring them (e.g.
+ * `build my-plugin` instead of `build --plugin my-plugin`) is a silent
+ * no-op, and accepting more than a command understands is a silent no-op in
+ * the other direction. Each command declares its own policy here.
+ *
+ * - `none`         the command takes no positional arguments
+ * - `at-most-one`  one optional positional (a bundle directory, a subcommand)
+ * - `any`          the positionals ARE the payload (the backend's own argv)
+ */
+type PositionalPolicy = "none" | "at-most-one" | "any";
+
+const POSITIONAL_POLICY: Record<string, PositionalPolicy> = {
+  "okf-validate": "at-most-one",
+  "okf-reindex": "at-most-one",
+  // `backends list` / `backends probe` — the subcommand is the positional.
+  backends: "at-most-one",
+  // `delegate -- <args>` — everything after `--` is the BACKEND's argv, and
+  // it is the payload rather than a silent no-op.
+  delegate: "any",
+};
 
 export function parseCliArgv<T extends CommandName>(argv: string[]): ParsedCommand<T> {
   const [rawCommand, ...rest] = argv;
@@ -170,11 +191,11 @@ export function parseCliArgv<T extends CommandName>(argv: string[]): ParsedComma
   }
   // Positionals are part of the contract too: silently ignoring them (e.g.
   // `build my-plugin` instead of `build --plugin my-plugin`) is a silent no-op.
-  if (POSITIONAL_COMMANDS.has(command)) {
-    if (parsed.positionals.length > 1) {
-      throw new Error(`invalid arguments for ${String(command)}: expected at most one bundle directory, got ${parsed.positionals.length} (${parsed.positionals.join(" ")})`);
-    }
-  } else if (parsed.positionals.length > 0) {
+  const policy = POSITIONAL_POLICY[command] ?? "none";
+  if (policy === "at-most-one" && parsed.positionals.length > 1) {
+    throw new Error(`invalid arguments for ${String(command)}: expected at most one positional argument, got ${parsed.positionals.length} (${parsed.positionals.join(" ")})`);
+  }
+  if (policy === "none" && parsed.positionals.length > 0) {
     throw new Error(`invalid arguments for ${String(command)}: this command takes no positional arguments (got: ${parsed.positionals.join(" ")}) — use flags, see anyplugin help`);
   }
   return { command, values: checked.data as z.infer<(typeof CommandArgs)[T]>, positionals: parsed.positionals };
