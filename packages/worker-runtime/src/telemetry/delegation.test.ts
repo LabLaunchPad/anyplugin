@@ -319,22 +319,42 @@ describe("attempt classification — never trust the exit code alone", () => {
 });
 
 describe("fallback legality", () => {
-  it("allows a fallback while nothing has been committed", () => {
-    expect(fallbackLegal(false)).toBe(true);
-    expect(canFallback({ exitCode: 1 }, "timeout")).toBe(true);
+  it("allows a fallback only when the effect state is KNOWN to be none", () => {
+    expect(fallbackLegal({ effect: "NONE" })).toBe(true);
+    expect(canFallback({ exitCode: 1 }, "timeout", "NONE")).toBe(true);
+  });
+
+  it("forbids a fallback when the effect state is UNKNOWN", () => {
+    // The backend ran. It may have written a file, sent a request, or charged
+    // a card before it failed, and the wrapper cannot tell which. "Probably
+    // not" is not "no", so the fallback is refused.
+    //
+    // This is the clause D-013 leaves implicit: "no EFFECT in {IN_FLIGHT,
+    // COMMITTED}" silently treats `unknown` as `none`.
+    expect(fallbackLegal({ effect: "UNKNOWN" })).toBe(false);
+    expect(canFallback({ exitCode: 1 }, "timeout", "UNKNOWN")).toBe(false);
+  });
+
+  it("forbids a fallback for an effect that is in flight or committed", () => {
+    expect(fallbackLegal({ effect: "IN_FLIGHT" })).toBe(false);
+    expect(fallbackLegal({ effect: "COMMITTED" })).toBe(false);
   });
 
   it("forbids a fallback once the turn has committed output", () => {
     // A committed turn is terminal: another backend would splice two answers
     // together and re-run whatever the first one already did.
-    expect(fallbackLegal(true)).toBe(false);
-    expect(canFallback({ exitCode: 1, committed: true }, "timeout")).toBe(false);
+    expect(fallbackLegal({ effect: "NONE", committed: true })).toBe(false);
+    expect(canFallback({ exitCode: 1, committed: true }, "timeout", "NONE")).toBe(false);
+  });
+
+  it("forbids a fallback when a commit point exists", () => {
+    expect(fallbackLegal({ effect: "NONE", commitPoint: true })).toBe(false);
   });
 
   it("never falls back for a failure that is not about this backend", () => {
-    expect(canFallback({ exitCode: 1 }, "auth")).toBe(false);
-    expect(canFallback({ exitCode: 1 }, "quota")).toBe(false);
-    expect(canFallback({ exitCode: 1 }, "unknown")).toBe(false);
+    expect(canFallback({ exitCode: 1 }, "auth", "NONE")).toBe(false);
+    expect(canFallback({ exitCode: 1 }, "quota", "NONE")).toBe(false);
+    expect(canFallback({ exitCode: 1 }, "unknown", "NONE")).toBe(false);
   });
 });
 

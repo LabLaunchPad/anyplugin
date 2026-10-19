@@ -121,15 +121,36 @@ event so the log distinguishes "fell back safely" from "failed after commit".
 This is the single most-missed detail in delegation wrappers, and it is
 cheap to get right: it is one boolean.
 
-**What "committed" means today.** The `anyplugin delegate` CLI **buffers** a
-backend's output and returns it when the attempt ends, so nothing is streamed
-to a host mid-attempt and `committed` is always `false` there. The flag is
-real and enforced — `canFallback()` refuses a fallback when it is set — and
-it is what a *streaming* wrapper (one that forwards output as it arrives)
-must set. The CLI's own chain is therefore unbounded by this rule today,
-which is honest: the CLI is a batch tool, not a streaming proxy. **A wrapper
-that streams must set `committed`; the kernel already refuses the fallback.**
-The claim is enforced where it can be, and stated where it cannot.
+**What "committed" means, and what it does not.** The `anyplugin delegate` CLI
+**buffers** a backend's output and returns it when the attempt ends, so
+nothing is streamed to a host mid-attempt and `committed` is `false` there.
+The flag is real and enforced — `canFallback()` refuses a fallback when it is
+set — and it is what a *streaming* wrapper (one that forwards output as it
+arrives) must set.
+
+**But the committed flag was never the whole rule, and treating it as the
+whole rule was a defect.** An attempt can have committed an **effect** — a
+file written, a request sent — while producing no output at all, and
+re-running the task would repeat that effect. The rule is now:
+
+```
+fallbackLegal(attempt) ⇔ no COMMIT_POINT exists
+                        ∧ no output was HANDED TO THE HOST
+                        ∧ the effect state is KNOWN and is NONE
+```
+
+An **unknown** effect state forbids the fallback, because "probably not" is
+not "no" — the same rule the rest of the repository applies to an unknown
+capability, an unknown quantity, and an unclassifiable failure.
+
+**And the second half of the harm is a presentation problem.** Two answers
+reaching the host is not a chain problem: the wrapper now presents exactly
+one attempt's stdout as the answer and every earlier attempt's output as
+stderr diagnostics. The chain rule does not have to refuse fallbacks to
+avoid it.
+
+The full account, including the reproduction and the three defects the
+independent review found in the same file, is `docs/POST-MORTEMS.md` PM-001.
 
 ---
 

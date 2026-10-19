@@ -299,7 +299,7 @@ every one is an *exit gate* on an MVP.
 |---|---|
 | **The SDK has no code.** Every MVP is a plan. | **By design** — D-039 puts it in a separate repository, and the instruction was planning only. `docs/BACKLOG.md` P1-12 |
 | **The graph engine does not exist.** | P1-13. The cheapest high-value item in the plan, and the only one that lands in this repository |
-| **The two kernel contract changes** — `fallbackLegal` and the candidate-lifecycle event kinds | P1-10, P1-11. Both version frozen, certificate-bound contracts, so both need their own migration |
+| **The two kernel contract changes** — `fallbackLegal` and the candidate-lifecycle event kinds | **P1-10 is DONE** (D-052): `fallbackLegal` was never a frozen contract, and the package is unpublished, so the blocker was a *behaviour* change rather than a contract migration. **P1-11 remains**: the candidate-lifecycle event kinds do version a frozen contract, so it needs its own migration |
 | **`ROADMAP.md` is a corrected strategy document, not a live status board** | P2-23 |
 | **Two region bundles cannot ship** — Brazil and US-health, on `UNKNOWN` regulatory claims | P2-25 |
 | **The platform patterns are documented but not scheduled** | P2-24 |

@@ -89,6 +89,23 @@ So the fallback chain is **closed** from the first committed byte. This is the
 single most-missed detail in delegation wrappers, and it is cheap to get
 right: one boolean on the attempt, checked before the chain advances.
 
+**But one boolean is not enough, and the missing case is the dangerous one.**
+A turn can have committed an **effect** — a file written, a request sent, a
+card charged — while producing no output at all. Re-running the task would
+repeat that effect. So the rule is three clauses, and an **unknown** effect
+state closes the chain, because "probably not" is not "no":
+
+```
+fallbackLegal(attempt) ⇔ no COMMIT_POINT exists
+                        ∧ no output was HANDED TO THE HOST
+                        ∧ the effect state is KNOWN and is NONE
+```
+
+The three signals are distinct and must stay distinct: *committed to the
+host* is irreversible, *produced an answer* is a presentation fact, and
+*effect state* is the safety fact. Conflating the first two stops the chain
+from ever falling back, because nearly every backend prints something.
+
 ## Two fail-policy axes
 
 Capability and health are different questions and get different answers.
@@ -122,6 +139,14 @@ The worker-runtime event log, not a log file. That is the whole point: the
 delegation becomes framed, hashed, byte-accounted state that `replay` can
 recover and that a fold can summarise, rather than lines in a file nobody
 can audit.
+
+**What is true today, stated exactly.** The event vocabulary is closed and an
+event is produced for every attempt, but the events are **not yet
+persisted**: `anyplugin delegate` reports them through `--json` and otherwise
+drops them. Persisting them needs the delegation event kinds in the frozen
+`EventSchema`, which is a versioned migration (`docs/BACKLOG.md` P1-11,
+P1-14). Until that lands, "the telemetry goes to the event log" is the
+*intent*, not the behaviour.
 
 The event vocabulary is small and closed: `BACKEND_PROBED`, `ROUTE_SELECTED`,
 `FALLBACK_SELECTED`, `DELEGATION_STARTED`, `DELEGATION_SUCCEEDED`,

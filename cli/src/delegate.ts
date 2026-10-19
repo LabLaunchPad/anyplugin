@@ -48,6 +48,7 @@ import {
   type DelegationErrorEnvelope,
   type DelegationEvent,
   type DelegationFailureClass,
+  type EffectState,
 } from "@lablaunchpad/worker-runtime";
 
 /** The result of probing a backend for availability. */
@@ -86,6 +87,27 @@ export interface DelegationOutcome {
   readonly failureClass?: DelegationFailureClass;
   /** Whether a fallback is still legal. */
   readonly fallbackLegal: boolean;
+  /**
+   * Whether the attempt produced output the host will see.
+   *
+   * The host receives every attempt's stdout (`bin.ts` prints them all), so
+   * an attempt that produced any of it has already been partially answered.
+   */
+  readonly committed: boolean;
+  /**
+   * Whether the attempt produced an answer at all.
+   *
+   * Not a gate on the fallback. It is the fact the presentation layer uses
+   * to decide which attempt's stdout is the ANSWER.
+   */
+  readonly outputProduced: boolean;
+  /**
+   * The effect state the wrapper could establish for this attempt.
+   *
+   * `unknown` is the normal value, and it is why a fallback is usually
+   * refused: the backend ran, and the wrapper cannot prove it did nothing.
+   */
+  readonly effectState: EffectState;
   /** The structured error envelope recovered from the output, when there was one. */
   readonly envelope?: DelegationErrorEnvelope | null;
   /** The telemetry events produced by this attempt. */
@@ -106,6 +128,20 @@ export interface ExecuteOptions {
   readonly signal?: AbortSignal;
   /** 1-based attempt number, for the telemetry. */
   readonly attempt?: number;
+  /**
+   * The caller's assertion that the task is safe to run again.
+   *
+   * A wrapper cannot observe whether a backend had an effect on the world, so
+   * the caller is the only party that knows. When this is false — the
+   * default — a failed attempt is assumed to have MAYBE had an effect, and
+   * the chain does not continue, because a fallback would execute that effect
+   * a second time.
+   *
+   * It is an ASSERTION, not a proof: it is recorded as a claim by whoever
+   * made it, and it is the only way to restore the old always-fall-back
+   * behaviour.
+   */
+  readonly reRunnable?: boolean;
 }
 
 /** Defaults that keep a misbehaving backend from harming the host. */
@@ -225,6 +261,27 @@ function byteCappedAppend(current: string, chunk: Buffer, maxBytes: number): { t
 }
 
 /**
+ * The effect state of a failed attempt, as far as the wrapper can prove it.
+ *
+ * The wrapper CANNOT observe whether a backend had an effect on the world, so
+ * the honest answer for almost every failure is `unknown` — and `unknown`
+ * forbids the fallback. Two cases are different:
+ *
+ * - `spawn_failed`: the process never ran, so it provably had no effect.
+ * - the caller asserting the task is re-runnable: an explicit human
+ *   statement that repeating the task is safe.
+ *
+ * Every other class means the backend RAN. A backend that ran may have
+ * written a file, sent a request, or charged a card before it failed, and
+ * the wrapper has no way to know which. "Probably not" is not "no".
+ */
+export function effectStateFor(failureClass: DelegationFailureClass, reRunnable: boolean): EffectState {
+  if (reRunnable) return "NONE";
+  if (failureClass === "spawn_failed") return "NONE";
+  return "UNKNOWN";
+}
+
+/**
  * Run one backend safely.
  *
  * The command is NEVER passed through a shell. A backend argument is data,
@@ -266,6 +323,10 @@ export async function executeBackend(
       truncated: false,
       durationMs: 0,
       failureClass,
+      // The process never ran, so it provably had no effect.
+      effectState: effectStateFor(failureClass, opts.reRunnable === true),
+      committed: false,
+      outputProduced: false,
       fallbackLegal: true,
       envelope: null,
       events,
@@ -401,7 +462,15 @@ export async function executeBackend(
         timedOut: result.timedOut,
         cancelled: result.cancelled,
         envelope: parseErrorEnvelope(`${outCap.text}\n${errCap.text}`),
+        // `committed` means the host HAS the output. The CLI buffers until the
+        // attempt ends and the host has received nothing, so it is false —
+        // and the reason is that the buffer is never presented as the answer
+        // (`bin.ts` sends only the answer attempt's stdout to stdout).
         committed: false,
+        // `outputProduced` is the OTHER half of the fact: the attempt DID
+        // produce something. It is not a gate on the fallback — it is what
+        // tells the presentation layer which attempt carried the answer.
+        outputProduced: outCap.text.length > 0,
       };
 
   let failureClass: DelegationFailureClass | undefined;
@@ -417,14 +486,20 @@ export async function executeBackend(
     // Exit 0: a success, UNLESS the output carries an error envelope. A
     // backend that fails mid-stream and still exits 0 must not be reported
     // as a success.
+    //
+    // And when the envelope cannot be classified, the class is `unknown` —
+    // NOT the absence of a class. Dropping it (as this used to) reported a
+    // failed backend as a success, which is the "a wrong answer presented as
+    // right" failure. `unknown` is a real class: its behaviour is `report`,
+    // so the chain stops and the operator sees it.
     const envelope = observation.envelope ?? null;
     if (envelope) {
-      const cls = classifyAttempt({ ...observation, envelope });
-      if (cls !== "unknown") failureClass = cls;
+      failureClass = classifyAttempt({ ...observation, envelope });
     }
   }
 
-  const fallbackOk = failureClass ? canFallback(observation, failureClass) : true;
+  const effectState = failureClass ? effectStateFor(failureClass, opts.reRunnable === true) : ("none" as EffectState);
+  const fallbackOk = failureClass ? canFallback(observation, failureClass, effectState) : true;
 
   if (failureClass) {
     events.push(
@@ -465,6 +540,9 @@ export async function executeBackend(
     truncated,
     durationMs,
     ...(failureClass ? { failureClass } : {}),
+    effectState,
+    committed: observation.committed ?? false,
+    outputProduced: observation.outputProduced ?? false,
     fallbackLegal: fallbackOk,
     envelope: observation.envelope ?? null,
     events,
@@ -715,8 +793,19 @@ export interface DelegateOptions extends ExecuteOptions {
  * Delegate a request, walking the fallback chain.
  *
  * The chain stops at the first success. It also stops — deliberately — when a
- * failure is one that another backend would fail identically (auth, quota), or
- * when the turn has already committed output.
+ * failure is one that another backend would fail identically (auth, quota),
+ * when the turn has already committed output, or when the failed attempt may
+ * have had an effect on the workspace.
+ *
+ * The third reason is the one that requires judgement. The wrapper cannot
+ * observe whether a backend wrote a file or sent a request before it failed,
+ * so after any failure in which the backend RAN, the effect state is
+ * `unknown` — and `unknown` forbids the fallback, because a fallback would
+ * run the task a second time and possibly execute the effect twice.
+ *
+ * The escape hatch is explicit: `--re-runnable` says the task is safe to
+ * repeat. It is an assertion by the caller, not a proof by the wrapper, and
+ * it is recorded as such.
  */
 export async function delegate(opts: DelegateOptions): Promise<DelegationResult> {
   const breakers = opts.breakers ?? new Map<string, CircuitBreaker>();
@@ -729,6 +818,8 @@ export async function delegate(opts: DelegateOptions): Promise<DelegationResult>
 
   const attempts: DelegationOutcome[] = [];
   let attemptNumber = 1;
+  /** Why the chain stopped early, when it did. */
+  let chainStopped: string | undefined;
 
   for (const candidate of decision.candidates) {
     // `selectBackend` already recorded the selection of the FIRST candidate.
@@ -811,18 +902,17 @@ export async function delegate(opts: DelegateOptions): Promise<DelegationResult>
     }
 
     // The chain stops when falling back is not allowed or not useful.
-    if (!outcome.fallbackLegal) break;
-    if (candidate !== decision.candidates[decision.candidates.length - 1]) {
-      events.push(
-        delegationEvent({
-          type: "FALLBACK_SELECTED",
-          backendId: candidate.id,
-          attempt: attemptNumber,
-          failureClass: outcome.failureClass,
-          at: Date.now(),
-        }),
-      );
+    if (!outcome.fallbackLegal) {
+      chainStopped = outcome.committed
+        ? `${candidate.id} failed (${outcome.failureClass}) and no fallback was tried: the attempt had already produced output the host holds, and a second backend's answer would be spliced onto it`
+        : `${candidate.id} failed (${outcome.failureClass}) and no fallback was tried: the attempt may have had an effect on the workspace, and re-running the task could repeat it — re-run with --re-runnable if the task is safe to repeat`;
+      break;
     }
+    // No FALLBACK_SELECTED event here: the loop's head already emits one for
+    // the backend being moved TO. Emitting a second one here named the
+    // backend that had just FAILED, which contradicted the event's own
+    // definition ("a different backend was chosen") and made the log
+    // unreadable — two events, one of them about the wrong backend.
     attemptNumber += 1;
   }
 
@@ -831,7 +921,11 @@ export async function delegate(opts: DelegateOptions): Promise<DelegationResult>
     outcome: last ?? null,
     attempts,
     selected: decision.selected,
-    ...(last?.failureClass ? { reason: `every candidate failed (last: ${last.failureClass})` } : { reason: "every candidate failed" }),
+    ...(chainStopped
+      ? { reason: chainStopped }
+      : last?.failureClass
+        ? { reason: `every candidate failed (last: ${last.failureClass})` }
+        : { reason: "every candidate failed" }),
     events,
     ok: false,
   };

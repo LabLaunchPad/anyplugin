@@ -182,12 +182,15 @@ The rules that make it safe are in `cli/src/delegate.ts` and the contract in
   blocklist has to anticipate every secret.
 - **Never a silent failure.** Every attempt produces a classified telemetry
   event, including the ones that could not be classified.
-- **Never a fallback after the turn committed.** Once output has been
-  committed to the host, the chain is closed: another backend would splice two
-  answers together and re-run whatever the first one already did. The kernel
-  enforces it (`canFallback()`); the `anyplugin delegate` CLI buffers its
-  output, so it never sets the flag — see `docs/FAILURE-MODES.md` §5 for the
-  exact scope.
+- **Never a fallback after the turn committed.** The chain is closed when the
+  turn's output has been committed to the host, **and** when the attempt's
+  effect state is not known to be `NONE` — because an attempt can have written
+  a file or sent a request while producing no output at all, and re-running
+  the task would repeat it. The kernel enforces it (`canFallback()`); the
+  `anyplugin delegate` CLI buffers its output, so it never sets the
+  `committed` flag, and it refuses a fallback by default unless the caller
+  asserts the task is re-runnable — see `docs/FAILURE-MODES.md` §5 for the
+  exact scope and `docs/POST-MORTEMS.md` PM-001 for the account.
 
 Two fail-policy axes, deliberately separate:
 
@@ -241,6 +244,7 @@ is worse than no guarantee.
 | What does the kernel's design say, and why? | **`docs/WORKER-RUNTIME-KERNEL.md`** | the contracts (the authority) |
 | What can be observed? | `packages/worker-runtime/src/resource/telemetry.ts` | prose |
 | What can go wrong, and what happens? | **`docs/FAILURE-MODES.md`** | scattered prose |
+| Why did a false claim survive, and what closes it? | **`docs/POST-MORTEMS.md`** | scattered prose |
 | What is still open? | **`docs/BACKLOG.md`** | `ROADMAP.md` (strategy) |
 | Why was it done that way? | **`docs/DECISIONS.md`** | — |
 | Who is this for, and who is accountable? | **`docs/PERSONAS.md`** | `README.md` (onboarding) |

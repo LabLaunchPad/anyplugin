@@ -95,8 +95,15 @@ describe("safe spawn — the wrapper never hands the host a shell", () => {
     expect(elapsed).toBeLessThan(5_000);
     expect(outcome.timedOut).toBe(true);
     expect(outcome.failureClass).toBe("timeout");
-    // A timed-out turn is NOT committed, so a fallback is still legal.
-    expect(outcome.fallbackLegal).toBe(true);
+    // A timed-out turn MAY have had an effect: the process ran, and the
+    // wrapper cannot prove it did nothing before the deadline killed it. So
+    // a fallback is NOT legal.
+    //
+    // This assertion used to be `true`, with the reasoning "a timed-out turn
+    // is NOT committed". That reasoning was about OUTPUT and said nothing
+    // about EFFECTS — which is the defect the sibling audit test proves.
+    expect(outcome.effectState).toBe("UNKNOWN");
+    expect(outcome.fallbackLegal).toBe(false);
   });
 
   it("caps the captured output", async () => {
@@ -282,11 +289,30 @@ describe("delegation — the fallback chain", () => {
     expect(result.outcome?.stdout).toBe("ok");
   });
 
-  it("falls back to the next backend after a per-backend failure", async () => {
+  it("does NOT fall back after a per-backend failure, because the attempt may have had an effect", async () => {
+    // We KNOW the backend failed, and "this backend failed" is exactly what
+    // a fallback is FOR — the taxonomy still marks `backend_failed` as
+    // fallbackable. But the backend RAN, so it may have written a file before
+    // it died, and re-running the task would run that effect a second time.
+    //
+    // Two gates, two questions: the taxonomy says whether another backend is
+    // WORTH trying; the effect rule says whether it is SAFE to try.
     const bad = await scriptBackend("bad", `process.exit(3);`);
     const good = await scriptBackend("good2", `process.stdout.write("ok2");`);
     const catalog = BackendCatalog.parse({ apiVersion: 1, backends: [bad, good] });
     const result = await delegate({ catalog, args: [] });
+    expect(result.ok).toBe(false);
+    expect(result.attempts).toHaveLength(1);
+    expect(result.attempts[0]!.backendId).toBe("bad");
+    expect(result.attempts[0]!.failureClass).toBe("backend_failed");
+    expect(result.attempts[0]!.effectState).toBe("UNKNOWN");
+  });
+
+  it("falls back after a per-backend failure when the caller declares the task re-runnable", async () => {
+    const bad = await scriptBackend("bad", `process.exit(3);`);
+    const good = await scriptBackend("good2", `process.stdout.write("ok2");`);
+    const catalog = BackendCatalog.parse({ apiVersion: 1, backends: [bad, good] });
+    const result = await delegate({ catalog, args: [], reRunnable: true });
     expect(result.ok).toBe(true);
     expect(result.attempts).toHaveLength(2);
     expect(result.attempts[0]!.backendId).toBe("bad");
@@ -309,16 +335,23 @@ describe("delegation — the fallback chain", () => {
     expect(result.attempts[0]!.failureClass).toBe("auth");
   });
 
-  it("DOES fall back after a bare non-zero exit — the backend failed, even if it did not say why", async () => {
+  it("does NOT retry a bare non-zero exit on another backend — the backend ran", async () => {
     // We KNOW the backend failed. We do not know why, and no cause is
-    // invented — but "this backend failed" is exactly what a fallback is for.
+    // invented — the class is still `backend_failed`. But "probably
+    // harmless" is not "harmless": the process ran, so the effect state is
+    // unknown, and the fallback is refused.
+    //
+    // The classification is unchanged; the refusal is about SAFETY, not
+    // about usefulness. The taxonomy still says another backend is worth
+    // trying — it just may not be safe to try it.
     const one = await scriptBackend("one", `process.exit(3);`);
     const two = await scriptBackend("two", `process.stdout.write("ok");`);
     const catalog = BackendCatalog.parse({ apiVersion: 1, backends: [one, two] });
     const result = await delegate({ catalog, args: [] });
-    expect(result.ok).toBe(true);
-    expect(result.attempts).toHaveLength(2);
+    expect(result.ok).toBe(false);
+    expect(result.attempts).toHaveLength(1);
     expect(result.attempts[0]!.failureClass).toBe("backend_failed");
+    expect(result.attempts[0]!.fallbackLegal).toBe(false);
   });
 
   it("records a telemetry event for every attempt", async () => {

@@ -53,10 +53,14 @@ commands:
                                       list the declared delegation backends, or probe them for
                                       availability (a probe never runs the real work)
   anyplugin delegate [--backend ID] [--capability CAP] [--domain DOM] [--registry FILE]
-                                      [--timeout MS] [--json] -- [ARGS...]
+                                      [--timeout MS] [--re-runnable] [--json] -- [ARGS...]
                                       run a request through the wrapper: capability-matched
                                       routing, safe spawn (never a shell), deadline, output cap,
                                       and a classified failure for every attempt
+                                      --re-runnable asserts the task is safe to repeat, which
+                                      permits a fallback after a failed attempt; without it a
+                                      failed attempt is never retried on another backend,
+                                      because the attempt may already have had an effect
   anyplugin help                     this help
   anyplugin run <hook-id> [--plugin DIR] [--event <canonical-event>] [--payload '<json>']
                                   execute a hook handler locally with a payload
@@ -91,6 +95,7 @@ interface ParsedFlags {
   json?: boolean;
   fix?: boolean;
   "include-root"?: boolean;
+  "re-runnable"?: boolean;
   registry?: string;
   backend?: string;
   capability?: string;
@@ -616,6 +621,7 @@ async function runDelegate(values: ParsedFlags, positionals: string[]): Promise<
       ...(values.domain ? { domain: values.domain } : {}),
     },
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(values["re-runnable"] === true ? { reRunnable: true } : {}),
   });
 
   if (values.json) {
@@ -634,6 +640,7 @@ async function runDelegate(values: ParsedFlags, positionals: string[]): Promise<
             timedOut: a.timedOut,
             truncated: a.truncated,
             failureClass: a.failureClass ?? null,
+            effectState: a.effectState,
             fallbackLegal: a.fallbackLegal,
           })),
           events: result.events,
@@ -643,10 +650,26 @@ async function runDelegate(values: ParsedFlags, positionals: string[]): Promise<
       ),
     );
   } else {
+    // ONE answer on stdout. The LAST attempt is the answer; every earlier
+    // attempt failed, and its output is DIAGNOSTICS.
+    //
+    // Printing them all on stdout hands the host two answers to one request
+    // — the exact harm the fallback rule exists to prevent. It is a
+    // PRESENTATION problem, so it is solved here, rather than by making the
+    // chain refuse to fall back whenever a backend printed anything (which
+    // would stop the chain from ever falling back, because nearly every
+    // backend prints something).
+    const answer = result.attempts[result.attempts.length - 1];
     for (const attempt of result.attempts) {
       const status = attempt.failureClass ? `FAILED (${attempt.failureClass})` : "ok";
-      console.log(`[${attempt.backendId}] attempt ${attempt.attempt}: ${status} in ${attempt.durationMs}ms`);
-      if (attempt.stdout.trim()) console.log(attempt.stdout.trimEnd());
+      const line = `[${attempt.backendId}] attempt ${attempt.attempt}: ${status} in ${attempt.durationMs}ms`;
+      if (attempt === answer) {
+        console.log(line);
+        if (attempt.stdout.trim()) console.log(attempt.stdout.trimEnd());
+      } else {
+        console.error(`${line} — output withheld: it was not the answer`);
+        if (attempt.stdout.trim()) console.error(attempt.stdout.trimEnd());
+      }
       if (attempt.stderr.trim()) console.error(attempt.stderr.trimEnd());
     }
     if (!result.ok && result.reason) console.error(`anyplugin delegate: ${result.reason}`);

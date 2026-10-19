@@ -68,8 +68,10 @@ A wrapper that only works on the happy path is a wrapper that will one day
 run something it should not. The negative cases that matter most, in the order
 they have bitten:
 
-1. **The output was already committed.** A fallback then splices two answers
-   and re-runs side effects. Guarded by the `committed` flag.
+1. **The output was already committed, or the attempt may have had an effect.**
+   A fallback then splices two answers and re-runs side effects. Guarded by
+   the `committed` flag **and** by the attempt's effect state, which must be
+   *known* to be none — an unknown effect state closes the chain.
 2. **The exit code says success but the work failed.** A backend can exit 0
    after a mid-stream failure. Guarded by parsing the error envelope.
 3. **The destination already exists and is not ours.** A matching plugin name

@@ -43,6 +43,7 @@ pnpm clean                       # remove all dist/ output
 | Backend registry (declarative, zod-strict, fail-closed on an unknown apiVersion) | `core/src/backends/index.ts` |
 | Delegation wrapper (probe, route, safe spawn, telemetry) | `cli/src/delegate.ts` |
 | Failure-mode catalogue (what goes wrong, and what the system does) | `docs/FAILURE-MODES.md` |
+| Post-mortems (why a false claim survived, and what closes it) | `docs/POST-MORTEMS.md` |
 | Classified backlog (what is still open, and why) | `docs/BACKLOG.md` |
 | Decision record (why each choice was made, and what was rejected) | `docs/DECISIONS.md` |
 | Personas, intent, and the authority table | `docs/PERSONAS.md` |
@@ -74,7 +75,7 @@ plugins/    @lablaunchpad/plugin-knowledge — first-party plugin + runtime (run
             machine that has Node and nothing else.
 knowledge/  this repo's own OKF v0.2 bundle (audited platform intelligence)
 templates/  starter template used by `anyplugin init`
-docs/       architecture-adjacent docs (FAILURE-MODES.md, BACKLOG.md, ai-native/)
+docs/       architecture-adjacent docs (FAILURE-MODES.md, POST-MORTEMS.md, BACKLOG.md, ai-native/)
 research/   audit working area (clones of official repos) — gitignored
 ```
 

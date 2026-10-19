@@ -317,10 +317,27 @@ fallbackLegal(attempt) ⇔ no EFFECT in {IN_FLIGHT, COMMITTED} ∧ no COMMIT_POI
 An `IN_FLIGHT` effect forbids the fallback, because it may have partially
 executed.
 
-**Consequences:** This is a **change to a shipped kernel contract** and is
-recorded in `docs/BACKLOG.md` as an open P1 with the exact edit named. It is
-not applied in this change because it alters a frozen, certificate-bound
-contract and needs its own versioned migration.
+**Consequences:** This is a **change to the shipped fallback rule**, and it
+was recorded in `docs/BACKLOG.md` as an open item with the exact edit named.
+It was deferred on the stated ground that it *"alters a frozen,
+certificate-bound contract and needs its own versioned migration"*.
+
+**That rationale was false, and the correction matters more than the rule.**
+`fallbackLegal` is a plain exported function, not a Zod schema: it is not in
+the `CONTRACTS` registry, it has no JSON Schema mirror, and no
+`CertificateSchema` binds a delegation hash. The package
+`@lablaunchpad/worker-runtime` is **unpublished** (`npm view` → 404), so
+there is no external API surface either. The blocker was a **behaviour
+change**, not a contract migration — and those are different kinds of
+obstacle: one a human can decide in a sentence, the other a machine can
+check.
+
+It is applied now, under **D-052**, and the defect is re-classified **P0**.
+
+> A false deferral rationale is worse than no rationale, because it makes a
+> fix look impossible rather than merely un-urgent. When a fix is deferred,
+> the rationale must name the **mechanism** that blocks it, and that
+> mechanism must be checked against the registry — not against a README.
 
 ---
 
@@ -1242,12 +1259,78 @@ re-derives.
 
 ---
 
+### D-052 — The fallback chain is closed by the **effect state**, and an unknown effect state closes it
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `packages/worker-runtime/src/telemetry/delegation.ts` (`fallbackLegal`); `cli/src/delegate.ts`; `cli/src/delegate-fallback-audit.test.ts`; `docs/POST-MORTEMS.md` PM-001
+
+**Context:** D-013 recorded that `fallbackLegal` must consider in-flight
+effects. The investigation behind PM-001 found three further facts.
+
+1. **The rule was inert, not merely too narrow.** The only live consumer
+   passed the constant `committed: false`, so the chain never closed. A
+   backend that wrote files and then failed was followed by a **second
+   backend running the same task** — proven on the filesystem by
+   `cli/src/delegate-fallback-audit.test.ts`, not inferred.
+2. **The deferral rationale was false** (D-013's consequences, above).
+3. **D-013's own rule had the defect it was written to prevent.** "no EFFECT
+   in {IN_FLIGHT, COMMITTED}" silently treats an **unknown** effect state as
+   `NONE`. An unknown quantity is never defaulted here; an unknown
+   capability fails closed; an unclassifiable failure is not retried.
+
+**Decision:**
+
+```
+fallbackLegal(attempt) ⇔ no COMMIT_POINT exists
+                        ∧ no output was HANDED TO THE HOST
+                        ∧ the effect state is KNOWN and is NONE
+```
+
+with three consequences.
+
+- **The effect state is a required argument.** A caller that cannot say what
+  state the attempt's effects are in says `UNKNOWN`, and `UNKNOWN` forbids
+  the fallback. Making it optional would let a caller forget it — and a
+  forgotten effect state is the defect.
+- **Three signals stay distinct.** `committed` (the host HAS the output —
+  irreversible) ≠ `outputProduced` (the attempt produced an answer) ≠
+  `effectState` (a side effect may have happened). Conflating the first two
+  was tried and rejected: nearly every backend prints something, so a rule
+  that refuses the fallback whenever anything was printed would stop the
+  chain from ever falling back and would leave the escape hatch unusable.
+- **The wrapper says what it cannot know.** A generic CLI wrapper cannot
+  observe whether a backend had an effect on the world, so its honest answer
+  is `UNKNOWN` and the fallback is refused by default. `spawn_failed` is
+  the one provably-safe class: the process never ran. The escape hatch is
+  explicit — `--re-runnable`, an assertion by the caller, not a proof by
+  the wrapper, recorded as such.
+
+**And the presentation harm is solved where it lives.** Two answers reaching
+the host is a *presentation* problem, so `bin.ts` sends only the answer
+attempt's stdout to stdout and every earlier attempt's output to stderr as
+diagnostics. The chain rule does not have to refuse fallbacks to avoid it.
+
+**Consequences:** `anyplugin delegate` **no longer falls back by default**
+after an attempt in which the backend ran. That is a user-visible behaviour
+change, and it is the safe direction — re-running a task that may already
+have written a file or sent a request is exactly the "a wrong attempt can
+corrupt the user's workspace" case the capability axis exists for.
+`--re-runnable` restores the old behaviour deliberately. The severity of the
+defect is corrected from **P1 to P0**: by this repository's own table, "a
+wrong answer presented as right" is P0.
+
+And the lesson that outlives the rule: **a false deferral rationale is worse
+than none**, because it makes a fix look impossible rather than merely
+un-urgent.
+
+---
+
 ## Related documents
 
 | Question | Owner |
 |---|---|
 | What does the system look like? | `ARCHITECTURE.md` |
 | What goes wrong, and what does the system do? | `docs/FAILURE-MODES.md` |
+| Why did a false claim survive, and what closes it? | `docs/POST-MORTEMS.md` |
 | What is still open, and why? | `docs/BACKLOG.md` |
 | What did the last sessions establish? | `docs/SESSION-LEARNINGS.md` |
 | Where does every external claim come from? | `docs/EVIDENCE.md` |

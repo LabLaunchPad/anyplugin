@@ -82,6 +82,7 @@ export const CommandArgs = {
       capability: z.string().optional(),
       domain: z.string().optional(),
       timeout: z.string().optional(),
+      "re-runnable": flag.optional(),
       json: flag.optional(),
     })
     .strict(),
@@ -131,10 +132,14 @@ const ALL_OPTIONS = [
   "domain",
   "timeout",
   "include-root",
+  "re-runnable",
   "hookId",
   "event",
   "payload",
 ] as const;
+
+/** The options that take no value. Everything else takes a string. */
+const BOOLEAN_OPTIONS = new Set<string>(["dry-run", "json", "fix", "include-root", "re-runnable"]);
 
 export interface ParsedCommand<T extends CommandName> {
   command: T;
@@ -177,7 +182,7 @@ export function parseCliArgv<T extends CommandName>(argv: string[]): ParsedComma
   try {
     parsed = parseArgs({
       args: rest,
-      options: Object.fromEntries(ALL_OPTIONS.map((o) => [o, { type: o === "dry-run" || o === "json" || o === "fix" || o === "include-root" ? "boolean" : "string" }])),
+      options: Object.fromEntries(ALL_OPTIONS.map((o) => [o, { type: BOOLEAN_OPTIONS.has(o) ? "boolean" : "string" }])),
       allowPositionals: true,
       strict: true,
     });

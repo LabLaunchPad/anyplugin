@@ -207,8 +207,24 @@ export interface AttemptObservation {
   readonly cancelled?: boolean;
   /** A structured error envelope recovered from the backend's output. */
   readonly envelope?: DelegationErrorEnvelope | null;
-  /** Whether any of the attempt's output was committed to the host. */
+  /**
+   * Whether any of the attempt's output was committed to the host.
+   *
+   * "Committed to the host" means the host HAS it — a streaming wrapper that
+   * forwarded bytes as they arrived. It is NOT the same as "the attempt
+   * produced output": a buffered wrapper holds its output until the attempt
+   * ends. Only the first is irreversible.
+   */
   readonly committed?: boolean;
+  /**
+   * Whether the attempt produced an answer at all.
+   *
+   * Not a gate on the fallback — see `fallbackLegal`. It is recorded so the
+   * telemetry can distinguish "produced nothing" from "produced something
+   * that was discarded", and so a presentation layer knows which attempt's
+   * output is the answer.
+   */
+  readonly outputProduced?: boolean;
 }
 
 /**
@@ -263,8 +279,6 @@ export function classifyAttempt(observation: AttemptObservation): DelegationFail
       if (byStatus !== "unknown") return byStatus;
     }
     if (envelope.name) {
-      const named = classifyHttpStatus(0); // placeholder to keep the shape explicit
-      void named;
       const lower = envelope.name.toLowerCase();
       if (lower.includes("ratelimit") || lower.includes("rate_limit")) return "rate_limited";
       if (lower.includes("auth")) return "auth";
@@ -289,12 +303,28 @@ export function classifyAttempt(observation: AttemptObservation): DelegationFail
   return "backend_failed";
 }
 
-/** Is a failed attempt safe to fall back from? */
-export function canFallback(observation: AttemptObservation, failureClass: DelegationFailureClass): boolean {
+/**
+ * Is a failed attempt safe to fall back from?
+ *
+ * The effect state is a REQUIRED argument, not an optional one. A caller that
+ * cannot say what state the attempt's effects are in must say `unknown`, and
+ * `unknown` forbids the fallback. Making it optional would let a caller
+ * forget it — and a forgotten effect state is precisely the defect this
+ * module exists to prevent.
+ */
+export function canFallback(
+  observation: AttemptObservation,
+  failureClass: DelegationFailureClass,
+  effect: EffectState,
+): boolean {
   if (!failureSpec(failureClass).mayFallback) return false;
   // A committed turn is terminal: another backend would splice two answers
   // together and re-run whatever the first one already did.
-  return fallbackLegal(observation.committed ?? false);
+  return fallbackLegal({
+    committed: observation.committed ?? false,
+    outputProduced: observation.outputProduced ?? false,
+    effect,
+  });
 }
 
 /**
@@ -560,19 +590,86 @@ export const FAIL_POLICY = {
 } as const;
 
 /**
+ * The state of any EFFECT an attempt may have started.
+ *
+ * - `NONE`      — provably no effect was started.
+ * - `IN_FLIGHT` — an effect was started and may have partially executed.
+ * - `COMMITTED` — an effect completed.
+ * - `UNKNOWN`   — it is NOT known whether an effect was started.
+ *
+ * `UNKNOWN` is a first-class value, not an omission. It is the value a
+ * wrapper must use when it cannot observe effects — which is most wrappers,
+ * most of the time. Treating it as `NONE` would be a guess, and this module
+ * exists to prevent exactly that kind of guess.
+ */
+export const EFFECT_STATES = ["NONE", "IN_FLIGHT", "COMMITTED", "UNKNOWN"] as const;
+export type EffectState = (typeof EFFECT_STATES)[number];
+
+/** The state of one attempt, for the fallback decision. */
+export interface FallbackState {
+  /**
+   * Whether the attempt's output was HANDED TO THE HOST.
+   *
+   * This is not "the attempt produced output". A buffered wrapper holds its
+   * output until the attempt ends and the host has received nothing; a
+   * streaming wrapper has already forwarded it and cannot take it back. Only
+   * the second is irreversible, and only the second is terminal.
+   */
+  readonly committed?: boolean;
+  /**
+   * Whether the attempt produced an answer at all.
+   *
+   * Recorded for the telemetry, and used by the PRESENTATION layer to decide
+   * which attempt's output is the answer. It is deliberately NOT a gate on
+   * the fallback: almost every backend prints something, so gating on it
+   * would make the chain refuse to fall back for nearly every real backend
+   * and would leave the escape hatch unusable.
+   */
+  readonly outputProduced?: boolean;
+  /** The state of any effect the attempt may have started. REQUIRED. */
+  readonly effect: EffectState;
+  /** Whether a commit point exists for this turn. */
+  readonly commitPoint?: boolean;
+}
+
+/**
  * Whether a fallback is still legal.
  *
- * A delegated agent turn can mutate the workspace. Once ANY of the turn's
- * output has been committed to the host, switching to a different backend
- * would splice two different answers together — and would re-run whatever the
- * first backend had already done. So the chain is CLOSED from the moment the
- * first byte is committed.
+ *   fallbackLegal(attempt) ⇔ no COMMIT_POINT exists
+ *                        ∧ no output was handed to the host
+ *                        ∧ the effect state is KNOWN and is `NONE`
  *
- * This is the single most-missed detail in delegation wrappers, and it is
- * cheap to get right: it is a boolean on the attempt.
+ * ── The third clause is the one that is easy to get wrong ──────────────────
+ *
+ * D-013 states the rule as "no EFFECT in {IN_FLIGHT, COMMITTED}", which
+ * silently treats `UNKNOWN` as `NONE`. But an effect whose state is unknown
+ * may have partially executed, and re-running the task would execute it a
+ * second time. So `UNKNOWN` forbids the fallback.
+ *
+ * This is the SAME rule this repository applies everywhere else: a capability
+ * that is unknown fails closed, a quantity that is unknown is never defaulted
+ * to a number, and a failure that cannot be classified is not retried. The
+ * fallback decision is a SAFETY question, not a health question — `FAIL_POLICY`
+ * fails OPEN on health precisely because failing closed there would be a
+ * self-inflicted outage, and this is not that axis. Re-running a task that may
+ * already have paid a payment or written a file is exactly the "a wrong
+ * attempt can corrupt the user's workspace" case the capability axis exists
+ * for.
+ *
+ * ── Why the OUTPUT clause is about commitment, not production ──────────────
+ *
+ * "The attempt produced an answer" and "the host has the answer" are
+ * different facts, and conflating them breaks the escape hatch: nearly every
+ * backend prints something, so a rule that refuses the fallback whenever
+ * anything was printed would stop the chain from ever falling back. The
+ * harm of two answers is a PRESENTATION problem, and it is solved where it
+ * belongs: a wrapper presents exactly one attempt's output as the answer and
+ * the rest as diagnostics.
  */
-export function fallbackLegal(committed: boolean): boolean {
-  return !committed;
+export function fallbackLegal(state: FallbackState): boolean {
+  if (state.commitPoint) return false;
+  if (state.committed) return false;
+  return state.effect === "NONE";
 }
 
 /** A delegation telemetry event. */
@@ -596,6 +693,20 @@ export const DelegationEventSchema = z.object({
    * A failure after this point is TERMINAL: falling back is illegal.
    */
   committed: z.boolean().default(false),
+  /**
+   * Whether the attempt produced an answer at all.
+   *
+   * Distinct from `committed`: an attempt can produce output that the host
+   * never receives, because a failed attempt's output is diagnostics.
+   */
+  outputProduced: z.boolean().default(false),
+  /**
+   * The effect state the wrapper could establish for this attempt.
+   *
+   * `UNKNOWN` is the normal value, and it is why a fallback is usually
+   * refused: the backend ran, and the wrapper cannot prove it did nothing.
+   */
+  effectState: z.enum(EFFECT_STATES).optional(),
   /** The failure class, on a failed event. */
   failureClass: z.enum(DELEGATION_FAILURE_CLASSES).optional(),
   /** The class's prescribed behaviour, recorded so a reader need not look it up. */
