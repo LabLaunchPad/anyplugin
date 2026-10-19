@@ -512,6 +512,55 @@ device-dependent default precision without recording it.
 
 ---
 
+## 4C. `rea` — the reverse-engineering agent, and why it matters here
+
+**`github.com/morluto/rea` exists**, is public, is **MIT**, and is very
+actively developed (last commit 2026-10-20; ~4,553 files; npm `rea-agents`
+v6.7.0; MCP name `io.github.morluto/rea`). It is **not** agent infrastructure
+in the sense the name might suggest — it is a **reverse-engineering** system:
+*"One MCP for reverse engineering across binaries, applications, and runtime
+behaviour."*
+
+**Why it is in this ledger anyway:** it is the closest existing thing to
+**an agent whose output is evidence rather than prose**, and it does that
+with three mechanisms the SDK should copy.
+
+| # | Its mechanism | Why we want it |
+|---|---|---|
+| 1 | **A `coverage` declaration the producer owns** — `coverage.scope` ∈ {`root`, `container-entries`} × `coverage.status` ∈ {`complete`, `unknown`} — with the explicit rule *"limitations are explanatory and do not supply or infer coverage"* and *"an empty call list with partial or unknown coverage is not proof that the function has no calls"* | This is the **cleanest statement of "absence is not evidence"** in the whole survey, and it is a **field**, not prose. It maps directly onto our `UNKNOWN`-must-be-absent rule |
+| 2 | **Per-facet availability with a reason** — `{"available": false, "reason": "..."}` versus "observed and empty", with the clarifying line *"availability describes whether that facet was observed, not whether its collection contains any entries"* | The distinction between **"I looked and found nothing"** and **"I could not look"**. Both look like an empty list to a naive consumer |
+| 3 | **Bounded transport with a continuation protocol** — a named `resource_constraint` error emitted **before** an oversized string is built, a resumable `inspect_analysis_view` cursor with `coverage.next_offset`, and a streamed, atomically-published bundle export | The same discipline as our §2.4 task-envelope: **a truncation must be an error, not a smaller result** |
+| 4 | **An `analysis_profile` that participates in semantic identity** — the same bytes under a different analysis profile are a *different* result | A content hash alone is not enough when the *analysis* is part of the result. Our certificate binds hashes; this says the **profile** must be bound too |
+| 5 | **"Keep proof of ownership separate from validity, editability, and readiness"** — and *"unresolved identity or applicability must remain unknown rather than be treated as absent, foreign, or aligned"* | Four axes a single boolean would conflate. It is the sharpest epistemic rule in the survey, and it is *our* rule stated better |
+
+**Its `AGENTS.md` is also an engineering contract worth reading** — it
+states the layering (*"dependencies flow inward: domain semantics and
+contracts, provider adapters, shared application workflows, then CLI/MCP
+adapters"*), the fail-closed integration rule (*"do not integrate
+capabilities while material scope, authority, side-effect, or required
+verification questions remain unresolved"*), and a performance priority
+order that puts **agent tokens before CPU**: *"return the smallest sufficient
+answer with necessary provenance, coverage and limitations."*
+
+**The verdict, and it is not "depend on it":**
+
+| | |
+|---|---|
+| **Status** | `REFERENCED` — MIT and clean, but the value is the **three mechanisms**, not the 30+ provider adapters |
+| **What we take** | The `coverage` declaration, the per-facet availability, the bounded-transport-with-continuation, and the four-axis ownership rule |
+| **What we do not take** | The provider catalogue. Our SDK needs **one** analysis tier (the AST kernel, MVP 2), not thirty |
+| **What it is evidence of** | That the evidence discipline this project was designed around is **already being built by someone else** — which is a convergent design, and the strongest kind of validation there is |
+
+**And the one caution:** its `coverage.status: "unknown"` is **contagious** —
+a single unknown facet keeps a comparison dimension at `unknown` with null
+counts, so an incomplete provider **caps the strength of every conclusion
+drawn from it**. That is the correct behaviour, and it is a warning: *a
+partially-observed result must not be silently promoted to a positive
+finding.* Our `UNKNOWN` rule does the same thing, and this is independent
+confirmation that the rule is right.
+
+---
+
 ## 5. Decision-making: taken, refused, deferred
 
 | Decision | Verdict | One line of reason |
