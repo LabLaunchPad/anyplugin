@@ -1,89 +1,102 @@
-# Implementation Plan: Finding E (Transactional Install) + Finding D (Journal Migration)
+# Implementation Plan & Record — the audit remediation
 
-**Status: COMPLETE** — all phases implemented, all tests green.
+**Status: COMPLETE.** All P0 and P1 audit findings (A–L) are fixed, the
+delegation wrapper is shipped, and the repository's documentation gaps are
+closed.
 
 | Gate | Result |
 |---|---|
 | `pnpm build` | Clean |
-| `pnpm test` | 469 passed, 6 skipped (Windows symlink tests), 50 files |
+| `pnpm test` | 643 passed, 6 skipped (58 files) — the 6 skips are the pre-existing Windows symlink tests |
 | `okf-validate knowledge` | CONFORMANT (0 errors) |
 | `anyplugin doctor` | Working, incl. `--fix` |
+| Architecture boundary | `core` is a leaf; the kernel depends on nothing workspace-internal — both guarded mechanically |
 
 ---
 
-## Phase 1: Journal Schema Versioning (Finding D) — DONE
+## 1. The findings
 
-- [x] `schemaVersion: 1` added to `InstallJournal` + `InstallJournalSchema`
-- [x] `migrateJournal(raw)` — upgrades legacy (pre-`schemaVersion`) journals
-- [x] Future/unknown versions **fail closed** (`unsupported journal schema version`)
-- [x] `readJournal()` routes through `migrateJournal()`; corrupt ⇒ throws (never falls back to legacy cleanup)
-- [x] `writeJournal()` always stamps the current version
-- [x] `readCurrentWithError()` distinguishes `ENOENT` from `EACCES`/`EPERM`/`OTHER`
-- [x] `JournalEntryStatus` gained an `unreadable` variant (fail-closed on unreadable files)
+| ID | Class | What it was | Where it lives now |
+|---|---|---|---|
+| A | BUG | Hook id accepted leading `_`/`0-9`, unbounded length | `core/src/schema/index.ts` — `^[a-z][a-z0-9-]{0,63}$` |
+| B | BUG | Manifest paths validated lexically only | `core/src/schema/index.ts` — realpath containment |
+| C | BUG | No destination-ownership classification | `cli/src/index.ts` — ABSENT/OWNED/CONFLICTING, ULID ownership proof |
+| D | BUG | Journal cast, not validated; missing ≅ corrupt | `cli/src/journal.ts` — strict schema, `schemaVersion`, `migrateJournal()` |
+| E | BUG | Install mutated before the journal was written | `cli/src/transaction.ts` — stage → intent → backup → apply → verify → commit |
+| F | BUG | `timeoutSec` declared, never enforced | `plugins/knowledge/runtime/runner.js` — hard deadline |
+| G | BUG | `failurePolicy` declared, never read | `plugins/knowledge/runtime/runner.js` — "blocking" exits 2 |
+| H | BUG | The OpenCode shim dropped every hook but the last | `adapters/opencode/src/index.ts` — event → ordered list |
+| I | BUG | The MCP frontmatter parser was not YAML | `plugins/knowledge/runtime/yaml-lite.js` — YAML 1.2 core schema |
+| J | BUG | Replay gap detection was O(n²) | `packages/worker-runtime/src/log/replay.ts` — single pass |
+| K | BEHAVIOUR | Event-log durability was unstated | `packages/worker-runtime/src/log/event-log.ts` — `DurabilityLevel` |
+| L | GAP | No diagnostic for a stale writer lock | `cli/src/bin.ts` — `anyplugin doctor`, liveness-based |
 
-**Tests:** `cli/src/journal-migration-audit.test.ts` (13), `cli/src/journal-validation-audit.test.ts` (8)
+Plus the defects the independent review of this branch found: the OpenCode
+shim discarding a blocking denial, the YAML parser's remaining divergences, a
+failed rollback destroying the user's backups, uninstall trusting the
+journal's paths, `doctor --fix` deleting crash-recovery material, and the
+delegation deadline being a lie. All are recorded in `docs/BACKLOG.md` with
+their classifications.
 
-## Phase 2: Transaction Engine (Finding E) — DONE
+---
 
-New module `cli/src/transaction.ts`:
+## 2. The new capability: the delegation wrapper
 
-- [x] `createTransactionContext()` — staging + backup scratch space
-- [x] `writeInstallIntent()` / `readInstallIntent()` — atomic intent manifest (temp + rename)
-- [x] `backupDestinations()` — byte-exact file AND directory-tree backups; records `wasAbsent`
-- [x] `restoreFromBackups()` — rollback; failures are collected, never thrown (must not mask the original error)
-- [x] `verifyAppliedState()` — per-file hash verification (detects partial copies)
-- [x] `hashTree()` / `hashDirFiles()` — stable, order-independent tree hashing
-
-`executeInstall()` pipeline in `cli/src/index.ts`:
+`anyplugin delegate` and `anyplugin backends` make the CLI a front door to
+other runtimes and tools.
 
 ```
-1. PREFLIGHT  classify every destination (ABSENT / OWNED / CONFLICTING); refuse conflicts
-2. STAGE      render every incoming byte into staging — host untouched
-3. INTENT     persist install_intent.json (atomic)
-4. BACKUP     snapshot the current content of every destination
-5. APPLY      copy staged bytes onto the host, revalidating ownership (TOCTOU guard)
-6. VERIFY     re-hash every destination against the staged hashes
-7. COMMIT     write the journal, then purge staging + backups
+registry (declarative) → probe → route → delegate safely → record telemetry
 ```
 
-Any failure after STAGE ⇒ rollback restores every destination and purges the scratch space.
+**The contract lives in the kernel** (`packages/worker-runtime/src/telemetry/delegation.ts`),
+**the mechanism in the CLI** (`cli/src/delegate.ts`). That split keeps the
+architecture boundary: the kernel knows about backends in the abstract and
+nothing about any agent.
 
-**Tests:** `cli/src/install-transactional-audit.test.ts` (20)
-
-## Phase 3: Doctor Diagnostics (Finding L) — DONE
-
-- [x] `anyplugin doctor [--json] [--fix]`
-- [x] Detects: stale worker-runtime locks, corrupt journals, outdated journal schemas,
-      orphaned install transaction scratch spaces, plugin dirs with no journal
-- [x] `--fix` remediates ONLY unambiguous problems (orphan scratch spaces, schema upgrades)
-- [x] `--fix` **never** auto-repairs a corrupt journal — it is the only record of owned bytes
-- [x] Always exits 0 or 1; never crashes on malformed inputs
-
-**Tests:** `cli/src/doctor-diagnostics.test.ts` (9)
-
----
-
-## Bugs found and fixed during implementation
-
-| Bug | Root cause | Fix |
-|---|---|---|
-| Install hang (infinite recursion) | Staging dir was created **inside** the install root, which is also the "root" copy destination ⇒ `copyDir(staged → dest)` copied a dir into its own subtree | `transactionWorkspaceRoot()` returns a **sibling** of the installed root |
-| `{{PLUGIN_ROOT}}` resolved to a deleted staging path | Substitution ran on the staged copy using the staging path as the root | Substitute with the **final destination** path |
-| Reinstall always falsely conflicted | Ownership for non-root copies (skills/commands/agent) was looked up in the *destination* dir, but the journal lives in the *installed root* | `classifyDestination()` now takes `journalRoot` and consults the root journal's copy entries |
-| `--fix` rejected by the CLI parser | `ALL_OPTIONS` allowlist in `strict-args.ts` did not include `fix` | Added `fix` (boolean) to the allowlist and to the `doctor` schema |
-
----
-
-## File changes
-
-| File | Change |
+| Piece | What it guarantees |
 |---|---|
-| `cli/src/transaction.ts` | **NEW** — staging/backup/verify/rollback engine |
-| `cli/src/journal.ts` | `schemaVersion`, `migrateJournal()`, `readCurrentWithError()`, `unreadable` status |
-| `cli/src/index.ts` | Transactional `executeInstall`, `transactionWorkspaceRoot()`, ownership lookup fix, `__onApplied` test seam |
-| `cli/src/bin.ts` | `doctor --fix` remediation, orphaned-transaction + outdated-schema detection |
-| `cli/src/strict-args.ts` | `doctor` schema gains `--home/--project/--fix`; `fix` added to `ALL_OPTIONS` |
-| `cli/src/install-transactional-audit.test.ts` | **NEW** — 20 tests |
-| `cli/src/journal-migration-audit.test.ts` | **NEW** — 13 tests |
-| `cli/src/doctor-diagnostics.test.ts` | **NEW** — 9 tests |
-| `AGENTS.md` | Audit findings C/D/E marked FIXED; transaction engine documented |
+| The registry | Unknown fields rejected; an unknown `apiVersion` refused whole; a capability a backend does not declare is `UNKNOWN`, and `UNKNOWN` fails closed |
+| Safe spawn | Never a shell; always a deadline and an output cap; always an environment allowlist |
+| Classification | The exit code is never the answer — it is combined with a structured error envelope, the timeout signal, and the `committed` flag |
+| Fallback | Closed once the turn has committed; an unclassifiable failure is never retried |
+| Two fail axes | Capability fails closed; health fails open. Constants, not configuration |
+| Telemetry | Every attempt produces a classified event for the worker-runtime log |
+
+---
+
+## 3. The documentation that was missing
+
+| Artifact | What it owns |
+|---|---|
+| `ARCHITECTURE.md` | The layer stack (Mermaid), the dependency direction, the package map, what the Worker Runtime is FOR, and "which document owns what" |
+| `docs/FAILURE-MODES.md` | Every failure class and the behaviour it MANDATES |
+| `docs/BACKLOG.md` | Every known issue, classified and severity-rated, with a "correct behaviour today" column |
+| `docs/SESSION-LEARNINGS.md` | What the last 48 engineering sessions established, and how they failed |
+| `knowledge/adapters/delegation-wrapper.md` | The OKF concept for the wrapper |
+| `knowledge/adapters/failure-modes.md` | The OKF concept for the failure-mode reasoning |
+
+---
+
+## 4. What is still open
+
+The P2 polish list, plus three genuine gaps the review surfaced, are in
+`docs/BACKLOG.md`. The three that matter:
+
+| ID | Gap |
+|---|---|
+| P1-7 | **No crash recovery.** The install writes `install_intent.json` and the backups, but nothing reads them. A process killed between `apply` and `commit` leaves the host mutated with no journal. `doctor` now PRESERVES the backups so a recovery tool can use them. |
+| P1-8 | The circuit breaker has no live consumer in the CLI (it is stateless per invocation). |
+| P1-9 | `copyDir`'s symlink containment now has a test, but the Windows leg of the *manifest* symlink audit still skips (a junction-based substitute is the fix). |
+
+---
+
+## 5. How the work was done
+
+| Phase | Method |
+|---|---|
+| Discovery | The live session store was queried directly (`node:sqlite`) for the last 10 AnyPlugin sessions and 38 adjacent ones, with their tool-error records intact. |
+| Research | External patterns were checked against primary sources — OTel GenAI semconv, LiteLLM/Portkey routing and health, the Azure circuit-breaker pattern, AWS retry behaviour, GeoLibre/kroma registry patterns, ACP, and the Agent Client Protocol. |
+| Implementation | Contract-first, in the layer that owns the contract. |
+| Review | An independent adversarial review of the whole diff, which found 4 BLOCKERs and 7 MAJORs. |
+| Iteration | The BLOCKERs and the data-destroying MAJORs were fixed; the rest were classified into the backlog with an honest scope note in the docs. |
