@@ -53,7 +53,8 @@ describe("resolveAuthorizedPath (filesystem boundary)", () => {
       try {
         await symlink(outside, link, "dir");
       } catch {
-        return; // no symlink permission on this platform — escape covered by realpath tests elsewhere
+        console.warn("no symlink permission on this platform — symlink escape test skipped");
+        return;
       }
     }
     await expect(resolveAuthorizedPath(root, "link-out/secret.txt")).rejects.toThrow(SecurityError);
@@ -66,7 +67,8 @@ describe("resolveAuthorizedPath (filesystem boundary)", () => {
     try {
       await symlink(join(root, "..", "definitely-missing-target-xyz"), link, "file");
     } catch {
-      return; // no symlink permission on this platform
+      console.warn("no symlink permission on this platform — dangling symlink test skipped");
+      return;
     }
     await expect(resolveAuthorizedPath(root, "dangling-link")).rejects.toThrow(SecurityError);
     await expect(resolveAuthorizedPath(root, "dangling-link/deep/file")).rejects.toThrow(SecurityError);
@@ -124,7 +126,14 @@ describe("SafePath hostile corpus — zero escapes from 10,000 generated inputs"
     }
     expect(resolved).toBeGreaterThan(0); // corpus isn't all-reject
     await rm(root, { recursive: true, force: true });
-  }, 60000);
+    // The bound is a LIVELINESS limit, not a correctness claim: this loop
+    // performs 10 000 real filesystem resolutions, and vitest runs test FILES
+    // concurrently, so the wall time is a property of the runner's load
+    // rather than of the code. It passes in ~19s on a quiet Windows machine
+    // and exceeded the old 60s bound when the whole workspace ran at once.
+    // Nothing about the assertion changed: still 10 000 inputs, still zero
+    // escapes, and a genuine escape still fails the test.
+  }, 240_000);
 });
 
 describe("isContained", () => {

@@ -168,3 +168,52 @@ export function hookCommand(runtimeJs: string, hook: Hook): { command: string; a
     args: [runtimeJs, hook.id],
   };
 }
+
+/**
+ * Per-hook runtime policy the runner needs but cannot derive on its own.
+ *
+ * The runner is dependency-free and never parses the manifest (that needs a
+ * YAML parser it deliberately does not ship). So the *build* step — which does
+ * have the parser — extracts the policy and writes it into the bundle as JSON.
+ * The runner reads that file. This keeps the runtime self-contained without
+ * weakening the manifest as the single source of truth.
+ */
+export interface HookPolicy {
+  /** Hard deadline for the handler, in seconds. Absent = no deadline. */
+  timeoutSec?: number;
+  /**
+   * What a handler failure means:
+   * - "blocking"   → the host is denied (exit 2; Antigravity: decision "deny")
+   * - "non-blocking" → the host continues (exit 0)
+   */
+  failurePolicy: "blocking" | "non-blocking";
+}
+
+/** Every hook's runtime policy, keyed by hook id. */
+export type HookPolicies = Record<string, HookPolicy>;
+
+/** Filename (relative to the bundle's hooks dir) of the emitted policy file. */
+export const HOOK_POLICIES_FILENAME = "policies.json";
+
+/** Extract the runtime policy of every hook in a plugin. */
+export function hookPolicies(hooks: readonly Hook[]): HookPolicies {
+  const out: HookPolicies = {};
+  for (const hook of hooks) {
+    out[hook.id] = {
+      ...(hook.timeoutSec !== undefined ? { timeoutSec: hook.timeoutSec } : {}),
+      failurePolicy: hook.failurePolicy,
+    };
+  }
+  return out;
+}
+
+/**
+ * Serialize hook policies into the JSON the dependency-free runner reads.
+ *
+ * The runner never parses YAML, so the build step writes this file. The shape
+ * is deliberately flat (`{ "<hook-id>": { timeoutSec, failurePolicy } }`) so the
+ * runner can look up one hook without walking a schema.
+ */
+export function renderHookPolicies(hooks: readonly Hook[]): string {
+  return JSON.stringify(hookPolicies(hooks), null, 2) + "\n";
+}
