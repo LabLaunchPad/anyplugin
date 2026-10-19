@@ -242,8 +242,18 @@ certificate-bound contracts.
 
 ## 6. Related documents
 
+**This file is the *contract*.** The files below are the *plan* — what gets
+built, in what order, and what proves each step works.
+
 | Document | Owns |
 |---|---|
+| `roadmap.md` | **The MVP ladder**, the problem-solving framework, the delegation contract, the metrics, the before/after |
+| `gaps.md` | Why the specification existed without a plan; the coverage matrix; what remains open |
+| `substrate.md` | The seven-repo proven substrate, the build slots, the licence allowlist |
+| `tools.md` | The 18-tool surface, the two tiers, the eight region bundles, the egress chokepoint |
+| `simulations.md` | The certification harness, the scenario catalogue, the environment matrix, the metric set |
+| `learnings.md` | The extraction ledger: every learning with its source, its status, its negative case, and what is planned but unbuilt |
+| `platform-engineering.md` | The patterns stolen from Linux, Debian, Android, Apple and the clouds, and the lawful boundary for learning them |
 | `trust.md` | Identity, attestation, the anchor chain, the commit-point protocol, multi-tenant isolation |
 | `optimization.md` | The learning loop, the shadow protocol, the ramp, and the nine top signals |
 | `economics.md` | Prompt caching and batching, with the corrected provider table |

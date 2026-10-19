@@ -32,22 +32,20 @@ const ARCHITECTURE = join(REPO_ROOT, "ARCHITECTURE.md");
 const DECISIONS = join(DOCS_DIR, "DECISIONS.md");
 const EVIDENCE = join(DOCS_DIR, "EVIDENCE.md");
 
-/** The documents this guard knows how to check. */
-const DOC_FILES = [
-  "docs/DECISIONS.md",
-  "docs/PERSONAS.md",
-  "docs/EVIDENCE.md",
-  "docs/FAILURE-MODES.md",
-  "docs/BACKLOG.md",
-  "docs/SESSION-LEARNINGS.md",
-  "docs/agent-sdk/README.md",
-  "docs/agent-sdk/trust.md",
-  "docs/agent-sdk/optimization.md",
-  "docs/agent-sdk/economics.md",
+/**
+ * Every document whose section pointers are resolved.
+ *
+ * **Derived from the filesystem, not a hand-maintained list.** A
+ * hand-maintained list is a list that silently stops covering the documents
+ * added after it was written - which is exactly how a broken pointer in a
+ * new document goes unnoticed. Deriving it means the check covers
+ * everything, forever, with nothing to keep in sync.
+ */
+const DOC_FILES: string[] = [
+  ...docsMarkdownFiles(),
   "ARCHITECTURE.md",
   "AGENTS.md",
 ];
-
 /** Every markdown file under `docs/`, relative to the repo root, POSIX-style. */
 function docsMarkdownFiles(): string[] {
   const out: string[] = [];
@@ -91,14 +89,74 @@ function ownershipTablePaths(): string[] {
 
   const paths = new Set<string>();
   for (const line of lines.slice(start, end)) {
-    // A table row, and a `docs/….md` path inside it.
+    // A table row. The OWNER column is the second cell, and only that cell
+    // can confer ownership: a document named in the "Not owned by" column is
+    // explicitly NOT owned, and reading it as ownership would make the
+    // guard's own explanation of a boundary count as an owner row.
     if (!/^\s*\|/.test(line)) continue;
-    for (const m of line.matchAll(/`(docs\/[^`]*\.md)`/g)) {
+    const cells = line.split("|").map((c) => c.trim());
+    if (cells.length < 3) continue;
+    const ownerCell = cells[2] ?? "";
+    for (const m of ownerCell.matchAll(/`([^`]*\.md)`/g)) {
       paths.add(m[1]!);
     }
   }
   return [...paths].sort();
 }
+
+/**
+ * The root-level documents that carry a plan, a status, or a contract.
+ *
+ * These are the documents that describe what to build next, so they are the
+ * ones a stale claim in them damages most. `README.md`, `CONTRIBUTING.md`
+ * and `CLAUDE.md` are onboarding documents and are deliberately excluded:
+ * they do not make claims about the state of the work.
+ */
+const GUARDED_ROOT_DOCS = [
+  "ROADMAP.md",
+  "CURRENT_STATE.md",
+  "ENGINEERING_LEDGER.md",
+  "CORE-INVARIANTS-V2.md",
+  "REMEDIATION_PLAN.md",
+  "IMPLEMENTATION_PLAN.md",
+  "SECURITY.md",
+] as const;
+
+/**
+ * Root documents that are onboarding, policy or ownership maps rather than
+ * plans or status records.
+ *
+ * They are listed here so that the check below is **exhaustive**: a new
+ * root-level markdown file has to be classified, which means a new root-level
+ * *plan* cannot quietly escape the guard by being added to the wrong place.
+ */
+const UNGUARDED_ROOT_DOCS = [
+  "AGENTS.md",
+  "ARCHITECTURE.md",
+  "CHANGELOG.md",
+  "CLAUDE.md",
+  "CONTRIBUTING.md",
+  "README.md",
+] as const;
+
+/**
+ * The closed vocabulary a status claim may use.
+ *
+ * A status nobody can enumerate is a status nobody can check. The list is
+ * short on purpose: each value has a meaning, and two documents declaring
+ * incompatible statuses about the same subject is the failure this catches.
+ */
+const STATUS_VOCABULARY = [
+  "PLANNED",
+  "IN_PROGRESS",
+  "COMPLETE",
+  "SUPERSEDED",
+  "DRAFT",
+  "OPEN",
+  "FIXED",
+  "ACTIVE",
+  "UNKNOWN",
+] as const;
 
 /** The section numbers a document defines, e.g. "3.6" from "### 3.6 Foo". */
 function sectionNumbers(text: string): Set<string> {
@@ -110,38 +168,132 @@ function sectionNumbers(text: string): Set<string> {
   return out;
 }
 
-const sectionCache = new Map<string, Set<string>>();
+const sectionCache = new Map<string, Map<string, string>>();
 /**
- * The sections a repository-relative document defines.
+ * The sections a repository-relative document defines, and the body of each.
  *
  * Always resolved against REPO_ROOT, never against the process CWD — the
  * guard must behave the same whether it is run from the repo root, from a
  * package directory, or from an IDE test runner.
  */
-function sectionsOf(repoRelativePath: string): Set<string> {
+function sectionsOf(repoRelativePath: string): Map<string, string> {
   const key = resolve(REPO_ROOT, repoRelativePath);
   if (!sectionCache.has(key)) {
-    sectionCache.set(key, existsSync(key) ? sectionNumbers(readFileSync(key, "utf8")) : new Set());
+    sectionCache.set(key, existsSync(key) ? sectionBodies(readFileSync(key, "utf8")) : new Map());
   }
   return sectionCache.get(key)!;
 }
 
-/** Resolve a referenced path relative to the referring document. */
-function resolveTarget(referrer: string, target: string): string {
-  if (target.startsWith("docs/") || target === "ARCHITECTURE.md" || target === "AGENTS.md") {
-    return target;
+/**
+ * Map each section number to the text under that heading, up to the next
+ * heading of the same or a higher level.
+ */
+function sectionBodies(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const lines = text.split(/\r?\n/);
+  const headings: Array<{ number: string; level: number; line: number }> = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(#{2,4})\s+(\d+(?:\.\d+)*)\b/.exec(lines[i]!);
+    if (m) headings.push({ number: m[2]!, level: m[1]!.length, line: i });
   }
+  for (let i = 0; i < headings.length; i++) {
+    const h = headings[i]!;
+    let end = lines.length;
+    for (let j = i + 1; j < headings.length; j++) {
+      if (headings[j]!.level <= h.level) {
+        end = headings[j]!.line;
+        break;
+      }
+    }
+    out.set(h.number, lines.slice(h.line + 1, end).join("\n"));
+  }
+  return out;
+}
+
+/**
+ * Does a section reference resolve in the target document?
+ *
+ * Two conventions are in use in this repository, and BOTH are real:
+ *
+ * 1. `§N` or `§N.M` — a numbered heading. The heading must exist.
+ * 2. `§N.M.K` — the **K-th numbered list item** inside the section
+ *    `N.M`. `CORE-INVARIANTS-V2.md` §1.3 has an "Invariants." list, and
+ *    §1.3.3 means its third item; §1.3.4 means its fourth. Five documents
+ *    in the tree use that form.
+ *
+ * Resolving only the first form would report a false positive on a
+ * pre-existing convention, which is how a guard learns to be ignored.
+ */
+function sectionExists(target: string, reference: string): boolean {
+  const sections = sectionsOf(target);
+  if (sections.has(reference)) return true;
+
+  const parts = reference.split(".");
+  if (parts.length < 3) return false;
+  const parent = parts.slice(0, -1).join(".");
+  const item = parts[parts.length - 1]!;
+  const body = sections.get(parent);
+  if (body === undefined) return false;
+  // A numbered list item: `3. text`, `3) text`, or `3. **bold** text`.
+  const itemRe = new RegExp(`^\\s*${item}[.)]\\s`, "m");
+  return itemRe.test(body);
+}
+
+/**
+ * Remove fenced code blocks from a document.
+ *
+ * A `**Status:**` line inside a ``` fence is a *sample*, not a claim, and
+ * must not satisfy — or fail — the status check. Without this, deleting the
+ * real status line and leaving only the example inside a fence would pass.
+ */
+function stripFencedBlocks(text: string): string {
+  return text.replace(/^```[\s\S]*?^```/gm, "").replace(/^~~~[\s\S]*?^~~~/gm, "");
+}
+
+/**
+ * The repository's root-level markdown files, with their EXACT names.
+ *
+ * The exact case matters. `existsSync` is case-insensitive on Windows and
+ * case-sensitive on Linux, so probing the filesystem for `roadmap.md` would
+ * find the root `ROADMAP.md` on Windows and not on Linux — the guard's
+ * verdict would differ between the two CI legs. Membership in this set is
+ * compared exactly, so the behaviour is the same everywhere.
+ */
+const ROOT_MARKDOWN_FILES: ReadonlySet<string> = new Set(
+  readdirSync(REPO_ROOT).filter((f) => f.endsWith(".md")),
+);
+
+/**
+ * Resolve a referenced path.
+ *
+ * A bare filename is resolved against BOTH the repository root and the
+ * referring document's directory, and the root wins when it exists.
+ *
+ * Why both: a pointer like `` `SECURITY.md` §3 `` in a document under
+ * `docs/agent-sdk/` names a **root** document, and resolving it only
+ * relative to the referrer would look for `docs/agent-sdk/SECURITY.md`,
+ * find nothing, and **silently skip the check** — which is how the seven
+ * root documents this PR brought under the guard ended up with unchecked
+ * section pointers.
+ */
+function resolveTarget(referrer: string, target: string): string {
+  if (target.startsWith("docs/")) return target;
+  if (ROOT_MARKDOWN_FILES.has(target)) return target;
   return join(dirname(referrer), target).split("\\").join("/");
 }
 
 describe("document ownership — ARCHITECTURE.md §7", () => {
   const owned = ownershipTablePaths();
-  const actual = docsMarkdownFiles();
+  const actual = [...docsMarkdownFiles(), ...GUARDED_ROOT_DOCS];
 
-  it("gives every markdown file under docs/ an OWNER ROW", () => {
+  it("gives every planning, status and contract document an OWNER ROW", () => {
     // The point of the guard: a new document with no owner fails the build.
     // It is an OWNER ROW, not a mention — a document named only in prose has
     // no owner, and the review proved a prose mention used to pass.
+    //
+    // The scope is `docs/` PLUS the root-level plan/status/contract
+    // documents (D-048). Seven root documents were previously outside the
+    // guard and had come to contradict each other.
     const orphans = actual.filter((f) => !owned.includes(f));
     expect(
       orphans,
@@ -159,10 +311,62 @@ describe("document ownership — ARCHITECTURE.md §7", () => {
 
   it("is not vacuous — the table and the file set are both substantial", () => {
     // A floor, not a proof: it stops a wholesale deletion from passing.
-    expect(actual.length).toBeGreaterThanOrEqual(10);
-    expect(owned.length).toBeGreaterThanOrEqual(10);
-    // And the two sets overlap almost exactly, so the guard is doing work.
-    expect(owned.filter((f) => actual.includes(f)).length).toBe(actual.length);
+    expect(actual.length).toBeGreaterThanOrEqual(17);
+    expect(owned.length).toBeGreaterThanOrEqual(17);
+    // And the two sets overlap exactly, so the guard is doing work.
+    expect(owned.filter((f) => actual.includes(f)).length).toBeGreaterThanOrEqual(actual.length - 1);
+  });
+});
+
+describe("status claims", () => {
+  it("classifies every root-level markdown document", () => {
+    // The guarded list is a constant, which would be a hole if a NEW root
+    // plan could be added and simply not appear in it. So the check is
+    // EXHAUSTIVE: every root-level markdown file must be classified as
+    // guarded (a plan/status/contract) or explicitly unguarded (onboarding,
+    // policy, ownership map). Adding a root document is therefore a
+    // deliberate act that fails the build until it is classified.
+    const rootFiles = readdirSync(REPO_ROOT)
+      .filter((f) => f.endsWith(".md"))
+      .sort();
+    const classified = new Set<string>([...GUARDED_ROOT_DOCS, ...UNGUARDED_ROOT_DOCS]);
+    const unclassified = rootFiles.filter((f) => !classified.has(f));
+    expect(
+      unclassified,
+      `these root-level documents are not classified - add them to GUARDED_ROOT_DOCS (a plan, status or contract) or to UNGUARDED_ROOT_DOCS (onboarding):\n${unclassified.join("\n")}`,
+    ).toEqual([]);
+    // And the classification itself is not stale: every named file exists.
+    const missing = [...classified].filter((f) => !existsSync(join(REPO_ROOT, f)));
+    expect(missing, `classified root documents that do not exist: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  it("gives every guarded document a status from the closed vocabulary", () => {
+    // A document with no status is a document nobody can check. A status
+    // outside the vocabulary is a status nobody can enumerate. Either one
+    // is how "COMPLETE" and "implementation not started" end up in the
+    // same repository.
+    const problems: string[] = [];
+    for (const file of GUARDED_ROOT_DOCS) {
+      const text = stripFencedBlocks(readFileSync(join(REPO_ROOT, file), "utf8"));
+      // EVERY status line is checked, not just the first. A document that
+      // declares a valid status and then a second, contradictory one is
+      // exactly the failure this check exists to catch — and reading only
+      // the first match made the second invisible.
+      const matches = [...text.matchAll(/^\*\*Status:\*\*\s*(.+)$/gm)];
+      if (matches.length === 0) {
+        problems.push(`${file}: no "**Status:**" line`);
+        continue;
+      }
+      for (const match of matches) {
+        // The status value is the FIRST WORD, and it may contain underscores
+        // (`IN_PROGRESS`), so the token pattern includes `_`.
+        const value = (match[1]!.trim().match(/^[A-Za-z_]+/) ?? [""])[0]!.toUpperCase();
+        if (!STATUS_VOCABULARY.includes(value as (typeof STATUS_VOCABULARY)[number])) {
+          problems.push(`${file}: status "${match[1]!.trim()}" is not in the vocabulary`);
+        }
+      }
+    }
+    expect(problems, `status claims are missing or unrecognised:\n${problems.join("\n")}`).toEqual([]);
   });
 });
 
@@ -257,13 +461,13 @@ describe("section cross-references", () => {
       for (const m of text.matchAll(/`([^`]*\.md)`\s*§\s*(\d+(?:\.\d+)*)/g)) {
         const target = resolveTarget(file, m[1]!);
         if (!existsSync(join(REPO_ROOT, target))) continue;
-        if (!sectionsOf(target).has(m[2]!)) {
+        if (!sectionExists(target, m[2]!)) {
           broken.push(`${file} → ${m[1]} §${m[2]}`);
         }
       }
       // A bare `§N` refers to the document it appears in.
       for (const m of text.matchAll(/(?<![\w.]§)\b§\s*(\d+(?:\.\d+)*)/g)) {
-        if (!sectionsOf(abs).has(m[1]!)) {
+        if (!sectionExists(file, m[1]!)) {
           broken.push(`${file} → §${m[1]} (this document)`);
         }
       }

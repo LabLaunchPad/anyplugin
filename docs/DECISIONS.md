@@ -825,6 +825,423 @@ alternative is shipping the four defects above.
 
 ---
 
+## Theme F — The implementation roadmap (2026-10-20)
+
+### D-039 — The SDK is built in a **separate repository** and consumes the kernel as a published package
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/gaps.md` §1; `docs/DECISIONS.md` D-003
+
+**Context:** D-003 established that the SDK is a *separate product* that
+*consumes* the kernel rather than being AnyPlugin scope. Where that product
+physically lives was still open, and the drafting request specified
+`packages/digest-worker` inside this monorepo — which would have quietly
+converted "separate product" into "same release train".
+
+**Decision:** The SDK is a separate repository, published to npm, depending on
+`@lablaunchpad/worker-runtime` as a versioned package. The kernel is
+published first and the SDK pins a contract version, not a git SHA.
+
+**Alternatives rejected.** Same monorepo, published together (the kernel's
+release cadence becomes hostage to a product with a different audience and a
+commercial roadmap; a breaking SDK change would force a kernel release).
+Same monorepo, unpublished (a half-state: source together, shipping apart
+later, and nothing forces the split to actually happen).
+
+**Consequences:** Two CI pipelines, two release cadences, and a
+cross-repository dependency to keep honest. In exchange, the kernel's
+contract version becomes a genuine, published, semver-managed interface —
+which is what makes it safe for a third party to build against. The cost is
+that any kernel change the SDK needs is a two-PR change, and the plan must
+therefore sequence kernel work (MVP 2) before the SDK work that depends on it.
+
+---
+
+### D-040 — Two state stores, with one direction of truth: **the log is the truth, SQLite is the projection**
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/roadmap.md` §6 (MVP 3); `docs/DECISIONS.md` D-037
+
+**Context:** The drafting request specified an "event-sourced SQLite store
+(WAL mode) with checkpoints", while the kernel already owns a single-writer
+append-only hash-framed event log. D-037 had already rejected the *sidecar
+log* — "two write paths, two hash chains, and no answer to which is
+authoritative?" The obvious reading of the request was that it asked for the
+rejected thing again.
+
+**Decision:** Both stores exist, and the direction of truth is stated
+mechanically:
+
+| Store | Role | May it hold anything the log does not? |
+|---|---|---|
+| **The kernel's event log** | The **system of record**. Every event, every checkpoint, every promotion, every policy change. | — |
+| **SQLite (WAL)** | A **derived projection** and a **materialised checkpoint store**, rebuildable by folding the log. | **No.** A SQLite row that is not derivable from the log is a defect. |
+
+**Drift is detected, not prevented.** Every SQLite row carries the log
+sequence number it was derived from. A `doctor` check compares SQLite's
+maximum sequence against the log head; a difference is a `BLOCKED` finding
+with a rebuild command, not a silent inconsistency.
+
+**Consequences:** SQLite gets the query performance, the vector search and the
+transactional checkpointing that the log cannot, and the log keeps the
+guarantees. The cost is a projection pipeline that must be deterministic and
+re-runnable, and a `doctor` check that has to exist from day one rather than
+being bolted on when drift first appears.
+
+---
+
+### D-041 — The graph engine is split: **deterministic traversal in the kernel, evidence-gated policy in the SDK**
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/roadmap.md` §6 (MVP 2); `packages/worker-runtime/src/contracts/index.ts`
+
+**Context:** The kernel owns `GraphNodeSchema`, `GraphEdgeSchema`,
+`GraphSnapshotSchema` and a nine-value `EDGE_KINDS` — and **no traversal
+engine**, with those symbols referenced nowhere outside their own
+definitions. `ROADMAP.md`'s milestone M5 ("deterministic traversal across
+branching, multi-hop, cycles, disconnected components; byte-identical output
+for identical input") is therefore **undone**. The requirement was for
+"multi-tier graph engineering".
+
+**Decision:** Two layers, with the boundary drawn at *determinism*:
+
+| Layer | Owns | Where |
+|---|---|---|
+| **Traversal** | Node/edge walking, cycle detection, reachability, topological order, and the **invalidation cascade** that `InvalidationResultSchema` already describes | **The kernel** (MVP 2) — completing M5 |
+| **Policy** | Which edges may be traversed, on what evidence, with what budget, and what a `BROKEN` claim does to the path | **The SDK** (MVP 3) |
+
+**Alternatives rejected.** All of it in the SDK (the kernel's graph contract
+would stay a dead letter, and M5 would stay open). All of it in the kernel
+(evidence-gated routing needs the SDK's policy vocabulary — tiers, budgets,
+grounding — and putting it in the kernel would violate "the kernel never
+infers").
+
+**Consequences:** The kernel gains a real, tested capability and a closed
+milestone. The SDK's graph policy stays swappable, and the kernel's traversal
+is reusable by AnyPlugin itself — which is how the repository becomes the
+first graph the engine is tested against.
+
+---
+
+### D-042 — The **region bundle** is the unit of tailoring; a compliance profile is a required field
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/tools.md` §4–§5
+
+**Context:** The requirement was for tools tailored to "latest area, region,
+country specific user needs", and then for "multi tier solutions with ready to
+go templates as per users persona and its compliance needs" — without
+naming a first jurisdiction.
+
+**Decision:** A **region bundle** is a versioned, citable artefact holding
+`locales`, `currency` (with ISO 4217 minor units), `timezone` (identifier),
+`taxRates` (with `effectiveFrom`), `holidays` (with shift rules), and a
+mandatory **`complianceProfile`**. Eight bundles ship: IN, SG, AE, SA, CN, BR,
+EU/EEA+UK, US.
+
+**Alternatives rejected.** One region first (the request explicitly asked for
+multi-tier templates, not a bet). Locale strings only (a locale is
+formatting; a compliance profile is *policy*, and policy is what actually
+changes which tools may run).
+
+**Consequences:** Every bundled dataset needs a version, an effective date
+and a citation, and therefore a refresh channel that produces an auditable
+*diff* rather than a silent overwrite. Two bundles (Brazil, US-health) carry
+**UNVERIFIED** regulatory claims in the evidence ledger and must not ship
+until re-verified — which is recorded rather than quietly smoothed over.
+
+---
+
+### D-043 — Eighteen tools in two tiers; a third-party MCP server may only ever be `network`
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/tools.md` §2–§3
+
+**Context:** The requirement was for "Top 10–20 tools as per latest area,
+region, country specific user needs", and then for the full surface
+"including MCP servers".
+
+**Decision:** Eighteen tools, each with a **required tier field** (`local` or
+`network`) in its schema. `local` is the default surface and has **no egress
+path at all**. `network` is disabled by default for regulated tenants. A
+**third-party MCP server can only ever be `network`**, and can never confer
+`AUTHORITATIVE` authority — an unpinned one is `REPORTED` at best.
+
+**Alternatives rejected.** A single blended surface (the tool set's tier would
+be invisible to the model and to the policy engine, and "local-first" would
+become unfalsifiable). Letting an MCP server declare itself `local`
+(a local stdio MCP server is a local *process*; the MCP authorization spec
+applies to HTTP transports only and explicitly says stdio implementations
+SHOULD NOT follow it — so it needs containment, not an OAuth trust grant).
+
+**Consequences:** A `local` tier that works with the network disabled is a
+hard requirement, not a nice-to-have, which constrains the parsing stack
+(no hosted OCR, no hosted geocoder, no hosted tax API). The cost is that
+some capabilities need a deliberate opt-in and a legal basis before they
+work, and the SDK must be able to emit that legal basis as an artefact.
+
+---
+
+### D-044 — Prompt compression is **built**, not depended upon
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/substrate.md` §3.5; `docs/EVIDENCE.md` E3, E5, E8
+
+**Context:** `microsoft/LLMLingua` is the reference implementation for
+training-free prompt compression: MIT, 6,756★, EMNLP'23 + ACL'24, and the
+*technique* is sound. It is also self-classified `Development Status :: 3 -
+Alpha`, its **last release was 2024-04-09**, and it pulls in torch and
+transformers — a heavy, GPU-adjacent dependency inside a client-first SDK.
+
+**Decision:** Build the compression tier (~400 LOC). The technique is
+LLMLingua's; the *gate* is ours: a cheap local evaluator head decides
+whether the compressed context still answers the question, and emits
+`compression_ratio`, `evidence_recall` and `verifier_pass` as span
+attributes. LLMLingua becomes an optional server-side peer.
+
+**Alternatives rejected.** Depending on LLMLingua (an alpha-classified
+research artefact with no release in two and a half years, and a dependency
+weight that contradicts the zero-compute default). Skipping compression
+entirely (then the SDK pays full input cost for every turn, which is the
+single largest cost lever available).
+
+**Consequences:** The SDK owns the quality gate, which is the part that makes
+compression *auditable* — LLMLingua does not do it at all. The cost is that
+our implementation is ours to maintain, and that the evaluator head's own
+accuracy becomes a measured quantity we must report rather than assume.
+
+---
+
+### D-045 — A **licence allowlist** governs every dependency, enforced in CI
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/substrate.md` §5
+
+**Context:** The draft evidence base named **BentoPDF**, which is AGPL-3.0
+(a modified Artifex PyMuPDF). AGPL §13 infects any service that links it.
+The same base named the `kreuzberg-dev/kreuzberg` main repository, whose
+README says *Elastic License 2.0* — source-available, not open source. It
+also named `sermakarevich/chunker`, which has **no licence file at all**, so
+it is all-rights-reserved: readable, not dependable upon.
+
+**Decision:** A closed allowlist — MIT, Apache-2.0, BSD-2/3, ISC, 0BSD,
+Unlicense, CC0-1.0, public domain, Unicode-3.0, OFL-1.1, PostgreSQL — and a
+deny-list for AGPL, ELv2, BUSL, SSPL, and *no licence file*. A CI test
+asserts every lockfile licence is in the allowlist or appears in a reviewed
+exception file naming the dependency, the licence, the reason, and an expiry
+review date.
+
+**Consequences:** BentoPDF and the ELv2 Kreuzberg repository are excluded
+today. `@kreuzberg/wasm` is pinned to the `4.x` MIT LTS line (or Xberg
+adopted). Two of the most valuable algorithms in the draft — the hierarchical
+chunker and the binary-tree reducer — are **reimplemented from their
+published descriptions** rather than vendored, because their licences do not
+permit it. That is more work and it is the correct trade.
+
+---
+
+### D-046 — The five agent phases OTel does not define live in a **private namespace**
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/substrate.md` §3.7; `docs/EVIDENCE.md` E17
+
+**Context:** The draft evidence base asserted that the OpenTelemetry GenAI
+semantic conventions define "9 agent-specific span kinds (planning,
+reasoning, safety, delegation, memory, tool, model, error, state)". They do
+not. OTel defines `create_agent`, `invoke_agent` (client and internal),
+`invoke_workflow`, `plan`, `execute_tool`, `load skill`, `read skill
+resource`, `command execution` — and nothing for reasoning, guardrail,
+delegation, memory-as-span, or state. The conventions have also **moved** to
+`open-telemetry/semantic-conventions-genai`, and their status is
+**Development**.
+
+**Decision:** Use `gen_ai.*` where OTel defines it, and define the five
+missing phases under a documented private namespace — `agent.reasoning`,
+`agent.guardrail`, `agent.delegation`, `agent.memory`, `agent.state` — with
+a stated upstream-migration path. Pin a commit of the conventions, not a
+range.
+
+**Alternatives rejected.** Emitting nine bespoke kinds and calling it OTel
+(the drift test in D-030 exists precisely to stop a document claiming a
+standard it does not follow). Forking the conventions (a fork of a
+SIG-governed, unstable specification is a maintenance trap).
+
+**Consequences:** Five phases are ours to keep stable across upstream churn,
+which is work. In exchange, the vocabulary is honest about what it is, and a
+downstream user who wants upstream names has a documented mapping.
+
+---
+
+### D-047 — The graph traversal engine lands **in the kernel**, completing milestone M5
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/gaps.md` §2; `ROADMAP.md` M5
+
+**Context:** The kernel's `GraphNodeSchema`, `GraphEdgeSchema` and
+`GraphSnapshotSchema` exist and are referenced **nowhere else** in the
+repository. `InvalidationResultSchema` declares `affectedNodes`,
+`staleDecisions`, `reopenedWork` and `requiresReverification` — fields that
+**cannot be computed without traversal**. The invalidation engine therefore
+has a contract and no implementation.
+
+**Decision:** The traversal engine is built in the kernel, as MVP 2 of the
+SDK roadmap, with the M5 acceptance criteria as its gate: deterministic
+traversal across branching, multi-hop, cycles and disconnected components,
+and byte-identical output for identical input.
+
+**Consequences:** This is the only work in the roadmap that modifies
+AnyPlugin rather than the SDK repository, and it is a **closure of an
+existing milestone** rather than new scope. It needs no contract version
+bump — traversal is a pure function over an existing contract — so it is
+the cheapest high-value item in the whole plan. It also makes the repository
+itself the first test corpus: AnyPlugin's own dependency graph is a real,
+branching, multi-hop, cyclic graph with a known-correct expected output.
+
+---
+
+### D-048 — Root-level planning documents come **under the ownership guard**, and a status claim must come from a closed vocabulary
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/gaps.md` §1.2; `core/src/boundaries/doc-ownership.test.ts`
+
+**Context:** PR #29 built a document-ownership guard and pointed it at
+`docs/`. Seven planning and status documents live at the **repository
+root** — `ROADMAP.md`, `CURRENT_STATE.md`, `ENGINEERING_LEDGER.md`,
+`CORE-INVARIANTS-V2.md`, `REMEDIATION_PLAN.md`, `IMPLEMENTATION_PLAN.md`,
+  `SECURITY.md` — and were therefore **outside the guard**. (`CHANGELOG.md`
+  is the thirteenth root document and is deliberately **classified as
+  onboarding**, not as a plan or status record — the classification is
+  exhaustive, so a new root document cannot escape the guard by being
+  added to the wrong list.) They are also
+mutually contradictory: `IMPLEMENTATION_PLAN.md` says "COMPLETE … the
+repository's documentation gaps are closed" while `ROADMAP.md` says
+"implementation not started" and `CORE-INVARIANTS-V2.md` says "No
+implementation is authorized by this document." `ROADMAP.md` also claims
+`packages/` is not a workspace location, which `pnpm-workspace.yaml`
+contradicts in five lines.
+
+**Decision:** Two mechanical changes, both implemented in this cycle:
+
+  1. The ownership guard's scope extends from `docs/` to **every** markdown
+     file in the repository that carries a plan, a status, or a contract, and
+     the classification is **exhaustive** — a new root-level markdown file
+     fails the build until it is classified as guarded or explicitly
+     unguarded. A document that declares a status must use a status from a
+     **closed vocabulary**, and **every** status line in it is checked (not
+     just the first), with fenced code blocks excluded so that an example
+     cannot satisfy the check.
+  2. The false claims are corrected: `ROADMAP.md`'s status line and its
+     `packages/` claim, `IMPLEMENTATION_PLAN.md`'s "the repository's
+     documentation gaps are closed", and the other five root documents each
+     declare a status from the vocabulary.
+
+  The full rewrite of `ROADMAP.md` into a live document is deferred (BACKLOG
+  P2-23), because a correction and a rewrite are different kinds of work.
+
+  **What this does NOT do, stated plainly.** The guard does **not** compare
+  two documents' statuses about the same subject. That check was considered
+  and is **not implemented** — it needs a declared subject-to-status mapping
+  that does not exist yet, and inventing one to satisfy a test would be
+  ceremony rather than a check. The contradiction the guard *cannot* catch is
+  therefore caught by **review**, and it is recorded as an open item
+  (`docs/BACKLOG.md` P2-29) rather than being claimed as a guarantee.
+
+**Consequences:** The guard now covers the documents that actually describe
+what to build next — which is the gap that let a false "implementation not
+started" survive two shipped milestones. The cost is that adding a new root
+document now requires an owner row, and that the status vocabulary has to be
+maintained.
+
+---
+
+### D-049 — The SDK does **not** adopt AIIAI 3.0's evidence shape, and does **not** adopt the gateway audit's scoring
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/gaps.md` §4
+
+**Context:** Two of the four attached reference documents propose things this
+kernel already does better.
+
+AIIAI 3.0 (Z.ai, Oct 2026) models evidence as a **scalar confidence** plus a
+span plus a path, with `status ∈ {grounded, inference, unverified}` — which
+would let a `REPORTED`-authority claim with a resolvable span pass a blocker
+gate. The kernel's model is **typed authority × validity × epistemic rung**,
+and it demotes that claim to `UNCITED` automatically.
+
+The internal gateway audit awards OmniRoute **93.5/100** and full security
+marks on the basis of *no publicly known CVEs* — and **none of its three
+fit scores equals the sum of its own stated components** (58.0 vs 68, 93.5
+vs 92, 31.0 vs 40), with its "non-negotiable rules" referenced but never
+reproduced.
+
+**Decision:** The kernel's evidence model wins. If AIIAI's *shape* is wanted,
+`authority` and `validity` are added as **required** fields rather than
+adopting `status: grounded`. The gateway audit is **not** an input to this
+plan; its requirement list is re-derived from the primary texts.
+
+**Consequences:** The SDK cannot use a scalar confidence threshold as a
+promotion criterion, which is a real constraint — it means the promotion
+gates operate on rung transitions with their own evidence, exactly as
+`optimization.md` §2.4 specifies. The gateway's conclusions have to be
+re-derived rather than inherited, which costs time and produces fewer
+answers.
+
+---
+
+## Theme G — Learning from other systems, lawfully
+
+### D-050 — The licence allowlist is enforced against the **resolved licence file** at the pinned version
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/substrate.md` §3.2, §5; `docs/agent-sdk/learnings.md` §4A
+
+**Context:** D-045 defined a licence allowlist and a deny-list. The
+verification pass then found a **live error in this repository's own
+records**: the Kreuzberg repository had been recorded as *Elastic License 2.0*
+on the strength of its **README**, and was later found to be **MIT** — in
+five independent places, including the `LICENSE` file itself. In the same
+pass, a second repository was found with a README asserting *"the code is
+MIT"* and **no licence file at all**, and a third whose licence is AGPL with
+an enterprise overlay reached through a path convention.
+
+**Decision:** The allowlist is checked against the **resolved licence file at
+the pinned version**, by CI, on every dependency. A README, a badge, a
+package-registry field, a GitHub detector, and a blog post are **not**
+evidence of a licence. Where the file is absent, the dependency is **not
+admitted** — an absent file is all-rights-reserved, and a README sentence is
+not a grant.
+
+**Consequences:** The check is a build step, not a review step, and it reads
+the artefact rather than the metadata around it. The cost is that a licence
+that *changes* — as Kreuzberg's apparently did between two reads in the same
+month — becomes a CI failure until the allowlist is re-derived, which is the
+intended behaviour. The rule also retires a whole class of "we checked the
+badge" reasoning, which is how a permitted dependency gets refused or a
+forbidden one gets admitted.
+
+---
+
+### D-051 — External repositories are mined in a **non-persistent scratch folder**; nothing is vendored and no source is reproduced
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/platform-engineering.md` §1, §4; `docs/agent-sdk/learnings.md` §4B
+
+**Context:** The plan needed real engineering patterns from real systems, and
+the only honest way to get them is to **read the source** — not the
+marketing. That creates two risks: pulling unlicensed or copyleft code into
+the tree, and filling a document with copied expression.
+
+**Decision:** The mining happens in a **scratch directory outside the
+repository**, which is deleted afterwards. The output is **mechanisms,
+contracts, invariants and failure-mode defences**, with a `repo + path +
+lines` citation and **no excerpt**. Where a source's licence forbids reuse
+(no licence file, AGPL, or a self-disclaiming research artefact), only the
+**idea** is taken and the source is marked `idea-only` or
+`refuse-to-copy` in the ledger.
+
+**Alternatives rejected.** Vendoring the patterns (licence exposure, and
+vendoring is how a 6-star repository becomes a 6-star dependency). Reading
+vendor documentation only (the interesting parts — the failure-mode defences
+— are not in the documentation). Copying code into the plan (expression is
+copyrightable, and the plan is a document people will copy *from*).
+
+**Consequences:** The learnings are **citable and checkable** without
+copying anything, and the repository stays free of the sources. The cost is
+that the citations are pointers, not quotes — a reader must clone the repo
+to verify a line number, which is exactly the discipline the evidence ledger
+already imposes. The scratch corpus is disposable, so the work is
+**reproducible but not incremental**: a future cycle re-mines rather than
+re-derives.
+
+---
+
 ## Related documents
 
 | Question | Owner |
@@ -836,3 +1253,8 @@ alternative is shipping the four defects above.
 | Where does every external claim come from? | `docs/EVIDENCE.md` |
 | Who is this for, and what are they accountable for? | `docs/PERSONAS.md` |
 | What is the SDK, and what does it consume? | `docs/agent-sdk/README.md` |
+| What is the MVP roadmap, and what does each MVP ship? | `docs/agent-sdk/roadmap.md` |
+| What was missing, and why did the last cycle stop at docs? | `docs/agent-sdk/gaps.md` |
+| Which proven OSS repos do we depend on, and which do we build? | `docs/agent-sdk/substrate.md` |
+| What tools does the Worker have, and how are they tailored by region? | `docs/agent-sdk/tools.md` |
+| How is the whole thing certified? | `docs/agent-sdk/simulations.md` |

@@ -238,6 +238,7 @@ is worse than no guarantee.
 | What is the journal? | `cli/src/journal.ts` | `cli/src/transaction.ts` (the engine) |
 | How does an install roll back? | `cli/src/transaction.ts` | `cli/src/journal.ts` |
 | What is the kernel contract? | `packages/worker-runtime/src/contracts/index.ts` | `docs/WORKER-RUNTIME-KERNEL.md` (design input) |
+| What does the kernel's design say, and why? | **`docs/WORKER-RUNTIME-KERNEL.md`** | the contracts (the authority) |
 | What can be observed? | `packages/worker-runtime/src/resource/telemetry.ts` | prose |
 | What can go wrong, and what happens? | **`docs/FAILURE-MODES.md`** | scattered prose |
 | What is still open? | **`docs/BACKLOG.md`** | `ROADMAP.md` (strategy) |
@@ -252,15 +253,40 @@ is worse than no guarantee.
 | How does the SDK prove what it did? | **`docs/agent-sdk/trust.md`** | — |
 | How does the SDK improve itself, and how is that read? | **`docs/agent-sdk/optimization.md`** | — |
 | What do caching and batching actually cost? | **`docs/agent-sdk/economics.md`** | — |
+| What is the MVP roadmap, and what does each MVP ship? | **`docs/agent-sdk/roadmap.md`** | — |
+| What was missing, and why did the last cycle stop at docs? | **`docs/agent-sdk/gaps.md`** | — |
+| Which proven OSS repos do we depend on, and which do we build? | **`docs/agent-sdk/substrate.md`** | — |
+| What tools does the Worker have, and how are they tailored by region? | **`docs/agent-sdk/tools.md`** | — |
+| How is the whole thing certified? | **`docs/agent-sdk/simulations.md`** | — |
+| What was learned, what was refused, and what is planned but unbuilt? | **`docs/agent-sdk/learnings.md`** | — |
+| The platform patterns stolen from Linux, Debian, Android, macOS and the clouds | **`docs/agent-sdk/platform-engineering.md`** | — |
 | Which adopted patterns the evidence supports, and which it does not? | `docs/PATTERNS.md` | — |
 | What procedures must a change follow? | `docs/ai-native/reusable-procedures.md` | — |
 | What did the external research audit find? | `docs/ai-native/harness-corpus-audit.md` | — |
+| What is the strategy, milestone by milestone? | **`ROADMAP.md`** | `ARCHITECTURE.md` (shape) |
+| What is true right now? | **`CURRENT_STATE.md`** | prose |
+| Which defects are open, fixed, or unmapped? | **`ENGINEERING_LEDGER.md`** | `docs/BACKLOG.md` (the classified backlog) |
+| What are the non-negotiable invariants? | **`CORE-INVARIANTS-V2.md`** | `AGENTS.md` (the contract table) |
+| What was the original remediation, and is it done? | **`REMEDIATION_PLAN.md`** | — |
+| What was the audit remediation, and is it done? | **`IMPLEMENTATION_PLAN.md`** | — |
+| What is the security policy? | **`SECURITY.md`** | `docs/FAILURE-MODES.md` (the catalogue) |
 
 **The ownership map is machine-checked.**
 `core/src/boundaries/doc-ownership.test.ts` asserts that every markdown file
-under `docs/` is named in this table, and that every file this table names
-exists. A document with no owner fails the build — a document nobody owns is a
-document nobody maintains.
+under `docs/`, **and every root-level plan, status or contract document**,
+is named in this table; that every file this table names exists; and that
+each guarded document declares a status from a closed vocabulary. A document
+with no owner fails the build — a document nobody owns is a document nobody
+maintains. A document whose status is not in the vocabulary also fails: a
+status nobody can enumerate is a status nobody can check.
+
+**The scope of the guard was widened once, and it mattered.** It originally
+covered `docs/` only. Seven planning and status documents at the repository
+root sat outside it and came to contradict each other — one declaring
+"COMPLETE" while another declared "implementation not started" and a third
+declared "no implementation is authorized". The guard was correct about
+what it covered and blind about what mattered. See `docs/agent-sdk/gaps.md`
+§1.2 and `docs/DECISIONS.md` D-048.
 
 **Mirrors are drift-guarded, not independent.** `knowledge/adapters/event-mapping.md`
 and `anyplugin.plugin.schema.json` are mirrors with a test that fails when they

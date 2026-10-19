@@ -114,6 +114,13 @@ describe("the runtime's inlined SafePath agrees with the core implementation", (
     // The runner inlines the SafePath logic because it ships with no
     // dependencies. That duplication is only safe if the two agree, so the
     // agreement is PROVEN rather than assumed.
+    //
+    // The timeout is explicit because this test spawns a node subprocess per
+    // corpus batch, and vitest's 5 s default is genuinely marginal for it:
+    // on an idle machine it takes ~4.8 s, and under any real load it
+    // crosses 5 s and fails — a verdict that depends on the machine rather
+    // than on the code. The assertion is unchanged; only the budget is
+    // stated. See `docs/BACKLOG.md` P2-28.
     const sandbox = await mkdtemp(join(tmpdir(), "safepath-diff-"));
     try {
       await cp(RUNTIME_DIR, join(sandbox, "runtime"), { recursive: true });
@@ -176,7 +183,7 @@ describe("the runtime's inlined SafePath agrees with the core implementation", (
     } finally {
       await rm(sandbox, { recursive: true, force: true });
     }
-  });
+  }, 60_000);
 });
 
 /** Run the runner with a given cwd and report the cwd the handler saw. */

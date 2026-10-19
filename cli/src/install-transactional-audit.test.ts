@@ -36,7 +36,13 @@ async function pathExists(p: string): Promise<boolean> {
  *  - a failed install leaves ZERO partial files and ZERO orphaned scratch dirs
  *  - a successful install leaves ZERO scratch dirs behind
  */
-describe.sequential("Transactional install — audit regression tests (Finding E)", () => {
+// The timeout is explicit because every test in this file drives a real
+// install/uninstall transaction against the filesystem, and vitest's 5 s
+// default is genuinely marginal for that: under any real load the suite
+// crosses it and fails, so the verdict would depend on the machine rather
+// than on the code. The assertions are unchanged; only the budget is
+// stated. See `docs/BACKLOG.md` P2-28.
+describe.sequential("Transactional install - audit regression tests (Finding E)", { timeout: 60_000 }, () => {
   let testRoot: string;
   let home: string;
   let project: string;

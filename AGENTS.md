@@ -48,6 +48,13 @@ pnpm clean                       # remove all dist/ output
 | Personas, intent, and the authority table | `docs/PERSONAS.md` |
 | External-claim ledger (every outside fact, with its source and access date) | `docs/EVIDENCE.md` |
 | The Agent/Worker SDK (a specification of intent, not this repo's scope) | `docs/agent-sdk/README.md` |
+| The SDK's MVP roadmap (the module decomposition and its gates) | `docs/agent-sdk/roadmap.md` |
+| What was missing, and why the last cycle stopped at docs | `docs/agent-sdk/gaps.md` |
+| The proven OSS substrate, and what we build instead | `docs/agent-sdk/substrate.md` |
+| The 18-tool surface and the region bundles | `docs/agent-sdk/tools.md` |
+| The certification harness and its scenario catalogue | `docs/agent-sdk/simulations.md` |
+| The extraction ledger: what was learned, refused, and deferred | `docs/agent-sdk/learnings.md` |
+| The platform patterns stolen from Linux, Debian, Android, macOS and the clouds | `docs/agent-sdk/platform-engineering.md` |
 | Document-ownership guard (a document with no owner fails the build) | `core/src/boundaries/doc-ownership.test.ts` |
 | Layer stack, dependency direction, "which doc owns what" | `ARCHITECTURE.md` |
 

@@ -1,5 +1,11 @@
 # ENGINEERING_LEDGER.md
 
+**Status:** SUPERSEDED — the ledger records the defect-eradication campaign
+through PR #28. Findings A–L are **FIXED**; the live defect list is
+`docs/BACKLOG.md`, and the live implementation record is
+`IMPLEMENTATION_PLAN.md`. This document is kept because *the reason a
+mechanism was rejected is evidence* — deleting it would mean re-deriving it.
+
 AnyPlugin defect-eradication ledger. Protocol: **VERIFY → FIX → ERADICATE THE CLASS → TEST → UPDATE LEDGER.**
 Statuses: `[OPEN]` · `[INVESTIGATING]` · `[FIXED]` · `[FIXED & ERADICATED]` · `[SPEC'D — QUEUED PHASE 1]` · `[UNMAPPED]`.
 

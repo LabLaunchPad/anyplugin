@@ -1,6 +1,20 @@
 # AnyPlugin Roadmap — the Worker Runtime
 
-**Status:** strategy frozen, implementation not started. M0 is the next action.
+**Status:** IN_PROGRESS — milestones M1–M12 are implemented and shipped. The
+remaining work is the SDK roadmap in `docs/agent-sdk/roadmap.md`; this
+document is retained as the **strategy and milestone record**, not as a live
+status board.
+
+> **Correction (2026-10-20).** This document previously said "implementation
+> not started. M0 is the next action", and stated that "`packages/` is not
+> currently a workspace location". Both were false by then: `pnpm-workspace.yaml`
+> declares `packages/*`, and the kernel under `packages/worker-runtime/` had
+> shipped ten frozen contracts, an append-only event log, a verification
+> engine, an invalidation engine, a delegation wrapper and a `doctor` command.
+> The status claims were correctable, so they were corrected; the document's
+> full rewrite into a live status board is a separate piece of work
+> (`docs/BACKLOG.md` P2-23). The stale claims are catalogued in
+> `docs/agent-sdk/gaps.md` §1.
 
 This document supersedes the short checklist that used to live in `README.md`. It records what we are building, what we are deliberately *not* building, the thirteen milestones (M0–M12, plus M7a) that get us there, and the evidence that shaped them.
 
@@ -124,7 +138,7 @@ The runtime lives at `packages/worker-runtime/` — same pnpm workspace (splitti
 
 Enforced by executable guards in `core/src/boundaries/package-boundary.test.ts`, which classify every invariant as **ARMED** (enforcement exists, target absent, invariant *not* exercised), **PASSED** (target exists and was actually checked), or **FAILED**. ARMED is never reported as PASSED — a vacuously-green check manufactures confidence. The three runtime guards are ARMED today and the test **fails deliberately** the moment `packages/worker-runtime/` appears, forcing a conscious flip to PASSED instead of a silent slide from "never checked" to "checked and fine".
 
-⚠️ **`packages/` is not currently a workspace location — this is a setup step, not an existing property.** `pnpm-workspace.yaml` declares exactly `core`, `adapters/*`, `plugins/*`, `cli`; there is no `packages/*` glob and no `packages/` directory, and root `tsconfig.json` lists seven references, none under `packages/`. **M1's first task** is adding the workspace glob and the tsconfig reference.
+⚠️ **CORRECTED (2026-10-20): `packages/` IS a workspace location.** `pnpm-workspace.yaml` declares `core`, `adapters/*`, `plugins/*`, `cli` **and `packages/*`**; `packages/worker-runtime/` exists, and root `tsconfig.json` references it. This was M1's first task and it is done. The three runtime guards are therefore no longer `ARMED` — the boundary guard reports `PASSED` for the kernel's dependency direction.
 
 ### Language: TypeScript
 
