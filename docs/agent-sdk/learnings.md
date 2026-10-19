@@ -561,6 +561,37 @@ confirmation that the rule is right.
 
 ---
 
+## 4D. The cycle that found a live defect in its own shipped code
+
+**Source:** the P1-10 investigation and its post-mortem, `docs/POST-MORTEMS.md`
+PM-001. **Status:** `ADOPTED` and `BUILT`.
+
+| Learning | Why it generalises |
+|---|---|
+| **A rule with one live consumer is a rule whose input can be a constant.** The kernel's `fallbackLegal` was correct, tested, and **inert**: the only caller passed the literal `false`. | The pattern is not about booleans. It is that a *library* rule and a *caller* are different artefacts, and a library test proves nothing about the caller. **Grep the call sites, not the definition.** |
+| **A false deferral rationale is worse than none.** P1-10 sat open because it "changed a frozen, certificate-bound contract". `fallbackLegal` is not a Zod schema, is not in the `CONTRACTS` registry, has no JSON Schema mirror, is not certificate-bound, and the package is **unpublished**. | A wrong rationale makes a fix look *impossible* rather than merely un-urgent, so nobody re-checks it. **When a fix is deferred, the blocking mechanism must be checked against the registry — not against a README.** |
+| **Three signals that must never share one boolean**: *committed to the host* (irreversible) ≠ *produced an answer* (a presentation fact) ≠ *effect state* (the safety fact). | The first attempt at the fix conflated the first two, and the independent review caught it: nearly every backend prints something, so gating on "produced output" stops the chain from ever falling back and leaves the escape hatch unusable. |
+| **"Probably not" is not "no."** An **unknown** effect state forbids the fallback — the same rule the repository applies to an unknown capability, an unknown quantity, and an unclassifiable failure. | D-013's own rule ("no EFFECT in {IN_FLIGHT, COMMITTED}") silently treats `unknown` as `none`. **A rule that omits a case is not a rule that permits it.** |
+| **The wrapper must say what it cannot know.** A generic CLI wrapper cannot observe whether a backend had an effect on the world, so its honest answer is `UNKNOWN` — and the escape hatch is an explicit *assertion* by the caller (`--re-runnable`), recorded as an assertion. | This is the `MEASURED`/`DERIVED`/`ESTIMATED`/`ATTESTED`/`UNKNOWN` ladder applied to a *safety* decision. An assertion is legitimate; a silent default is not. |
+| **Two answers reaching the host is a presentation problem, not a chain problem.** | It was fixed where it lives — only the answer attempt's stdout goes to stdout — instead of making the chain refuse fallbacks to avoid it. **Fix a defect at the layer that causes it, not at the layer that notices it.** |
+| **A test that asserts the subject's own self-report is the subject grading its own homework.** The suite was green because it agreed with the defect: `expect(outcome.fallbackLegal).toBe(true)`. | A safety claim must be asserted on the **effect** — the filesystem, the exit code, the written record — never only on a value the subject produced. The regression test that finally caught this asserts on a file's contents. |
+| **A document that explains a defect away is worse than no document.** `docs/FAILURE-MODES.md` §5 said the CLI's chain "is therefore unbounded by this rule today, which is honest". | The reasoning was wrong (buffering does not make the host unaware) and the conclusion was a defect wearing the costume of a design property. **Rationalisation is the failure mode that survives review.** |
+| **The class of defect a document guard cannot catch is TRUTH.** The doc-ownership guard found four orphans and seventeen under-specified decisions — and could never have found a hard-coded `false`, because it reads documents and never executes a claim. | The guards to build are therefore **not** document guards: a constant-argument guard, a consumer-aware check over the failure-mode table, and an orphan-contract guard. |
+| **The edge-direction table belongs in the kernel.** `INVALIDATES` propagates forwards; the seven dependency kinds propagate **backwards** (this repository writes its dependency edges *dependent → dependency*); `SUPERSEDES` is a replacement relation and is excluded from the cascade. | Leaving the direction undefined for every caller is how a **second trust ladder** gets built — the mistake this repository already made once, with two independent passes both reaching for a new vocabulary. |
+| **Two id spaces must meet somewhere, and the meeting point must be written down.** `GraphNodeSchema.id` is `ND-…`; `InvalidationResultSchema.staleDecisions` is `DEC-…`. A graph node **cannot** carry a decision's id. | The convention (for record-bearing node kinds, `ref` **is** the record id; a `ref` without the required prefix is an anomaly and the record is excluded) was the missing piece that made the cascade implementable at all. |
+
+**And the negative cases**, which are the half of a ledger that is usually missing:
+
+| The tempting wrong move | Why it is wrong |
+|---|---|
+| "Keep the old `fallbackLegal(committed: boolean)` and add a second function for effects." | Two rules, two callers, two places to forget. The effect state must be a **required argument**, so a caller that forgets it cannot compile. |
+| "Detect the effect by snapshotting the working directory before and after the attempt." | A heuristic, not a proof: mtime granularity, ignored files, effects outside the cwd, and remote effects it cannot see at all. Using a heuristic to permit a duplicate effect is the "guessing is not evidence" failure wearing a different hat. |
+| "Make `committed` mean 'produced any output', so a partial answer blocks the fallback." | Defeats the escape hatch for nearly every real backend. The output harm is a presentation problem; the effect harm is the safety one. |
+| "Default the effect state to `NONE` when the caller does not say." | An unknown quantity defaulted to a safe value — the exact thing the repository forbids everywhere else. The default must be `UNKNOWN`, which forbids the fallback. |
+| "Fix the exit-0-with-an-envelope case by keeping `unknown` out of the failure classes." | `unknown` is a real class with a real behaviour (`report`). Dropping it reported a failed backend as a success. **A class that cannot be classified is still a class.** |
+
+---
+
 ## 5. Decision-making: taken, refused, deferred
 
 | Decision | Verdict | One line of reason |
