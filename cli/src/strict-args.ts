@@ -60,7 +60,39 @@ export const CommandArgs = {
     })
     .strict(),
   "okf-validate": z.object({ plugin: dir.optional(), json: flag.optional() }).strict(),
-  "okf-reindex": z.object({ plugin: dir.optional(), json: flag.optional() }).strict(),
+  "okf-reindex": z.object({ plugin: dir.optional(), json: flag.optional(), "include-root": flag.optional() }).strict(),
+  doctor: z
+    .object({
+      home: dir.optional(),
+      project: dir.optional(),
+      json: flag.optional(),
+      fix: flag.optional(),
+    })
+    .strict(),
+  backends: z
+    .object({
+      registry: dir.optional(),
+      json: flag.optional(),
+    })
+    .strict(),
+  delegate: z
+    .object({
+      registry: dir.optional(),
+      backend: z.string().optional(),
+      capability: z.string().optional(),
+      domain: z.string().optional(),
+      timeout: z.string().optional(),
+      json: flag.optional(),
+    })
+    .strict(),
+  run: z
+    .object({
+      hookId: z.string({ error: "run requires hook-id argument" }),
+      plugin: dir.optional(),
+      event: z.string().optional(),
+      payload: z.string().optional(),
+    })
+    .strict(),
   intensity: z
     .object({
       mode: z.enum(INTENSITY_MODES, {
@@ -92,6 +124,16 @@ const ALL_OPTIONS = [
   "mode",
   "tier",
   "json",
+  "fix",
+  "registry",
+  "backend",
+  "capability",
+  "domain",
+  "timeout",
+  "include-root",
+  "hookId",
+  "event",
+  "payload",
 ] as const;
 
 export interface ParsedCommand<T extends CommandName> {
@@ -114,7 +156,7 @@ export function parseCliArgv<T extends CommandName>(argv: string[]): ParsedComma
   try {
     parsed = parseArgs({
       args: rest,
-      options: Object.fromEntries(ALL_OPTIONS.map((o) => [o, { type: o === "dry-run" || o === "json" ? "boolean" : "string" }])),
+      options: Object.fromEntries(ALL_OPTIONS.map((o) => [o, { type: o === "dry-run" || o === "json" || o === "fix" || o === "include-root" ? "boolean" : "string" }])),
       allowPositionals: true,
       strict: true,
     });

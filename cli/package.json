@@ -17,6 +17,7 @@
     "@lablaunchpad/adapter-opencode": "workspace:*",
     "@lablaunchpad/adapter-codex": "workspace:*",
     "@lablaunchpad/adapter-antigravity": "workspace:*",
+    "@lablaunchpad/worker-runtime": "workspace:*",
     "zod": "^4.4.3"
   }
 }
