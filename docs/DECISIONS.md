@@ -1,8 +1,15 @@
 # Decision Record
 
 Every decision that shaped this codebase, why it was made, what was rejected,
-and what it cost. A decision without a rejected alternative is not a decision —
-it is a preference, and preferences are not worth recording.
+and what it cost. A decision without a considered alternative is not a
+decision — it is a preference, and preferences are not worth recording.
+
+**Rejected alternatives are recorded where they exist**, in an
+`**Alternatives rejected:**` section, and in the prose where the choice was
+not contentious enough to need its own section. The guard requires a
+**Status, a Context, a Decision and Consequences** on every decision; it does
+not require an alternatives section, because for many decisions the
+alternative was not seriously considered and saying so would be theatre.
 
 **Status values** — `Accepted`, `Accepted (scoped)` (accepted with a stated
 boundary on when it holds), `Proposed`, `Superseded by D-nnn`.
@@ -107,7 +114,7 @@ AnyPlugin is becoming it.
 
 ### D-004 — "Polylithic" means one stable contract per layer, and it is the only thing that makes it safe
 
-**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/README.md` §2
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/README.md` §1.1
 
 **Context:** Multiple native runtimes means multiple build pipelines, multiple
 release cadences, and a canonical specification that must be versioned
@@ -224,7 +231,7 @@ than a shared secret, and it is the friction that makes the property real.
 
 ### D-009 — Pinning, not TOFU
 
-**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/trust.md` §7
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/trust.md` §8
 
 **Context:** Trust-On-First-Use accepts the first key it sees. A compromised
 or MITM'd first connection therefore wins silently and permanently.
@@ -244,7 +251,7 @@ that skips it is detectable.
 
 **Status:** Accepted · **Date:** 2026-10-20 · **Context:** A "Worker" appearing in a product specification can read as if it were an account — something with an identity to which permissions are granted. The temptation is to treat the model's assertions as credentials, or to invent a scheme in which a model is the subject of a signature.
 
-**Evidence:** `docs/agent-sdk/trust.md` §7
+**Evidence:** `docs/agent-sdk/trust.md` §8
 
 **Decision:** Reject the concept outright. A model holds no key; anything it
 "possesses" is copied text, and copyability is not possession. A worker is
@@ -256,7 +263,7 @@ principal.
 **Consequences:** The worker is identified by its key, and a key can be rotated, revoked, and rebound. A model can do none of those, because it holds nothing. The cost is that every record must name the *worker*, and a reader who wants to know which model produced a claim must look in the event payload rather than at an identity field. That is a one-line cost for removing an entire class of confusion.
 ### D-011 — Truth anchors beat internal memory; facts evolve by supersession
 
-**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/trust.md` §6
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/trust.md` §2.2
 
 **Context:** Memory poisoning: a false claim remembered as fact, then recalled
 as corroborated.
@@ -278,7 +285,7 @@ relied on at all") — the same distinction, already earned.
 
 **Status:** Accepted · **Date:** 2026-10-20 · **Context:** A ledger signed record-by-record must be re-signed whenever a key rotates, and a verification path that depends on a key is a verification path that breaks on a schedule. A key rotation would then look like a corruption.
 
-**Evidence:** `docs/agent-sdk/trust.md` §8.6
+**Evidence:** `docs/agent-sdk/trust.md` §4.1
 
 **Decision:** `chainHash_n = sha256(canonicalJson({prevChainHash, recordHash}))`,
 recomputable from the log bytes alone. The `chain.head` side file is a
@@ -294,7 +301,7 @@ recomputation, not the file.
 
 ### D-013 — `fallbackLegal` must consider **in-flight effects**, not just committed output
 
-**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `packages/worker-runtime/src/telemetry/delegation.ts` (`fallbackLegal`); `docs/agent-sdk/trust.md` §5.3
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `packages/worker-runtime/src/telemetry/delegation.ts` (`fallbackLegal`); `docs/agent-sdk/trust.md` §5.4
 
 **Context:** The current rule is "once output is committed to the host, the
 chain is closed". That is insufficient. An attempt can have committed an
@@ -321,7 +328,7 @@ contract and needs its own versioned migration.
 
 ### D-014 — The optimizer lives **above** the kernel, and runs out of band
 
-**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/optimization.md` §0.1
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/optimization.md` §1
 
 **Context:** An optimizer that runs inside the worker's critical path turns
 every optimizer bug into a worker bug.
@@ -339,7 +346,7 @@ notice. That property is the reason the optimizer's budget exists (D-026).
 
 **Status:** Accepted · **Date:** 2026-10-20 · **Context:** The reviewed architecture leaned on an "AIWorker with a Soul" pattern as though it were established prior art. A search of GitHub — repository names, code and description, plus the "AIWorker" + "Soul" combination — found nothing citable: 115 repositories named AIWorker, all visibly unrelated, and zero repositories matching both terms. The search was GitHub-only, so a private post could exist. That is why the verdict is UNKNOWN rather than "does not exist".
 
-**Evidence:** `docs/agent-sdk/optimization.md` §0.1 (A2)
+**Evidence:** `docs/agent-sdk/optimization.md` §1 (A2)
 
 **Decision:** A *policy* is a versioned, declarative, content-addressed
 artifact that changes worker behaviour: prompt template, tool routing, budget
@@ -355,7 +362,7 @@ rather than a program audit. Rollback is byte-for-byte (D-016).
 
 ### D-016 — The optimizer's plan is a **pure fold over the event log**
 
-**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/optimization.md` §1.7
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/optimization.md` §2.6
 
 **Context:** An optimizer with its own database can disagree with the ledger.
 Which one is authoritative? The question has no good answer.
@@ -376,7 +383,7 @@ database to disagree with the log.
 
 **Status:** Accepted · **Date:** 2026-10-20 · **Context:** The kernel already owns an epistemic ladder. A second "candidate lifecycle" ladder would create two answers to "how much do we trust this?" — the collision the kernel file already documents when it renamed the two `FAILURE_CLASSES` symbols.
 
-**Evidence:** `docs/agent-sdk/optimization.md` §1.1
+**Evidence:** `docs/agent-sdk/optimization.md` §2.1
 
 **Decision:** A candidate has two coordinates, and they may not move
 independently without a recorded event each.
@@ -404,7 +411,7 @@ forbidden jumps are enumerated and mechanically unreachable (D-018).
 
 **Status:** Accepted · **Date:** 2026-10-20 · **Context:** A policy promoted on a production measurement has already been measured on the traffic it was measured on. The evidence that the change is safe was gathered under the *old* policy, and it does not transfer. A candidate that would improve the measured metric only by degrading something unmeasured is the failure mode this closes.
 
-**Evidence:** `docs/agent-sdk/optimization.md` §2.4
+**Evidence:** `docs/agent-sdk/optimization.md` §3.4
 
 **Decision:** A candidate's decision function is computed on live traffic and
 **never enacted**; where the candidate's decision is side-effecting, it is
@@ -432,7 +439,7 @@ affordable.
 
 **Context:** A policy promoted straight to full traffic is a policy whose failure is observed by its users. The blast radius of a mistake is the whole user base, and the detection time is however long a user takes to complain.
 
-**Evidence:** `docs/agent-sdk/optimization.md` §3.1
+**Evidence:** `docs/agent-sdk/optimization.md` §4.1
 
 | Stage | Traffic | Soak to advance |
 |---|---|---|
@@ -450,7 +457,7 @@ live version at a time. A policy whose *mechanism* is new is capped at
 
 ### D-020 — Rollback happens **before** diagnosis
 
-**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/optimization.md` §3.3
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/optimization.md` §4.3
 
 **Context:** Seven automatic rollback triggers, any one of which fires an
 immediate rollback with no human and no debate.
@@ -469,7 +476,7 @@ the only state in which diagnosis is safe.
 
 ### D-021 — Flapping is a safety event; quarantine, and only a human can unpin
 
-**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/optimization.md` §4
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/optimization.md` §5
 
 **Context:** A bad policy costs one bad period. A flapping policy costs
 repeatedly, and it destroys the signal value of every other metric — after
@@ -630,7 +637,7 @@ publication.
 
 **Status:** Accepted · **Date:** 2026-10-20 · **Context:** A cache is an optimisation, and an optimisation that can change what a system returns is not an optimisation — it is a second, faster, harder-to-reason-about implementation of the same function.
 
-**Evidence:** `docs/agent-sdk/economics.md` §1.3
+**Evidence:** `docs/agent-sdk/economics.md` §1.5
 
 **Decision:** Replay returns the recorded result without consulting the cache.
 Caching changes only the *cost* of producing a result, never the result.
@@ -777,7 +784,7 @@ made.
 **Consequences:** Every state-mutating primitive in the codebase now has a read-only counterpart, and the two are named differently (`isRefusing`/`canAttempt`). The cost is a slightly wider API surface; the benefit is that a function whose name begins with "is" cannot change anything, which is a property a reader can check without reading the body.
 ### D-037 — One log, not two
 
-**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/optimization.md` §0.2 (the required kernel change)
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/optimization.md` §1.2 (the required kernel change)
 
 **Context:** The candidate lifecycle and the policy promotions need event kinds
 that do not exist in `EventSchema.kind`. The alternative is a sidecar

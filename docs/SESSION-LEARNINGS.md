@@ -188,7 +188,7 @@ design decisions live.
 
 ## 4. The design sessions (2026-10-20)
 
-Three parallel design passes produced the Agent/Worker SDK specification in
+Four parallel design passes produced the Agent/Worker SDK specification in
 `docs/agent-sdk/`. They are recorded here because **the way they failed is
 the lesson**, and because the failures were of a kind the audit had not
 previously surfaced.
@@ -197,7 +197,8 @@ previously surfaced.
 |---|---|---|
 | External-claim verification | **PRODUCED** | 19 external claims checked against primary sources: 6 `VERIFIED`, 8 `PARTLY VERIFIED`, 4 **`CONTRADICTED`**, 2 `UNKNOWN`. Full ledger in `docs/EVIDENCE.md`. |
 | Identity, attestation and trust | **PRODUCED** | The threat model, the per-mode signature schemes, the forgery surface for each, the revocation semantics, the commit-point protocol, and the honest limit on non-repudiation. `docs/agent-sdk/trust.md`. |
-| Autonomous optimisation and signals | **PRODUCED** | The candidate state machine reconciled with the kernel's epistemic ladder, the shadow protocol, twelve promotion gates, the ramp, the flapping detector, the optimizer budgets, the never-automated list, and nine anti-gaming signals. `docs/agent-sdk/optimization.md`. |
+| Autonomous optimisation and signals | **PRODUCED** | The candidate state machine reconciled with the kernel's epistemic ladder, the shadow protocol, twelve promotion gates, the ramp, the flapping detector, the optimizer budgets, the never-automated list, and nine top signals with six anti-gaming rules. `docs/agent-sdk/optimization.md`. |
+| Adversarial review of the resulting docs | **PRODUCED** | 35 factual claims spot-checked against source; 30 `TRUE`, 2 `FALSE`, 3 `MISLEADING`. It found a **hash-chain claim the kernel does not implement**, a **guard that could be satisfied by a marker outside a decision's own block**, a **guard that accepted a prose mention as document ownership**, **19 broken section pointers**, and **four claims of "enforced mechanically" about unimplemented code**. All fixed. |
 
 ### The failures worth recording
 
@@ -242,8 +243,19 @@ completeness, `core/src/boundaries/doc-ownership.test.ts` now enforces it:
 every document under `docs/` must be owned by `ARCHITECTURE.md`, every decision
 must carry a context, a decision and consequences, every evidence row must
 carry a verdict, a source and an access date, and every decision reference
-must resolve. **The guard immediately found three orphaned documents and 17
+must resolve. **The guard immediately found four orphaned documents and 17
 under-specified decisions** — it paid for itself before it was finished.
+
+**And then the review found that the guard itself was unsound.** Two of its
+three checks could be satisfied without the thing they claimed to check: the
+decision-block slice leaked across section boundaries, so a decision with *no*
+decision statement passed as long as a sibling paragraph elsewhere supplied
+the marker; and ownership was tested by "is this path mentioned anywhere in
+`ARCHITECTURE.md`", so a document named only in prose passed with no owner
+row at all. Both were reproduced by mutation, and both are fixed. **A guard
+that can pass vacuously is the thing the repository already warns about** —
+"a test that cannot fail is not evidence" — and the PR that claims to make
+claims checkable is exactly where that failure is most likely to hide.
 
 ### What the cycle established, in one list
 

@@ -8,7 +8,12 @@ kernel, and the reasoning is worth keeping where the kernel is.
 
 > `ROADMAP.md` §1 says this product is "**not** another agent SDK". That is
 > still true of AnyPlugin. This directory specifies a **different** product
-> that AnyPlugin's kernel could serve.
+> that AnyPlugin's kernel could serve. `ROADMAP.md` §6 also lists
+> "Kubernetes runtime", "cloud dashboard" and "SaaS billing" as things
+> AnyPlugin is **not** building as a product — which is precisely the scope
+> of the SDK's phases 2.4, 3.1 and 4.3 below. The overlap is the point:
+> these are the same capabilities, deliberately placed in a different
+> product. See `docs/DECISIONS.md` D-003 and `docs/BACKLOG.md` P1-12.
 
 ---
 
@@ -74,7 +79,7 @@ batching, evidence recording, and the deployment adapters.
 | **Portability** | The Worker spec runs unchanged in library, daemon, and control-plane modes | — |
 | **Determinism** | The recorded call log is the source of truth; caching never changes the recorded result, only the cost of producing it | `packages/worker-runtime/src/log/` |
 | **Grounding** | Every claim carries an evidence tier and a provenance chain | `EvidenceSchema` (tier is a *projection* — D-006) |
-| **Accountability** | Every tool call, model call, and state transition produces a signed receipt | `EventSchema`, `CertificateSchema` |
+| **Accountability** | Every tool call, model call, and state transition produces a hash-bound receipt | `EventSchema`, `CertificateSchema` — the certificate binds hashes, not signatures; signatures are a proposed addition (`trust.md` §7.3) |
 | **Resource efficiency** | Caching and batching are first-class, with measured hit rates and automatic fallback when cache economics turn negative | `ResourceMeasurement`, `DurabilityLevel` |
 | **Error containment** | Every hook and tool call runs inside an error boundary; failures degrade gracefully and are recorded as structured events | `ContractFailureClass`, `DelegationEvent` |
 
@@ -107,19 +112,24 @@ by the design work in `trust.md` and `optimization.md`.
 
 ### 3.1 Grounding: a four-tier model, and where it actually lives
 
-| Tier | Meaning | How it is produced |
-|---|---|---|
-| `VERIFIED` | The claim cites a live source whose receipt resolves, and every direct quote appears in that source | A valid, unexpired, unrevoked anchor from an admissible attester class |
-| `UNCITED` | The claim is the model's own assertion, with no evidence attached | Model output with no tool call or source reference |
-| `BROKEN` | The claim cites something never admitted, evicted, or whose receipts no longer resolve; or it contains an invented quote | Citation validation failure; receipt mismatch; quote not found |
-| `UNSUPPORTED` | An independent entailment check rejected the claim even though a citation exists | Optional entailment hook (NLI model, LLM judge, or a deterministic rule) |
+The four tiers are **`VERIFIED` / `UNCITED` / `BROKEN` / `UNSUPPORTED`**, and
+the derivation is **not** restated here — it is defined once, in
+`trust.md` §2, and recorded as a decision in `docs/DECISIONS.md` D-006.
 
-**The tier is a projection, not a stored field** — see D-006. It cannot drift
-from the record it describes, because it is computed from the record.
+The one thing worth repeating here is *why* it matters: the tier is a
+**projection** over the kernel's `EvidenceSchema`, not a stored field and not
+a second ledger. It is computed from `authority` × `validity` × citation
+resolvability × producer lineage, so it cannot drift from the record it
+describes.
 
-**Prior art:** none found (E18). The closest is W3C PROV-O's derivation and
-invalidation vocabulary, without confidence tiers. This design is ours, and
-is labelled as such in `docs/EVIDENCE.md` §7.
+> **One input is not a kernel field.** The optional *entailment hook* (an NLI
+> model, an LLM judge, or a deterministic rule) can downgrade a cited claim
+> to `UNSUPPORTED`. It is a proposed addition, not something `EvidenceSchema`
+> carries today — which is why `trust.md` §2 and D-006 mark it as the single
+> non-kernel input to the derivation.
+
+**Prior art:** none found in the searched corpus — see `docs/EVIDENCE.md` E18
+and the caveat in U4. The design is ours; see `docs/EVIDENCE.md` §7.
 
 ### 3.2 Truth anchors: facts the agent must not contradict
 
@@ -151,7 +161,7 @@ modules that share no dependencies. Each acceptance criterion is **checkable**
 | Module | Todos | Acceptance criterion |
 |---|---|---|
 | **1.1 Worker specification schema** | Define the `worker.yaml` schema: goals, missions, tools, model routing, memory policy, budgets, permissions, grounding policy, cache policy, batch policy. Publish it as a versioned JSON Schema with a changelog. Build a linter that warns on unsafe defaults | The schema validates with field-level errors; the JSON Schema is derived, not hand-written, and a drift test fails when they disagree; the linter catches all three unsafe-default classes (no grounding policy, unbounded budgets, wildcard tool permissions) |
-| **1.2 Standalone runtime (daemon mode)** | `worker start --soul ./worker.yaml` with SQLite state and a local workbench. The iteration loop: plan → execute → reflect → replan. Non-blocking error boundaries around every tool call and hook. The evidence recorder | A user can run a Worker locally with one command; the loop survives a forced kill and resumes from the last checkpoint; a failing tool produces a structured error event and the loop continues; a test trace produces `VERIFIED`, `UNCITED` and `BROKEN` correctly |
+| **1.2 Standalone runtime (daemon mode)** | `agent-sdk start --soul ./worker.yaml` with SQLite state and a local workbench. The iteration loop: plan → execute → reflect → replan. Non-blocking error boundaries around every tool call and hook. The evidence recorder | A user can run a Worker locally with one command; the loop survives a forced kill and resumes from the last checkpoint; a failing tool produces a structured error event and the loop continues; a test trace produces `VERIFIED`, `UNCITED` and `BROKEN` correctly |
 | **1.3 Library mode** | Publish the programmatic `Worker` class. Share the iteration loop and evidence recorder with daemon mode. Typed tool-definition helpers | A developer can embed a Worker in a Node.js app in under ten lines; a **conformance test** proves library and daemon modes produce identical traces for identical inputs |
 | **1.4 MCP tool layer** | An MCP client for stdio and HTTP servers. An MCP gateway with per-Worker rate limits and audit logging. Tool-failure fallbacks: retry with backoff, alternate tool, graceful degradation | A Worker can call a filesystem MCP server and a remote HTTP MCP server in the same run; every MCP call produces a receipt with server, tool, input hash and output hash; a failing MCP server does not crash the Worker |
 

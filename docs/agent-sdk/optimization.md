@@ -143,7 +143,7 @@ transition without an event is not a transition.**
 | `RETIRED` | `VALIDATING` | `CANDIDATE_STAGE_CHANGED` | the reason for retirement was addressed and new evidence collected | silent resurrection — `RETIRED → ENACTED` does not exist |
 | `ENACTED` | — | *any* | **the candidate is pinned**: all transitions out of `ENACTED` except `POLICY_ROLLED_BACK` are refused, and a pin is cleared only by a human | — |
 
-### 2.4 The forbidden jumps — structurally unreachable, and tested
+### 2.4 The forbidden jumps — structurally unreachable, and *specifiable* as tests
 
 1. `CAPTURED → VALIDATED` — no extraction, no lesson.
 2. `EXTRACTED → ENACTED` — no evidence, no shadow.
@@ -522,7 +522,7 @@ evidence is. The list is a constant for the same reason `FAIL_POLICY` is:
 | **N7** | **Auto-generating executable tools**, or any new code path learned from traces | Learned code is untrusted code. It requires human review + sandbox + capability declaration, matching the repo's existing fail-closed capability rule (`UNKNOWN` → treated as `UNSUPPORTED` → hard build error). |
 | **N8** | **Assigning the `human-reviewed` trust tier** | Only a human can attest to human review. The optimiser may *request* it. |
 | **N9** | **Raising a work contract's risk level above `medium`, or widening its `scope`** | Scope and risk are the frame the work is judged against. A worker that can widen its own frame is unfalsifiable. |
-| **N10** | **Accepting evidence produced by the candidate's own execution lineage** | Self-verification. Enforced mechanically (G9), never by judgement. |
+| **N10** | **Accepting evidence produced by the candidate's own execution lineage** | Self-verification. Gate G9 forbids it mechanically, never by judgement — once implemented. |
 | **N11** | **Unpinning a flapping candidate** | A pin the system can clear is not a pin. |
 | **N12** | **Deciding a task is "done" without an external verifier** | The kernel already forbids this: `BLOCKED` exists so absence of evidence has somewhere to go that is not success. |
 | **N13** | **Any change to the *existence* of the loop** — disabling it, raising its budget ceiling, changing the shadow share | An optimiser that can turn itself off is an optimiser that will. (Budget *within* the caps is adjustable; the caps are not.) |

@@ -153,7 +153,7 @@ dashboard. Auto-break a lock that might be held by a live writer. Make a
 security-relevant change to permissions, credentials, egress, or spend caps
 without a human.
 
-**Evidence.** `cli/src/bin.ts` (the doctor); `docs/agent-sdk/optimization.md` §3
+**Evidence.** `cli/src/bin.ts` (the doctor); `docs/agent-sdk/optimization.md` §4.3
 (rollback-before-diagnosis) and §6 (the never-automated list);
 `docs/agent-sdk/economics.md` (the cache monitor).
 
@@ -170,9 +170,16 @@ can check.
 **Is accountable for.** Their own conclusion. They need the evidence to be
 *reconstructible*, not merely asserted.
 
-**Needs from the system.** An append-only, hash-chained ledger where every
+**Needs from the system.** An append-only, per-record-hashed ledger where every
 byte is accounted for as `COMMITTED`, `INCOMPLETE`, or `REJECTED`. Deterministic
-replay. A record that says who attested what, with the chain visible.
+replay. A record that says who attested what, with the record hashes and the
+sequence visible.
+
+> **The chain link is a named gap, not a feature.** The kernel's log frame
+> hashes each *record*; it does not yet link records to their predecessor
+> across runs, so truncating a whole run is invisible. That gap is recorded as
+> `L1` in `docs/agent-sdk/trust.md` §4.1 and as an open item in
+> `docs/BACKLOG.md`. Do not promise an auditor a chain the code does not have.
 
 **What the system must never do to them.** Overclaim. The honest claim is
 *"I can reconstruct what the Worker saw, did, and proved, and I can detect
@@ -240,7 +247,7 @@ containment (every hook and tool call inside an error boundary).
 the first one half-failed. Classify a failure it could not classify and retry
 it. Change the result of a recorded call because a cache was cold.
 
-**Evidence.** `docs/agent-sdk/README.md`; `docs/agent-sdk/economics.md` §1.3
+**Evidence.** `docs/agent-sdk/README.md`; `docs/agent-sdk/economics.md` §1.5
 (determinism); `docs/agent-sdk/trust.md` §5 (the commit-point protocol).
 
 ---
@@ -268,7 +275,7 @@ established. Let the worker widen its own scope. Let a learned behaviour
 become permanent without re-validation.
 
 **Evidence.** `docs/agent-sdk/trust.md` §6 (the grounding policy);
-`docs/agent-sdk/optimization.md` §1.5 (trust tier and staleness);
+`docs/agent-sdk/optimization.md` §2.5 (trust tier and staleness);
 `docs/agent-sdk/optimization.md` §6 (the never-automated list).
 
 ---
@@ -296,8 +303,10 @@ table below is where each one gets its — or is denied its.
    the learning loop would be the laundering path.
 2. **The system may not count as evidence for itself** (D-023 rule 3). No
    evidence item whose producer lineage includes the candidate's own shadow
-   executions may back that candidate's promotion. This is enforced
-   mechanically, never by judgement.
+   executions may back that candidate's promotion. Gate G9 forbids it
+   mechanically rather than by judgement — **once the SDK is implemented**; it
+   is a specified rule today, not a running check (see `docs/BACKLOG.md`
+   P1-12).
 
 ---
 
@@ -346,7 +355,7 @@ oracle.
 | Claim type | How it is kept true |
 |---|---|
 | A persona's authority | Mirrored by a machine-checked rule in the kernel, or it is not authority |
-| A persona's accountability | The never-automated list (`docs/agent-sdk/optimization.md` §6) is a constant in code |
+| A persona's accountability | The never-automated list (`docs/agent-sdk/optimization.md` §6) **is specified as** a constant in code — a fixed list, not configuration an operator can relax. It is a design rule today; the SDK that would enforce it is not built (see `docs/BACKLOG.md` P1-12) |
 | A separation ("the model is not MEMORY…") | `ROADMAP.md` §1 is the source; this document links to it |
 | A count, a threshold, a price | `docs/EVIDENCE.md` carries the source and the access date |
 | A "we never do X" claim | It must appear in the never-automated list or the fail-closed rules, not only here |

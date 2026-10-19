@@ -72,9 +72,12 @@ they cannot drift from the record they describe.
 | `BROKEN` | `validity = INVALIDATED` — the claim was once relied upon and was found wrong |
 | `UNSUPPORTED` | `authority = DERIVED` from a source that is itself `UNCITED`, or the supporting evidence set is empty |
 
-**Prior art:** none found (`docs/EVIDENCE.md` E18). W3C PROV-O has the
-derivation and invalidation vocabulary but no confidence tiers. This is our
-design and is labelled as such.
+**Prior art:** none found *in the searched corpus* — GitHub repository search,
+W3C PROV-O, in-toto, SLSA, OTel GenAI (see `docs/EVIDENCE.md` E18 and the
+caveat in U4). **That is not an ISO/IETF/NIST catalogue sweep, and it is not
+proof of absence.** W3C PROV-O has the derivation and invalidation vocabulary
+but no confidence tiers. This design is ours so far, and is labelled as such
+in `docs/EVIDENCE.md` §7.
 
 ### 2.1 The grounding policy
 
