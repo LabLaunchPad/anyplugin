@@ -3,7 +3,11 @@ import { parseCliArgv } from "./strict-args.js";
 
 describe("strict CLI contract (Pattern C)", () => {
   it("parses flags without positionals (okf-validate --json)", () => {
-    const { command, values, positionals } = parseCliArgv(["okf-validate", "--json"]);
+    const { command, values, positionals } = parseCliArgv(["okf-validate", "--json"]) as {
+      command: string;
+      values: { json: boolean; [k: string]: unknown };
+      positionals: string[];
+    };
     expect(command).toBe("okf-validate");
     expect(values.json).toBe(true);
     expect(positionals).toEqual([]);

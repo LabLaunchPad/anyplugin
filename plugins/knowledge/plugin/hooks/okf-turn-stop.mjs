@@ -3,14 +3,23 @@
  * newest-first line to the bundle's log.md. Kept intentionally cheap: no LLM, no
  * transcript parsing; the agent (via the okf-reader skill or curator) writes
  * rich concepts — this hook only maintains the heartbeat so staleness is visible.
+ *
+ * This handler ships in an EMITTED bundle, which must run with no
+ * node_modules at all. So it imports nothing but node builtins: the SafePath
+ * validation of the untrusted `cwd` happens in the RUNNER, at the single
+ * point where untrusted input enters the runtime, and this handler consumes
+ * the already-validated `payload.cwd`.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export async function run(payload) {
+  // Already validated by the runner (spec §1.1).
+  const safeCwd = payload.cwd ?? process.cwd();
+
   const candidates = [
     process.env["ANYPLUGIN_OKF_BUNDLE"],
-    join(payload.cwd ?? process.cwd(), "knowledge"),
+    join(safeCwd, "knowledge"),
   ].filter(Boolean);
   const dir = candidates.find((d) => existsSync(join(d, "log.md")));
   if (!dir) return {};

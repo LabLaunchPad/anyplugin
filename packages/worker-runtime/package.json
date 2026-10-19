@@ -8,9 +8,6 @@
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
   },
-  "bin": {
-    "worker-runtime": "./dist/bin.js"
-  },
   "scripts": {
     "build": "tsc -b"
   },

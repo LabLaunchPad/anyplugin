@@ -1,0 +1,8 @@
+{
+  "levels": [
+    { "name": "essential", "description": "Minimum viable plugin with core features", "intensity": "passive" },
+    { "name": "full", "description": "Complete plugin feature set with all skills and hooks", "intensity": "moderate" },
+    { "name": "aggressive", "description": "Maximum feature set, intensive monitoring, and aggressive behavior", "intensity": "aggressive" }
+  ],
+  "default": "full"
+}

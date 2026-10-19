@@ -58,14 +58,15 @@
         "required": ["id", "event", "handler"],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string", "minLength": 1, "description": "Hook id; the handler file must be named <id>.mjs." },
+          "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9-]{0,63}$", "description": "Hook id; the handler file must be named <id>.mjs. Must start with lowercase letter, contain only lowercase letters, digits, and hyphens, max 64 chars." },
           "event": {
             "type": "string",
             "enum": ["session-start", "before-tool-use", "after-tool-use", "prompt-submit", "turn-stop", "session-end", "permission-request"]
           },
           "handler": { "type": "string", "minLength": 1, "description": "Path (relative to plugin root) to a JS/MJS module exporting async run(payload)." },
           "match": { "type": "string", "description": "Tool-name matcher (regex or plain name); omitted = all tools." },
-          "timeoutSec": { "type": "integer", "minimum": 1, "maximum": 600 }
+          "timeoutSec": { "type": "integer", "minimum": 1, "maximum": 600 },
+          "failurePolicy": { "type": "string", "enum": ["blocking", "non-blocking"], "default": "non-blocking" }
         }
       }
     },

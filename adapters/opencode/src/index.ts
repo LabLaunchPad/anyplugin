@@ -5,6 +5,8 @@ import {
   type Adapter,
   type InstallAction,
   NATIVE_EVENT_MAP,
+  HOOK_POLICIES_FILENAME,
+  renderHookPolicies,
   copyDir,
   writeIfChanged,
   toPosix,
@@ -28,7 +30,7 @@ export async function emitOpencode(plugin: ParsedPlugin, opts: EmitOptions): Pro
   const track = (abs: string) => files.push(toPosix(abs.slice(out.length + 1)));
 
   // Canonical hook id → OpenCode native hook/event name.
-  const bridge: { id: string; opencode: string; kind: "tool-before" | "tool-after" | "chat" | "permission" | "event" }[] = [];
+  const bridge: { id: string; opencode: string; kind: "tool-before" | "tool-after" | "chat" | "permission" | "event"; match?: string }[] = [];
   for (const hook of plugin.hooks) {
     const native = NATIVE_EVENT_MAP["opencode"][hook.event];
     if (!native) {
@@ -39,7 +41,7 @@ export async function emitOpencode(plugin: ParsedPlugin, opts: EmitOptions): Pro
       : native === "tool.execute.after" ? "tool-after"
       : native === "permission.asked" ? "permission"
       : "event";
-    bridge.push({ id: hook.id, opencode: native, kind });
+    bridge.push({ id: hook.id, opencode: native, kind, ...(hook.match ? { match: hook.match } : {}) });
   }
 
   if (bridge.length > 0) {
@@ -49,6 +51,9 @@ export async function emitOpencode(plugin: ParsedPlugin, opts: EmitOptions): Pro
       await copyOne(join(opts.pluginRoot, hook.handler), join(out, "hooks", "handlers", `${hook.id}.mjs`));
       track(join(out, "hooks", "handlers", `${hook.id}.mjs`));
     }
+    // Runtime policy (timeout + failure policy) for the dependency-free runner.
+    await writeIfChanged(join(out, "hooks", HOOK_POLICIES_FILENAME), renderHookPolicies(plugin.hooks));
+    track(join(out, "hooks", HOOK_POLICIES_FILENAME));
     const shim = renderShim(plugin.name, bridge);
     await writeIfChanged(join(out, "plugin.ts"), shim);
     track(join(out, "plugin.ts"));
@@ -135,11 +140,23 @@ interface Bridge {
   id: string;
   opencode: string;
   kind: "tool-before" | "tool-after" | "chat" | "permission" | "event";
+  /** Tool-name matcher (regex or plain name); undefined = all tools. */
+  match?: string;
 }
 
 function renderShim(name: string, bridge: Bridge[]): string {
+  // Finding H: a native event can be claimed by SEVERAL hooks. The old shim
+  // built `Object.fromEntries(...)`, so every hook but the last was silently
+  // dropped — the plugin's guards simply never ran. The map is now
+  // event → ORDERED LIST of hooks, and the shim dispatches all of them.
+  const byEvent = new Map<string, Bridge[]>();
+  for (const b of bridge) {
+    const list = byEvent.get(b.opencode) ?? [];
+    list.push(b);
+    byEvent.set(b.opencode, list);
+  }
   const map = JSON.stringify(
-    Object.fromEntries(bridge.map((b) => [b.opencode, b.id])),
+    Object.fromEntries([...byEvent.entries()].map(([event, list]) => [event, list.map((b) => ({ id: b.id, ...(b.match ? { match: b.match } : {}) }))])),
     null,
     2,
   );
@@ -149,6 +166,10 @@ function renderShim(name: string, bridge: Bridge[]): string {
  * (hooks/runner.js) so every platform executes identical handler code.
  * On v2 dev cores (which only load {id, setup} modules) this file is
  * silently ignored — skills/commands/agents artifacts carry the load there.
+ *
+ * Several hooks may share one native event; they are dispatched IN ORDER and
+ * their results merged (context is concatenated, the most restrictive
+ * permission decision wins, any block wins).
  */
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
@@ -157,7 +178,8 @@ import { fileURLToPath } from "node:url";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const RUNNER = join(ROOT, "hooks", "runner.js");
 
-const HOOK_IDS: Record<string, string> = ${map};
+interface HookEntry { id: string; match?: string }
+const HOOKS: Record<string, HookEntry[]> = ${map};
 
 function run(id: string, payload: unknown): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
@@ -176,18 +198,116 @@ function run(id: string, payload: unknown): Promise<{ code: number; stdout: stri
   });
 }
 
-async function maybeRun(hookName: string, payload: unknown): Promise<Record<string, unknown> | undefined> {
-  const id = HOOK_IDS[hookName];
-  if (!id) return undefined;
-  const result = await run(id, payload);
-  if (result.code === 0 && result.stdout.trim()) {
-    try {
-      return JSON.parse(result.stdout) as Record<string, unknown>;
-    } catch {
-      return undefined;
-    }
+/** Does this hook's matcher accept the tool about to run? */
+function matches(entry: HookEntry, toolName: string | undefined): boolean {
+  if (!entry.match) return true;
+  if (!toolName) return true;
+  try {
+    return new RegExp(entry.match).test(toolName);
+  } catch {
+    // An invalid matcher must not silently disable the hook. A matcher that
+    // is not a valid regex is treated as a plain tool name.
+    return entry.match === toolName;
+  }
+}
+
+/** Pull the permission decision out of the runner's output, wherever it sits. */
+function decisionOf(out: Record<string, unknown>): string | undefined {
+  const direct = out["permissionDecision"];
+  if (typeof direct === "string") return direct;
+  const specific = out["hookSpecificOutput"];
+  if (specific && typeof specific === "object") {
+    const nested = (specific as Record<string, unknown>)["permissionDecision"];
+    if (typeof nested === "string") return nested;
+  }
+  const decision = out["decision"];
+  if (typeof decision === "string") return decision;
+  return undefined;
+}
+
+/** Pull the additional context out of the runner's output, wherever it sits. */
+function contextOf(out: Record<string, unknown>): string | undefined {
+  const direct = out["additionalContext"];
+  if (typeof direct === "string") return direct;
+  const specific = out["hookSpecificOutput"];
+  if (specific && typeof specific === "object") {
+    const nested = (specific as Record<string, unknown>)["additionalContext"];
+    if (typeof nested === "string") return nested;
+  }
+  const steps = out["injectSteps"];
+  if (Array.isArray(steps)) {
+    const parts = steps
+      .map((s) => (s && typeof s === "object" ? (s as Record<string, unknown>)["content"] : undefined))
+      .filter((c): c is string => typeof c === "string");
+    if (parts.length) return parts.join("\\n");
   }
   return undefined;
+}
+
+interface Merged {
+  output: Record<string, unknown>;
+  context: string[];
+  decision?: string;
+  blocked: boolean;
+  reason?: string;
+}
+
+async function runAll(hookName: string, payload: unknown, toolName?: string): Promise<Merged> {
+  const entries = HOOKS[hookName] ?? [];
+  const merged: Merged = { output: {}, context: [] };
+  for (const entry of entries) {
+    if (!matches(entry, toolName)) continue;
+    const result = await run(entry.id, payload);
+    // The runner writes its payload to stdout BEFORE exiting, and a BLOCKING
+    // hook exits 2 (Antigravity: "deny", exit 0). So a non-zero exit does
+    // NOT mean "there is no output" — it very often means "the output is a
+    // denial". Skipping a non-zero result would silently ignore a guard
+    // plugin's refusal, which is the one thing a guard exists to do.
+    if (!result.stdout.trim()) {
+      // No payload at all. The exit code is then the only signal left, and a
+      // blocking exit is still a denial.
+      if (result.code === 2) {
+        merged.blocked = true;
+        merged.reason = merged.reason ?? ("hook " + entry.id + " blocked the tool");
+      }
+      continue;
+    }
+    let out: Record<string, unknown>;
+    try {
+      out = JSON.parse(result.stdout) as Record<string, unknown>;
+    } catch {
+      // Unparseable output: the runner's exit code is the only signal left.
+      // A blocking exit (2) with no parseable payload is still a denial.
+      if (result.code === 2) {
+        merged.blocked = true;
+        merged.reason = merged.reason ?? ("hook " + entry.id + " blocked the tool");
+      }
+      continue;
+    }
+    const ctx = contextOf(out);
+    if (ctx) merged.context.push(ctx);
+    const decision = decisionOf(out);
+    if (decision) {
+      // The most restrictive decision wins: deny > ask > allow.
+      const rank = (d: string) => (d === "deny" ? 3 : d === "ask" ? 2 : d === "allow" ? 1 : 0);
+      if (!merged.decision || rank(decision) > rank(merged.decision)) merged.decision = decision;
+    }
+    if (out["block"] === true || out["decision"] === "block" || out["decision"] === "deny" || result.code === 2) {
+      merged.blocked = true;
+      if (!merged.reason && typeof out["reason"] === "string") merged.reason = out["reason"];
+    }
+    for (const [key, value] of Object.entries(out)) {
+      if (key === "hookSpecificOutput" || key === "injectSteps") continue;
+      merged.output[key] = value;
+    }
+  }
+  if (merged.context.length) merged.output["additionalContext"] = merged.context.join("\\n");
+  if (merged.decision) merged.output["permissionDecision"] = merged.decision;
+  if (merged.blocked) {
+    merged.output["block"] = true;
+    if (merged.reason) merged.output["reason"] = merged.reason;
+  }
+  return merged;
 }
 
 export const ${shimConstName(name)}Plugin = async () => ({
@@ -195,23 +315,37 @@ export const ${shimConstName(name)}Plugin = async () => ({
     output.env["ANYPLUGIN_HOST"] = "opencode";
   },
   "tool.execute.before": async (input: Record<string, unknown>, output: { args: unknown }) => {
-    const out = await maybeRun("tool.execute.before", { ...input, hook_event_name: "tool.execute.before" });
-    if (out && "updatedInput" in out) (output as Record<string, unknown>)["args"] = (out["updatedInput"] as Record<string, unknown>)["args"];
+    const toolName = typeof input["tool"] === "string" ? input["tool"] : undefined;
+    const merged = await runAll("tool.execute.before", { ...input, hook_event_name: "tool.execute.before" }, toolName);
+    // The MERGED result is what the host must see. Copying only the context
+    // would silently discard a denial: the merge computes "block" and the
+    // reason, and then throws them away. A guard plugin that refuses a tool
+    // would appear to succeed.
+    const target = output as Record<string, unknown>;
+    for (const [key, value] of Object.entries(merged.output)) {
+      if (key === "updatedInput") continue;
+      target[key] = value;
+    }
+    const updated = merged.output["updatedInput"];
+    if (updated && typeof updated === "object") {
+      const args = (updated as Record<string, unknown>)["args"];
+      if (args !== undefined) target["args"] = args;
+    }
   },
   "tool.execute.after": async (input: Record<string, unknown>, output: Record<string, unknown>) => {
-    const out = await maybeRun("tool.execute.after", { ...input, hook_event_name: "tool.execute.after" });
-    if (out) Object.assign(output, out);
+    const toolName = typeof input["tool"] === "string" ? input["tool"] : undefined;
+    const merged = await runAll("tool.execute.after", { ...input, hook_event_name: "tool.execute.after" }, toolName);
+    if (Object.keys(merged.output).length) Object.assign(output, merged.output);
   },
   "permission.asked": async (input: Record<string, unknown>, output: { status: string }) => {
-    const out = await maybeRun("permission.asked", { ...input, hook_event_name: "permission.asked" });
-    if (out && typeof out["permissionDecision"] === "string") {
-      output.status = out["permissionDecision"] as string;
-    }
+    const toolName = typeof input["tool"] === "string" ? input["tool"] : undefined;
+    const merged = await runAll("permission.asked", { ...input, hook_event_name: "permission.asked" }, toolName);
+    if (merged.decision) output.status = merged.decision;
   },
   "event": async ({ event }: { event: { name?: string; properties?: Record<string, unknown> } }) => {
     const name = event?.name ?? "";
     if (name === "session.created" || name === "session.idle") {
-      await maybeRun(name, { ...(event.properties ?? {}), hook_event_name: name });
+      await runAll(name, { ...(event.properties ?? {}), hook_event_name: name });
     }
   },
 });

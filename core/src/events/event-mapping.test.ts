@@ -2,10 +2,22 @@ import { describe, it, expect } from "vitest";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { NATIVE_EVENT_MAP } from "./index.js";
-import { ALL_AGENTS, type AgentId } from "../detect/index.js";
+import type { AgentId } from "../detect/index.js";
+import { ALL_AGENTS } from "../detect/index.js";
 
 /** Column index of each agent in the mapping table (cells[1] = canonical name). */
 const AGENT_COLUMN: Record<AgentId, number> = { "claude-code": 2, opencode: 3, codex: 4, antigravity: 5 };
+
+/** The set of all canonical event names — used as the authoritative source. */
+const CANONICAL_EVENTS = [
+  "session-start",
+  "before-tool-use",
+  "after-tool-use",
+  "prompt-submit",
+  "turn-stop",
+  "session-end",
+  "permission-request",
+];
 
 function tableRow(md: string, canonical: string): string[] | null {
   for (const line of md.split(/\r?\n/)) {
@@ -35,6 +47,19 @@ describe("knowledge event-mapping drift guard", () => {
           expect(cell, `${agent}: ${canonical} → ${native}`).toContain(native);
         }
       }
+    }
+  });
+
+  /** Guard: every agent's NATIVE_EVENT_MAP keys must exactly match the canonical events. No vacuous pass / missing events. */
+  it("NATIVE_EVENT_MAP keys per agent exactly match canonical events (no vacuous pass / missing events)", () => {
+    for (const agent of ALL_AGENTS) {
+      const mapKeys = new Set(Object.keys(NATIVE_EVENT_MAP[agent]) as string[]);
+      // Map keys must be a subset of the canonical events
+      const unexpected = [...mapKeys].filter((k) => !CANONICAL_EVENTS.includes(k));
+      expect(unexpected).toEqual([]);
+      // Canonical events must be a subset of the map keys (no missing events)
+      const missing = CANONICAL_EVENTS.filter((k) => !mapKeys.has(k));
+      expect(missing).toEqual([]);
     }
   });
 });

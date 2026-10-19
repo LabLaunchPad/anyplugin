@@ -45,9 +45,13 @@ mcp:
 describe("opencode adapter emit", () => {
   it("renders a v1 plugin.ts shim bridging to the runner", async () => {
     const shim = await readFile(join(out, "plugin.ts"), "utf8");
-    expect(shim).toContain('"tool.execute.before": "guard-tool"');
+    // A native event maps to an ORDERED LIST of hooks (Finding H) — several
+    // hooks may share one event and all of them must be dispatched.
+    expect(shim).toContain('"tool.execute.before": [');
+    expect(shim).toContain('"id": "guard-tool"');
     // official docs name is permission.asked (verified 2026-08)
-    expect(shim).toContain('"permission.asked": "on-perm"');
+    expect(shim).toContain('"permission.asked": [');
+    expect(shim).toContain('"id": "on-perm"');
     expect(shim).toContain('ANYPLUGIN_HOST');
     expect(shim).toContain('"shell.env"');
     expect(shim).toContain('export default');
@@ -97,6 +101,7 @@ hooks:
     const shim = await readFile(join(psOut, "plugin.ts"), "utf8");
     expect(shim).not.toContain("on-prompt");
     // the mapped hook in the same manifest still emits normally
-    expect(shim).toContain('"permission.asked": "on-perm"');
+    expect(shim).toContain('"permission.asked": [');
+    expect(shim).toContain('"id": "on-perm"');
   });
 });

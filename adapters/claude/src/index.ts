@@ -5,6 +5,8 @@ import {
   type Adapter,
   type InstallAction,
   NATIVE_EVENT_MAP,
+  HOOK_POLICIES_FILENAME,
+  renderHookPolicies,
   copyDir,
   writeIfChanged,
   toPosix,
@@ -72,6 +74,8 @@ export async function emitClaude(plugin: ParsedPlugin, opts: EmitOptions): Promi
       }));
     }
     track(await writeIfChanged2(join(out, "hooks", "hooks.json"), jsonStable(hooksJson)));
+    // Runtime policy (timeout + failure policy) for the dependency-free runner.
+    track(await writeIfChanged2(join(out, "hooks", HOOK_POLICIES_FILENAME), renderHookPolicies(plugin.hooks)));
   }
 
   for (const skillDir of plugin.skills) {
@@ -109,6 +113,23 @@ export async function emitClaude(plugin: ParsedPlugin, opts: EmitOptions): Promi
       }
     }
     track(await writeIfChanged2(join(out, ".mcp.json"), jsonStable(mcp)));
+  }
+
+  // v2-safe merge artifact: skills/, commands/, agents/ paths that work
+  // regardless of plugin API version (silently dropped by v2, used by v1).
+  const patch: Record<string, unknown> = {};
+  if (plugin.skills.length > 0) {
+    patch["skills"] = plugin.skills.map((s) => substRoot(`${basename(s)}/skills`));
+  }
+  if (plugin.commands.length > 0) {
+    patch["commands"] = plugin.commands.map((c) => substRoot(basename(c)));
+  }
+  if (plugin.agents.length > 0) {
+    patch["agents"] = plugin.agents.map((a) => substRoot(basename(a)));
+  }
+  if (Object.keys(patch).length > 0) {
+    await writeIfChanged(join(out, "claude.merge.json"), jsonStable(patch));
+    track(join(out, "claude.merge.json"));
   }
 
   const actions: InstallAction[] = [

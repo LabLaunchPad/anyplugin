@@ -100,11 +100,11 @@ mcp:
     const codexToml = await readFile(join(home, ".codex", "config.toml"), "utf8");
     expect(codexToml).toContain("# BEGIN anyplugin:dry-plugin");
 
-    // dry-run: everything reported as "would", nothing actually removed
+    // dry-run: everything reported as "would" or "note:", nothing actually removed
     for (const [key, bundle] of Object.entries(bundles)) {
       const touched = await executeUninstall(key as never, bundle, { ...opts, dryRun: true });
       expect(touched.length).toBeGreaterThan(0);
-      for (const t of touched) expect(t).toMatch(/^would /);
+      for (const t of touched) expect(t).toMatch(/^(would |note: )/);
     }
     expect(await pathExists(join(home, ".claude", "plugins", "dry-plugin"))).toBe(true);
     expect(await readFile(join(home, ".codex", "config.toml"), "utf8")).toContain("# BEGIN anyplugin:dry-plugin");

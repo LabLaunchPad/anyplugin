@@ -2,7 +2,7 @@ import { z } from "zod";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { assertSafeRelative } from "../fs/safe-path.js";
+import { assertSafeRelative, resolveAuthorizedPath } from "../fs/safe-path.js";
 import { INTENSITY_MODES } from "../tiers/intensity.js";
 
 /** Canonical hook events — the platform-neutral names every adapter maps FROM. */
@@ -23,13 +23,16 @@ export type CanonicalEvent = z.infer<typeof CanonicalEvent>;
  * `async function run(payload: HookPayload): Promise<HookResult>`.
  */
 export const HookSchema = z.object({
-  id: z.string().min(1),
+  id: z.string().min(1).max(64).regex(/^[a-z][a-z0-9-]{0,63}$/, "hook ID must match ^[a-z][a-z0-9-]{0,63}$"),
   event: CanonicalEvent,
   handler: z.string().min(1),
   /** Tool-name matcher (regex or plain name); omitted = all tools. */
   match: z.string().optional(),
   timeoutSec: z.number().int().positive().max(600).optional(),
-});
+  /** Failure policy: "blocking" — handler throws result in exit 2 (host denied);
+   * "non-blocking" — handler throws result in exit 0 (host continues). Default: non-blocking. */
+  failurePolicy: z.enum(["blocking", "non-blocking"]).default("non-blocking"),
+}).strict();
 export type Hook = z.infer<typeof HookSchema>;
 
 export const McpServerSchema = z.object({
@@ -41,7 +44,7 @@ export const McpServerSchema = z.object({
   url: z.string().optional(),
   headers: z.record(z.string(), z.string()).default({}),
   timeoutMs: z.number().int().positive().optional(),
-});
+}).strict();
 export type McpServer = z.infer<typeof McpServerSchema>;
 
 /**
@@ -109,13 +112,13 @@ export async function loadPluginManifest(pluginRoot: string): Promise<ParsedPlug
     throw new Error(`no anyplugin.plugin.{yaml,yml,json} found in ${pluginRoot}`);
   }
   const raw = used.endsWith(".json") ? JSON.parse(text) : parseYaml(text);
-  return parsePluginManifest(raw);
+  return parsePluginManifest(raw, pluginRoot);
 }
 
 /** Parsed manifest: validated fields + unknown top-level keys preserved verbatim. */
 export type ParsedPlugin = AnyPluginManifest & { extra: Record<string, unknown> };
 
-export function parsePluginManifest(raw: unknown): ParsedPlugin {
+export async function parsePluginManifest(raw: unknown, pluginRoot: string): Promise<ParsedPlugin> {
   const known = AnyPluginManifestSchema.safeParse(raw);
   if (!known.success) {
     const issues = known.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
@@ -125,11 +128,26 @@ export function parsePluginManifest(raw: unknown): ParsedPlugin {
   for (const key of Object.keys(known.data)) delete extra[key];
   const plugin: ParsedPlugin = { ...known.data, extra };
   // SafePath boundary (spec §1.1): every manifest-declared path is lexically
-  // validated relative to the plugin root before any adapter or installer uses it.
-  for (const s of plugin.skills) assertSafeRelative(s, "manifest skills[] entry");
-  for (const c of plugin.commands) assertSafeRelative(c, "manifest commands[] entry");
-  for (const a of plugin.agents) assertSafeRelative(a, "manifest agents[] entry");
-  if (plugin.knowledge !== undefined) assertSafeRelative(plugin.knowledge, "manifest knowledge path");
-  for (const hook of plugin.hooks) assertSafeRelative(hook.handler, `manifest hooks[${hook.id}].handler`);
+  // validated relative to the plugin root, AND realpath containment is verified.
+  for (const s of plugin.skills) {
+    assertSafeRelative(s, "manifest skills[] entry");
+    await resolveAuthorizedPath(pluginRoot, s);
+  }
+  for (const c of plugin.commands) {
+    assertSafeRelative(c, "manifest commands[] entry");
+    await resolveAuthorizedPath(pluginRoot, c);
+  }
+  for (const a of plugin.agents) {
+    assertSafeRelative(a, "manifest agents[] entry");
+    await resolveAuthorizedPath(pluginRoot, a);
+  }
+  if (plugin.knowledge !== undefined) {
+    assertSafeRelative(plugin.knowledge, "manifest knowledge path");
+    await resolveAuthorizedPath(pluginRoot, plugin.knowledge);
+  }
+  for (const hook of plugin.hooks) {
+    assertSafeRelative(hook.handler, `manifest hooks[${hook.id}].handler`);
+    await resolveAuthorizedPath(pluginRoot, hook.handler);
+  }
   return plugin;
 }

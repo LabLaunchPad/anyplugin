@@ -10,5 +10,8 @@
   },
   "dependencies": {
     "@lablaunchpad/core": "workspace:*"
+  },
+  "devDependencies": {
+    "yaml": "^2.5.0"
   }
 }

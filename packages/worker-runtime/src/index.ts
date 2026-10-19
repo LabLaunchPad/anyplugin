@@ -80,6 +80,36 @@ export {
 } from "./resource/telemetry.js";
 
 export {
+  CIRCUIT_STATES,
+  DELEGATION_EVENT_TYPES,
+  DEFAULT_CIRCUIT_POLICY,
+  FAILURE_BEHAVIOUR,
+  DELEGATION_FAILURE_CLASSES,
+  FAILURE_SPECS,
+  FAIL_POLICY,
+  FALLBACKABLE_FAILURES,
+  CircuitBreaker,
+  canFallback,
+  classifyAttempt,
+  classifyErrorCode,
+  classifyFailure,
+  classifyHttpStatus,
+  delegationEvent,
+  delegationEventId,
+  failureSpec,
+  fallbackLegal,
+  type AttemptObservation,
+  type CircuitPolicy,
+  type CircuitState,
+  type DelegationErrorEnvelope,
+  type DelegationEvent,
+  type DelegationEventType,
+  type FailureBehaviour,
+  type DelegationFailureClass,
+  type FailureClassSpec,
+} from "./telemetry/delegation.js";
+
+export {
   EventLog,
   EventLogError,
   EVENT_LOG_RELPATH,

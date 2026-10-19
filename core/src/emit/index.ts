@@ -1,5 +1,5 @@
-import { mkdir, writeFile, readdir, stat, readFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { mkdir, writeFile, readdir, stat, readFile, realpath } from "node:fs/promises";
+import { dirname, join, relative, sep } from "node:path";
 
 /** Shared filesystem helpers for adapters emitting native artifacts. */
 
@@ -28,6 +28,22 @@ export async function copyDir(src: string, dest: string): Promise<string[]> {
   for (const entry of await readdir(src, { withFileTypes: true })) {
     const s = join(src, entry.name);
     const d = join(dest, entry.name);
+    // F-02: reject symlinks whose targets may live outside the plugin root;
+    // realpath the source and verify containment before copying
+    if (entry.isSymbolicLink()) {
+      try {
+        const realTarget = await realpath(s);
+        const srcReal = await realpath(src);
+        if (srcReal === null || !realTarget.startsWith(srcReal + sep)) {
+          // Uncontained symlink — skip it (external content would escape)
+          continue;
+        }
+        // Contained symlink — fall through to copy its target below
+      } catch {
+        //Cannot resolve the symlink — skip it (dangling or unsafe)
+        continue;
+      }
+    }
     if (entry.isDirectory()) {
       written.push(...(await copyDir(s, d)));
     } else {

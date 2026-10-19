@@ -12,6 +12,7 @@ import { existsSync, readFileSync, readdirSync, statSync, realpathSync } from "n
 import { join, dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline";
+import { parseYaml } from "./yaml-lite.js";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -63,6 +64,8 @@ function resolveBundle(explicit) {
 function walkMd(dir, base = dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name.startsWith(".")) continue;
+    // F-03: reject symlinks that could resolve outside the authorized bundle root
+    if (entry.isSymbolicLink()) continue;
     const abs = join(dir, entry.name);
     if (entry.isDirectory()) walkMd(abs, base, out);
     else if (entry.name.endsWith(".md")) out.push({ rel: relative(base, abs).split("\\").join("/"), abs });
@@ -70,44 +73,46 @@ function walkMd(dir, base = dir, out = []) {
   return out;
 }
 
-/** Lenient frontmatter reader — good enough for listing/reading; validation uses the anyplugin CLI. */
+/**
+ * Frontmatter reader.
+ *
+ * Uses the runtime's own YAML 1.2 core-schema parser so the shapes the MCP
+ * tools report (tags, trust, sources) match what the `yaml` package — and
+ * therefore the OKF validator — produce. The previous hand-rolled reader was
+ * not YAML: it turned `tags: [a, b]` into a string and dropped nested
+ * mappings entirely, so the server reported false facts about the bundle.
+ */
 function parseMd(text) {
   if (!text.startsWith("---")) return { fm: {}, body: text };
   const first = text.indexOf("\n");
+  if (first < 0) return { fm: {}, body: text };
   const rest = text.slice(first + 1);
   const close = rest.search(/^(---|\.\.\.)\s*$/m);
   if (close < 0) return { fm: {}, body: text };
   const fmText = rest.slice(0, close);
   const body = rest.slice(rest.indexOf("\n", close) + 1);
-  const fm = {};
-  let listKey = null;
-  for (const line of fmText.split(/\r?\n/)) {
-    if (/^\s*-\s+/.test(line) && listKey) {
-      const val = line.replace(/^\s*-\s+/, "").trim().replace(/^['"]|['"]$/g, "");
-      if (Array.isArray(fm[listKey])) fm[listKey].push(val);
-      continue;
-    }
-    const m = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-    if (m) {
-      const key = m[1];
-      const val = m[2].trim().replace(/^['"]|['"]$/g, "");
-      if (val === "") {
-        fm[key] = []; // maybe a list; scalar set later if no items follow
-        listKey = key;
-      } else {
-        fm[key] = val;
-        listKey = null;
-      }
-    }
+  let fm;
+  try {
+    fm = parseYaml(fmText);
+  } catch {
+    fm = null;
   }
+  if (!fm || typeof fm !== "object" || Array.isArray(fm)) fm = {};
   return { fm, body };
 }
 
+/**
+ * Trust tier, mirroring core/src/okf (`trustTier`).
+ *
+ * `verified` is a list of `{by, at}` events; a bare mapping counts as a
+ * one-element list (OKF §5.2). A `by` starting with "human:" means the
+ * concept was human-reviewed.
+ */
 function trustTier(fm) {
   const v = fm["verified"];
-  const list = Array.isArray(v) ? v : v ? [v] : [];
+  const list = Array.isArray(v) ? v : v && typeof v === "object" ? [v] : v ? [v] : [];
   if (!list.length) return "unverified";
-  return list.some((e) => typeof e === "object" && String(e.by ?? "").startsWith("human:"))
+  return list.some((e) => typeof e === "object" && e !== null && String(e.by ?? "").startsWith("human:"))
     ? "human-reviewed"
     : "machine-confirmed";
 }

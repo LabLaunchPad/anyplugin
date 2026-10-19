@@ -133,7 +133,9 @@ describe("install journal — conflict-safe uninstall", () => {
     await writeFile(join(f.home, ".codex", "config.toml"), originalToml);
 
     await executeInstall("codex", f.bundles["codex"]!, f.opts);
-    await executeInstall("codex", f.bundles["codex"]!, f.opts); // reinstall
+    // Reinstall should fail with new ownership model (different installationId)
+    // Must uninstall first before reinstalling
+    await expect(executeInstall("codex", f.bundles["codex"]!, f.opts)).rejects.toThrow("owned by another installation");
     await executeUninstall("codex", f.bundles["codex"]!, f.opts);
 
     expect(await readFile(join(f.home, ".codex", "config.toml"), "utf8")).toBe(originalToml);
@@ -144,5 +146,24 @@ describe("install journal — conflict-safe uninstall", () => {
     await writeFile(join(f.project, "opencode.json"), "{ not valid json");
     await expect(executeInstall("opencode", f.bundles["opencode"]!, f.opts)).rejects.toThrow(/unparseable JSON config/);
     expect(await readFile(join(f.project, "opencode.json"), "utf8")).toBe("{ not valid json");
+  });
+
+  it("conflict-abort survives corrupt journal JSON", async () => {
+    const f = await makePlugin();
+    // Add pre-existing content to AGENTS.md that should be preserved
+    await writeFile(join(f.project, "AGENTS.md"), "MY OWN NOTES\n");
+    await executeInstall("opencode", f.bundles["opencode"]!, f.opts);
+    // Corrupt the journal JSON after install — the journal lives at
+    // <project>/.opencode/plugins/<plugin>/.anyplugin-state.json for opencode
+    const opencodePluginsDir = join(f.project, ".opencode", "plugins");
+    await mkdir(opencodePluginsDir, { recursive: true });
+    const journalPath = join(opencodePluginsDir, "journaled-plugin", ".anyplugin-state.json");
+    await writeFile(journalPath, "{ corrupt json");
+    // Uninstall should abort because journal is now invalid
+    // The error comes from JSON.parse throwing on invalid JSON
+    await expect(executeUninstall("opencode", f.bundles["opencode"]!, f.opts)).rejects.toThrow(/Expected property name|invalid install journal|corrupt/);
+    // The project should be preserved with its edits
+    const agentsMd = join(f.project, "AGENTS.md");
+    expect(await readFile(agentsMd, "utf8")).toContain("MY OWN NOTES");
   });
 });

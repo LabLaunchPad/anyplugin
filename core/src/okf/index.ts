@@ -347,7 +347,7 @@ export async function validateBundle(root: string): Promise<ValidationIssue[]> {
 }
 
 /** Regenerate index.md per directory (official algorithm: deepest-first, # <Type> sections, sorted by title). */
-export async function regenerateIndexes(root: string): Promise<string[]> {
+export async function regenerateIndexes(root: string, opts: { includeRoot?: boolean } = {}): Promise<string[]> {
   const written: string[] = [];
   const bundle = await readBundle(root);
   const byDir = new Map<string, OkfDocument[]>();
@@ -419,9 +419,26 @@ export async function regenerateIndexes(root: string): Promise<string[]> {
     const absDir = join(root, dir);
     await mkdir(absDir, { recursive: true });
     const isRoot = dir === "";
+    const indexPath = join(absDir, "index.md");
+
+    // The ROOT index is often HAND-CURATED — a navigation map, not a generated
+    // listing. Overwriting it with generated content destroys work that no
+    // generator can reproduce, and it has happened before: the ledger records
+    // a past incident of exactly this class. So the root index is only
+    // written when it does not exist yet, or when the caller explicitly asks
+    // for the root to be regenerated.
+    if (isRoot && !opts.includeRoot) {
+      try {
+        await stat(indexPath);
+        continue; // It exists and is not ours to replace — leave it alone.
+      } catch {
+        // It does not exist — fall through and create it.
+      }
+    }
+
     const fm = isRoot ? { okf_version: OKF_VERSION } : {};
     const content = Object.keys(fm).length ? serializeDocument(fm, body, { isIndex: true }) : body.trimStart();
-    await writeFile(join(absDir, "index.md"), content, "utf8");
+    await writeFile(indexPath, content, "utf8");
     written.push(join(dir === "" ? "." : dir, "index.md").split(sep).join("/"));
   }
   return written;

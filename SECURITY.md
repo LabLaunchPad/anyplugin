@@ -16,6 +16,6 @@ AnyPlugin installs files into agent config directories and edits agent config fi
 
 1. **Path safety** — installer destinations come only from a fixed template whitelist plus validated name/path segments (`validatePluginName`, `validateRelPath`, `validateSegment` in `cli/src/index.ts`). Token substitution (`{{PLUGIN_ROOT}}`) is allowed in VALUES, never in paths.
 2. **Reversibility** — config edits are marker-delimited blocks; uninstall must restore prior state (tested in `cli/src/cli.test.ts` and `cli/src/scaffold.test.ts`).
-3. **Plugin runtime isolation** — hook handler failures are always non-blocking (exit 0); a plugin cannot break the host agent. Blocking (exit 2) is only an explicit handler decision.
+3. **Plugin runtime isolation** - a hook handler failure exits 0 with a stderr note by default; a plugin cannot break the host agent. The single exception is an explicit opt-in: a hook declared `failurePolicy: "blocking"` in the manifest, whose failures exit 2 (the host is denied). The plugin author asks for that; the platform never infers it.
 4. **Supply-chain minimalism** — three runtime dependencies (yaml, zod, smol-toml); the emitted runner and MCP server are dependency-free. New dependencies require justification.
 5. **No secrets in source** — credentials belong in environment variables or secret stores, never as literals in code, examples, or tests.
