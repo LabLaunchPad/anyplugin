@@ -152,6 +152,49 @@ scenario.
 
 ---
 
+## 1A. The engine's own density - saturating the machine without exceeding it
+
+A certification harness that is itself wasteful is a harness that will be
+skipped under pressure. So the **same density principle the SDK optimises**
+(`roadmap.md` §7.4) applies to the harness:
+
+> **DENSITY = (verified scenarios × coverage weight) / (wall-clock + tokens + cost)**
+
+**The four saturation levers, in the order they should be pulled:**
+
+| Lever | The move | The measurement | The bound |
+|---|---|---|---|
+| **S1 - Parallelise the scenario matrix** | 28 scenarios × 14 environments is **392 cells**. They are **independent** - the harness is embarrassingly parallel at the cell level | Cells completed per wall-clock second | A **fixed** worker pool, sized to the machine, never `os.cpus().length` on a shared host |
+| **S2 - Share the expensive setup** | The WASM binaries, the model weights, the compiled parser bundles and the golden corpus are **loaded once per worker, not once per scenario** | Bytes loaded per scenario | A shared, read-only, content-addressed cache - the same CAS the SDK uses |
+| **S3 - Reuse the recorded fixtures** | A scenario whose input is unchanged **replays** rather than re-executes | Replayed vs. re-executed cells | Replay is only valid when the input digest is unchanged; the harness records which |
+| **S4 - Bound the fan-out explicitly** | The D9 gate applies to the harness too: a scenario that is not parallelizable is not parallelized, and a scenario that would exceed the budget is **shed, not degraded** | Cells shed, with the reason | The same **token-bucket** budget shape: a sustained rate plus a burst allowance |
+
+**And the four things the harness must NOT do**, each of which would make it
+produce a *false* verdict rather than a slow one:
+
+| Anti-pattern | Why it is worse than slow |
+|---|---|
+| **Skip a scenario when the machine is busy** | A silent skip is a lie about coverage. The suite **reports skip counts per environment with reasons**, and a skip is visible in the report, not only in the exit code |
+| **Run scenarios concurrently against shared mutable state** | The kernel's single-writer rule applies to the harness. A shared fixture directory is a race, and a race in the *harness* produces a failure in the *system under test* |
+| **Reuse a live provider for a "deterministic" scenario** | A scenario whose oracle is a model is not deterministic. The oracles are **O1-O7**, and only O8 (a calibrated judge) is permitted to be statistical - and it must be reported with its kappa and its expiry |
+| **Let a timeout masquerade as a pass** | A timeout is a **failure**, not a success. The kernel's existing rule, and the one the platform research called *"exit 0 must mean the host may proceed, never that a handler succeeded"* |
+
+**The honest saturation limit, and it is the machine's:** the harness can
+saturate **one** machine's cores and one provider's rate limit. It cannot
+saturate a fleet, and it must not pretend to - the report states the
+**parallelism actually achieved** (`cells completed / (wall-clock x workers)`)
+next to the **parallelism available** (`min(cores, provider rate limit)`), so
+a slow run is attributable.
+
+**And the cost cap, because a harness that can spend without bound is a
+harness that will:** the harness's token and cost budget is **separate from
+the system's budget** - the same rule `optimization.md` §6.1 sets for the
+optimiser. Exhausting the harness budget **aborts the sweep and reports a
+partial result with the cells that did not run**. It does not silently
+narrow the matrix.
+
+---
+
 ## 3. The environment matrix
 
 The same scenario, run in every environment it claims to support. Each row is
