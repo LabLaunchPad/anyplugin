@@ -106,12 +106,31 @@ export function replay(dir: string): ReplayReport {
  * Bounded by what was recovered on purpose. Events after the highest surviving
  * one are indistinguishable from events that were never written, and reporting
  * them as gaps would invent losses that may not have occurred.
+ *
+ * The events arrive sorted by sequence, so the gaps are found in ONE pass:
+ * walk the sorted list and compare each sequence with the one expected next.
+ * The earlier implementation called `events.some()` inside the loop, which is
+ * O(n²) in the number of recovered events — replay runs over the whole log on
+ * every recovery, so the cost was paid exactly when the system was already
+ * under stress.
+ *
+ * Exported so the single-pass property can be proven directly: a test passes
+ * an array whose `some` throws, which fails if the quadratic pattern returns.
  */
-function findGaps(events: readonly WorkerEvent[]): number[] {
+export function findGaps(events: readonly WorkerEvent[]): number[] {
   if (events.length === 0) return [];
   const gaps: number[] = [];
-  for (let expected = events[0]!.sequence; expected < events[events.length - 1]!.sequence; expected += 1) {
-    if (!events.some((e) => e.sequence === expected)) gaps.push(expected);
+  let expected = events[0]!.sequence;
+  for (const event of events) {
+    // Every sequence below this event's, and at or above the next expected
+    // one, was lost.
+    while (expected < event.sequence) {
+      gaps.push(expected);
+      expected += 1;
+    }
+    // The next event must follow this one. Duplicates were already rejected
+    // during decoding, so the sequence never goes backwards.
+    expected = event.sequence + 1;
   }
   return gaps;
 }

@@ -5,6 +5,8 @@ import {
   type Adapter,
   type InstallAction,
   NATIVE_EVENT_MAP,
+  HOOK_POLICIES_FILENAME,
+  renderHookPolicies,
   copyDir,
   writeIfChanged,
   toPosix,
@@ -91,6 +93,9 @@ export async function emitCodex(plugin: ParsedPlugin, opts: EmitOptions): Promis
     }
     await writeIfChanged(join(out, "hooks", "hooks.json"), jsonStable(hooksJson));
     track(join(out, "hooks", "hooks.json"));
+    // Runtime policy (timeout + failure policy) for the dependency-free runner.
+    await writeIfChanged(join(out, "hooks", HOOK_POLICIES_FILENAME), renderHookPolicies(plugin.hooks));
+    track(join(out, "hooks", HOOK_POLICIES_FILENAME));
   }
 
   // MCP: rendered as a config.toml fragment the CLI appends under [mcp_servers].

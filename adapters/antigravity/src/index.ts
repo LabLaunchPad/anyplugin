@@ -5,6 +5,8 @@ import {
   type Adapter,
   type InstallAction,
   NATIVE_EVENT_MAP,
+  HOOK_POLICIES_FILENAME,
+  renderHookPolicies,
   copyDir,
   writeIfChanged,
   toPosix,
@@ -80,6 +82,9 @@ export async function emitAntigravity(plugin: ParsedPlugin, opts: EmitOptions): 
     }
     await writeIfChanged(join(out, "hooks.json"), jsonStable(hooksJson));
     track(join(out, "hooks.json"));
+    // Runtime policy (timeout + failure policy) for the dependency-free runner.
+    await writeIfChanged(join(out, "hooks", HOOK_POLICIES_FILENAME), renderHookPolicies(plugin.hooks));
+    track(join(out, "hooks", HOOK_POLICIES_FILENAME));
   }
 
   // mcp_config.json — mcpServers map; HTTP MUST use serverUrl (camelCase), not url.

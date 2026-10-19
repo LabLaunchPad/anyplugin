@@ -217,7 +217,18 @@ export type Decision = z.infer<typeof DecisionSchema>;
 
 // ── 6. Experience ────────────────────────────────────────────────────────────
 
-export const FAILURE_CLASSES = [
+/**
+ * The CONTRACT failure classes — why a piece of work failed.
+ *
+ * Named `CONTRACT_FAILURE_CLASSES` rather than `FAILURE_CLASSES` because the
+ * package also exports a DELEGATION failure taxonomy
+ * (`telemetry/delegation.ts`), which is a different thing with a different
+ * vocabulary. Two exported symbols with the same name and different value
+ * sets is a silent collision: whichever the barrel resolves last wins, and
+ * the other becomes unreachable without an error. The distinct names make
+ * the difference explicit at the import site.
+ */
+export const CONTRACT_FAILURE_CLASSES = [
   "INFRASTRUCTURE",
   "TOOL",
   "ENVIRONMENT",
@@ -227,8 +238,8 @@ export const FAILURE_CLASSES = [
   "VERIFICATION",
   "USER_CONSTRAINT",
 ] as const;
-export const FailureClassSchema = z.enum(FAILURE_CLASSES);
-export type FailureClass = z.infer<typeof FailureClassSchema>;
+export const FailureClassSchema = z.enum(CONTRACT_FAILURE_CLASSES);
+export type ContractFailureClass = z.infer<typeof FailureClassSchema>;
 
 /**
  * What happened when the worker attempted X under conditions Y.

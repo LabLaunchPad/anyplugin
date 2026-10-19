@@ -28,12 +28,13 @@
  * is classified; sequence gaps and duplicates are reported distinctly; replay
  * is deterministic; a second writer is refused.
  *
- * NOT guaranteed, and deliberately not claimed: **durability across OS crash or
- * power loss** (U1). Nothing here calls fsync, and no test simulates a crash.
- * A completed `append()` means the bytes were handed to the OS, not that they
- * survive its death. Claiming otherwise would be inventing a property.
+ * DURABILITY is a per-open choice, stated exactly rather than implied. See
+ * `DurabilityLevel` below. The default (`best-effort`) hands the bytes to the
+ * OS and does NOT survive power loss; the stronger levels fsync explicitly and
+ * say so. A completed `append()` at the default level means the bytes were
+ * handed to the OS, not that they survive its death.
  */
-import { closeSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync, appendFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync, fsyncSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { hostname } from "node:os";
 import { canonicalJson } from "../canonical.js";
@@ -44,6 +45,36 @@ import { recordHash } from "./write-contract.js";
 
 export const LOG_FILENAME = "events.log";
 export const WRITER_LOCK_FILENAME = "writer.lock";
+
+/**
+ * How much durability a writer asks for.
+ *
+ * The level is a claim about what survives a failure, so each one names the
+ * failure it tolerates:
+ *
+ * - `best-effort` (default) — bytes are handed to the OS page cache. They
+ *   survive the process dying. They do NOT survive an OS crash or power loss.
+ *   This is the default because the write path was measured (F10) at this
+ *   level, and an fsync per append would invalidate those numbers.
+ * - `process-crash` — bytes are fsynced to the storage device before the
+ *   append returns. They survive an OS crash. A power loss may still lose the
+ *   file ENTRY (the directory update), so a brand-new log file may vanish.
+ * - `power-loss` — bytes are fsynced, and the containing directory is fsynced
+ *   so the file entry itself is durable. On Windows the directory fsync is a
+ *   no-op (NTFS does not need it the way POSIX does); the level then means
+ *   the same as `process-crash` there, and this is reported rather than
+ *   pretended away.
+ */
+export type DurabilityLevel = "best-effort" | "process-crash" | "power-loss";
+
+/** The durability a writer uses when it does not ask for one. */
+export const DEFAULT_DURABILITY: DurabilityLevel = "best-effort";
+
+/** Options accepted by `EventLog.open`. */
+export interface EventLogOptions {
+  /** How durable each append must be. Defaults to `best-effort`. */
+  durability?: DurabilityLevel;
+}
 
 /** Relative path of the event log within a workspace, for ownership checks. */
 export const EVENT_LOG_RELPATH = `${STORAGE_ROOT_DIRNAME}/events/${LOG_FILENAME}`;
@@ -85,13 +116,15 @@ export class EventLog {
   #logPath: string;
   #lockPath: string;
   #nextSequence: number;
+  #durability: DurabilityLevel;
   #closed = false;
 
-  private constructor(dir: string, nextSequence: number) {
+  private constructor(dir: string, nextSequence: number, durability: DurabilityLevel) {
     this.#dir = dir;
     this.#logPath = join(dir, LOG_FILENAME);
     this.#lockPath = join(dir, WRITER_LOCK_FILENAME);
     this.#nextSequence = nextSequence;
+    this.#durability = durability;
   }
 
   /**
@@ -101,10 +134,15 @@ export class EventLog {
    * filesystem call, so the log cannot be opened outside kernel-owned storage
    * even if a caller supplies the path.
    */
-  static open(workspaceRoot: string, relPath: string = `${STORAGE_ROOT_DIRNAME}/events`): EventLog {
+  static open(
+    workspaceRoot: string,
+    relPath: string = `${STORAGE_ROOT_DIRNAME}/events`,
+    opts: EventLogOptions = {},
+  ): EventLog {
     assertWritable(relPath);
     const dir = join(workspaceRoot, relPath);
     mkdirSync(dir, { recursive: true });
+    const durability = opts.durability ?? DEFAULT_DURABILITY;
 
     const lockPath = join(dir, WRITER_LOCK_FILENAME);
     let fd: number;
@@ -134,7 +172,12 @@ export class EventLog {
     // Resume from the existing log rather than restarting the sequence, which
     // would produce duplicates — the contract's "broken writer" signal.
     const resumeFrom = highestSequence(join(dir, LOG_FILENAME));
-    return new EventLog(dir, resumeFrom + 1);
+    const log = new EventLog(dir, resumeFrom + 1, durability);
+    // The file ENTRY must be durable before any byte in it can be: a log file
+    // that the directory does not know about cannot be recovered, however
+    // durable its contents are.
+    if (durability === "power-loss") log.#fsyncDirectory();
+    return log;
   }
 
   /** The sequence the next appended event will receive. */
@@ -146,6 +189,31 @@ export class EventLog {
     return this.#dir;
   }
 
+  /** The durability level this writer commits to. */
+  get durability(): DurabilityLevel {
+    return this.#durability;
+  }
+
+  /**
+   * Flush the containing directory so the log file's ENTRY is durable.
+   *
+   * A no-op on Windows: NTFS journals directory updates, so there is no
+   * directory handle to fsync. The failure is swallowed deliberately — a
+   * platform that cannot express the guarantee must not make the write fail.
+   */
+  #fsyncDirectory(): void {
+    try {
+      const dirFd = openSync(this.#dir, "r");
+      try {
+        fsyncSync(dirFd);
+      } finally {
+        closeSync(dirFd);
+      }
+    } catch {
+      /* not supported on this platform — the file contents are still fsynced */
+    }
+  }
+
   /**
    * Append one event, assigning its sequence.
    *
@@ -155,7 +223,18 @@ export class EventLog {
   append(event: Omit<WorkerEvent, "sequence">): WorkerEvent {
     if (this.#closed) throw new EventLogError("cannot append to a closed event log");
     const complete = EventSchema.parse({ ...event, sequence: this.#nextSequence });
-    appendFileSync(this.#logPath, frameOf(complete), "utf8");
+    const frame = frameOf(complete);
+    const fd = openSync(this.#logPath, "a");
+    try {
+      writeSync(fd, frame);
+      // fsync BEFORE the sequence advances: a sequence that was handed out but
+      // whose bytes are not durable would be a permanent gap on recovery.
+      if (this.#durability !== "best-effort") {
+        fsyncSync(fd);
+      }
+    } finally {
+      closeSync(fd);
+    }
     // Incremented only after the write returns, so a throwing write does not
     // burn a sequence number and manufacture a gap.
     this.#nextSequence += 1;
