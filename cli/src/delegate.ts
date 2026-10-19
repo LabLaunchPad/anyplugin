@@ -190,8 +190,8 @@ function childEnv(spec: BackendSpec, extra: Record<string, string> = {}): Record
     if (value !== undefined) env[key] = value;
   }
   for (const [key, value] of Object.entries(spec.env)) {
-    // A backend may not smuggle a value into a variable the allowlist owns.
-    if (key in env && !(key in spec.env)) continue;
+    // The registry is the user's own file, so it MAY set a variable the
+    // allowlist already provides — that is the point of naming it explicitly.
     env[key] = value;
   }
   for (const [key, value] of Object.entries(extra)) env[key] = value;
@@ -203,6 +203,25 @@ function cap(text: string, maxBytes: number): { text: string; truncated: boolean
   const bytes = Buffer.byteLength(text, "utf8");
   if (bytes <= maxBytes) return { text, truncated: false };
   return { text: Buffer.from(text, "utf8").subarray(0, maxBytes).toString("utf8"), truncated: true };
+}
+
+/**
+ * Cap a stream as it arrives, counting BYTES.
+ *
+ * Counting characters would let a stream of 4-byte characters use four times
+ * the intended memory, and the accumulation guard below is what stops an
+ * unbounded producer from exhausting the host — so it has to be measured in
+ * the same unit the cap is expressed in.
+ */
+function byteCappedAppend(current: string, chunk: Buffer, maxBytes: number): { text: string; truncated: boolean } {
+  const currentBytes = Buffer.byteLength(current, "utf8");
+  if (currentBytes >= maxBytes) return { text: current, truncated: true };
+  const room = maxBytes - currentBytes;
+  if (chunk.byteLength <= room) return { text: current + chunk.toString("utf8"), truncated: false };
+  // A chunk that straddles the boundary is cut on a byte boundary. Cutting
+  // mid-codepoint would leave a replacement character, which is fine for
+  // diagnostics but must not be mistaken for the backend's actual output.
+  return { text: current + chunk.subarray(0, room).toString("utf8"), truncated: true };
 }
 
 /**
@@ -268,6 +287,8 @@ export async function executeBackend(
     stderr: string;
     timedOut: boolean;
     cancelled: boolean;
+    stdoutTruncated: boolean;
+    stderrTruncated: boolean;
     spawnError?: NodeJS.ErrnoException;
   }>((resolvePromise) => {
     const child = spawn(spec.command!, [...spec.args, ...args], {
@@ -280,6 +301,8 @@ export async function executeBackend(
 
     let stdout = "";
     let stderr = "";
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
     let settled = false;
     let timedOut = false;
     let cancelled = false;
@@ -317,23 +340,29 @@ export async function executeBackend(
     };
 
     child.stdout.on("data", (chunk: Buffer) => {
-      if (stdout.length < maxBytes * 2) stdout += chunk.toString("utf8");
+      const next = byteCappedAppend(stdout, chunk, maxBytes);
+      stdout = next.text;
+      stdoutTruncated = stdoutTruncated || next.truncated;
     });
     child.stderr.on("data", (chunk: Buffer) => {
-      if (stderr.length < maxBytes * 2) stderr += chunk.toString("utf8");
+      const next = byteCappedAppend(stderr, chunk, maxBytes);
+      stderr = next.text;
+      stderrTruncated = stderrTruncated || next.truncated;
     });
     child.on("error", (err: NodeJS.ErrnoException) => {
-      settle({ code: null, signal: null, stdout, stderr, timedOut, cancelled, spawnError: err });
+      settle({ code: null, signal: null, stdout, stderr, timedOut, cancelled, stdoutTruncated, stderrTruncated, spawnError: err });
     });
     child.on("close", (code, signal) => {
-      settle({ code, signal, stdout, stderr, timedOut, cancelled });
+      settle({ code, signal, stdout, stderr, timedOut, cancelled, stdoutTruncated, stderrTruncated });
     });
   });
 
   const durationMs = Date.now() - started;
+  // The streams were already capped as they arrived, in BYTES. The final cap
+  // is a belt-and-braces check for anything that slipped through.
   const outCap = cap(result.stdout, maxBytes);
   const errCap = cap(result.stderr, maxBytes);
-  const truncated = outCap.truncated || errCap.truncated;
+  const truncated = outCap.truncated || errCap.truncated || result.stdoutTruncated || result.stderrTruncated;
 
   // A spawn error is its own observation: the process never ran.
   const observation = result.spawnError
@@ -581,11 +610,16 @@ export function selectBackend(
 
   // Health filter, remembering the excluded ones so an all-unhealthy chain
   // can still try them.
+  //
+  // `isRefusing` is READ-ONLY. `canAttempt` has a side effect — it claims the
+  // half-open trial slot — and calling it here would claim the slot for a
+  // candidate that may never be attempted, leaving that backend permanently
+  // untried. The slot is claimed in `delegate()`, at the moment of the attempt.
   const healthy: BackendSpec[] = [];
   const unhealthy: BackendSpec[] = [];
   for (const candidate of candidates) {
     const breaker = breakers.get(candidate.id);
-    if (breaker && !breaker.canAttempt(now)) {
+    if (breaker && breaker.isRefusing(now)) {
       unhealthy.push(candidate);
       events.push(
         delegationEvent({
@@ -669,22 +703,49 @@ export async function delegate(opts: DelegateOptions): Promise<DelegationResult>
   let attemptNumber = 1;
 
   for (const candidate of decision.candidates) {
-    events.push(
-      delegationEvent({
-        type: "ROUTE_SELECTED",
-        backendId: candidate.id,
-        ...(opts.request?.capability ? { capability: opts.request.capability } : {}),
-        ...(opts.request?.domain ? { domain: opts.request.domain } : {}),
-        attempt: attemptNumber,
-        at: Date.now(),
-      }),
-    );
+    // `selectBackend` already recorded the selection of the FIRST candidate.
+    // Recording it again here would double-count it in the telemetry, so only
+    // a genuine move to another backend emits an event.
+    if (candidate !== decision.candidates[0]) {
+      events.push(
+        delegationEvent({
+          type: "FALLBACK_SELECTED",
+          backendId: candidate.id,
+          ...(opts.request?.capability ? { capability: opts.request.capability } : {}),
+          ...(opts.request?.domain ? { domain: opts.request.domain } : {}),
+          attempt: attemptNumber,
+          at: Date.now(),
+        }),
+      );
+    }
+
+    // Claim the circuit's trial slot at the moment of the actual attempt.
+    // `selectBackend` deliberately did NOT claim it (see the note there): a
+    // candidate that is considered and passed over must not consume the one
+    // half-open trial the backend is allowed.
+    const breaker = breakers.get(candidate.id);
+    if (breaker) {
+      const now = Date.now();
+      if (!breaker.canAttempt(now)) {
+        // The circuit closed between the selection and this attempt. Skip the
+        // candidate rather than running a backend the circuit is refusing.
+        events.push(
+          delegationEvent({
+            type: "CIRCUIT_OPENED",
+            backendId: candidate.id,
+            attempt: attemptNumber,
+            circuitState: breaker.state,
+            at: now,
+          }),
+        );
+        continue;
+      }
+    }
 
     const outcome = await executeBackend(candidate, opts.args ?? [], { ...opts, attempt: attemptNumber });
     attempts.push(outcome);
     events.push(...outcome.events);
 
-    const breaker = breakers.get(candidate.id);
     if (breaker) {
       if (outcome.failureClass) {
         const before = breaker.state;

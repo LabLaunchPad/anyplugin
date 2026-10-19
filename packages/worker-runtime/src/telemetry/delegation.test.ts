@@ -217,6 +217,28 @@ describe("circuit breaker", () => {
     expect(cb.state).toBe("closed");
   });
 
+  it("isRefusing is read-only and does not claim the half-open trial", () => {
+    // The bug this prevents: a caller that merely ASKS whether a backend is
+    // reachable must not consume the single half-open trial. If it did, a
+    // candidate that was considered and passed over could never be tried.
+    const cb = new CircuitBreaker({ failureThreshold: 1, cooldownMs: 1000, successThreshold: 1 });
+    cb.recordFailure("timeout", 0);
+    expect(cb.isRefusing(0)).toBe(true);
+    expect(cb.isRefusing(1000)).toBe(false); // the cooldown has elapsed
+    // The state is still OPEN — asking did not transition it.
+    expect(cb.state).toBe("open");
+    // And the trial slot was NOT claimed.
+    expect(cb.canAttempt(1000)).toBe(true);
+    expect(cb.state).toBe("half_open");
+  });
+
+  it("isRefusing reports half-open as refusing while a trial is in flight", () => {
+    const cb = new CircuitBreaker({ failureThreshold: 1, cooldownMs: 1000, successThreshold: 1 });
+    cb.recordFailure("timeout", 0);
+    cb.canAttempt(1000); // claims the trial
+    expect(cb.isRefusing(1000)).toBe(true);
+  });
+
   it("resets the failure count on success", () => {
     const cb = new CircuitBreaker({ failureThreshold: 3, cooldownMs: 1000, successThreshold: 1 });
     cb.recordFailure("timeout", 0);

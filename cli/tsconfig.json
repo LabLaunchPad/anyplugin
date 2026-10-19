@@ -22,6 +22,9 @@
     },
     {
       "path": "../adapters/antigravity"
+    },
+    {
+      "path": "../packages/worker-runtime"
     }
   ]
 }

@@ -348,6 +348,40 @@ describe("delegation — the fallback chain", () => {
     expect(breakers.get("flaky")!.state).toBe("open");
   });
 
+  it("does not consume a half-open trial for a candidate that is passed over", async () => {
+    // The bug this prevents: selection consults the breaker, and if that
+    // consultation claimed the single half-open trial, the backend could never
+    // be tried again — a permanent silent exclusion.
+    const first = await scriptBackend("first", `process.stdout.write("ok");`);
+    const second = await scriptBackend("second", `process.stdout.write("ok");`);
+    const catalog = BackendCatalog.parse({ apiVersion: 1, backends: [first, second] });
+
+    const breakers = new Map<string, CircuitBreaker>();
+    const secondBreaker = new CircuitBreaker({ failureThreshold: 1, cooldownMs: 0, successThreshold: 1 });
+    breakers.set("second", secondBreaker);
+
+    // The second backend's circuit has failed and its cooldown has elapsed, so
+    // it is eligible — but it is not the FIRST candidate.
+    secondBreaker.recordFailure("timeout", Date.now() - 10_000);
+
+    const result = await delegate({ catalog, args: [], breakers });
+    expect(result.ok).toBe(true);
+    // The first candidate succeeded, so the second was never attempted — and
+    // its half-open trial must still be AVAILABLE. The state is still "open"
+    // because no trial happened, but the slot was not consumed, so the
+    // backend can still be tried.
+    expect(result.attempts).toHaveLength(1);
+    expect(secondBreaker.canAttempt(Date.now())).toBe(true);
+  });
+
+  it("records exactly one ROUTE_SELECTED per attempt", async () => {
+    const backend = await scriptBackend("one-route", `process.stdout.write("ok");`);
+    const catalog = BackendCatalog.parse({ apiVersion: 1, backends: [backend] });
+    const result = await delegate({ catalog, args: [] });
+    const routes = result.events.filter((e) => e.type === "ROUTE_SELECTED");
+    expect(routes).toHaveLength(1);
+  });
+
   it("reports no eligible backend rather than crashing", async () => {
     const catalog = BackendCatalog.parse({ apiVersion: 1, backends: [] });
     const result = await delegate({ catalog, args: [] });
@@ -392,6 +426,20 @@ describe("output caps — a misbehaving backend cannot exhaust the host", () => 
   it("has a sane default cap", () => {
     expect(DEFAULT_MAX_OUTPUT_BYTES).toBeGreaterThan(0);
     expect(DEFAULT_MAX_OUTPUT_BYTES).toBeLessThanOrEqual(16 * 1024 * 1024);
+  });
+
+  it("caps the output in BYTES, not characters", async () => {
+    // A stream of 4-byte characters would use four times the intended memory
+    // if the cap were counted in characters — and the accumulation guard is
+    // what stops an unbounded producer from exhausting the host, so it has to
+    // be measured in the same unit the cap is expressed in.
+    const backend = await scriptBackend(
+      "wide",
+      `process.stdout.write("\\u{1F600}".repeat(50000));`,
+    );
+    const outcome = await executeBackend(backend, [], { maxOutputBytes: 4_096 });
+    expect(outcome.truncated).toBe(true);
+    expect(Buffer.byteLength(outcome.stdout, "utf8")).toBeLessThanOrEqual(4_096 + 4);
   });
 
   it("captures a normal-sized output in full", async () => {

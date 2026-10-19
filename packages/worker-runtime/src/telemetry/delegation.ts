@@ -430,10 +430,28 @@ export class CircuitBreaker {
   }
 
   /**
+   * Is the circuit currently REFUSING attempts?
+   *
+   * Read-only, and deliberately separate from `canAttempt`. `canAttempt` has a
+   * side effect — when the cooldown has elapsed it moves the circuit to
+   * half-open and CLAIMS the single trial slot. A caller that merely wants to
+   * know whether a backend is reachable must not claim that slot, or the
+   * backend can never be tried again: the slot stays claimed by a candidate
+   * that was considered and passed over.
+   */
+  isRefusing(now: number): boolean {
+    if (this.#state === "closed") return false;
+    if (this.#state === "open") return now - this.#openedAt < this.#policy.cooldownMs;
+    // half_open: a trial is in flight (or was claimed), so refuse.
+    return this.#trialInFlight;
+  }
+
+  /**
    * May an attempt be made right now?
    *
    * `now` is supplied by the caller so the state machine stays deterministic
-   * and testable without sleeping.
+   * and testable without sleeping. Call this at the moment an attempt is
+   * actually made, not when a candidate is merely being considered.
    */
   canAttempt(now: number): boolean {
     if (this.#state === "closed") return true;

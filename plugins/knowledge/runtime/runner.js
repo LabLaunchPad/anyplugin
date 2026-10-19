@@ -335,8 +335,11 @@ async function runWithDeadline(fn) {
           err["code"] = "ANYPLUGIN_TIMEOUT";
           reject(err);
         }, deadlineMs);
-        // Do not let the timer itself keep the process alive.
-        if (typeof timer.unref === "function") timer.unref();
+        // The timer is deliberately NOT unref'd. An unref'd timer does not keep
+        // the event loop alive, so a handler awaiting a promise that will never
+        // settle would let the process exit 0 — silently reporting success for
+        // a hook that never ran. The `finally` below clears it as soon as the
+        // handler settles, so there is no leak.
       }),
     ]);
   } finally {
