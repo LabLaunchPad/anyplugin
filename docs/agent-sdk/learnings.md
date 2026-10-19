@@ -295,7 +295,7 @@ The composite metric is gameable in three ways, and each has a rule:
 | Count easy tasks | Density is reported **per task class**, and the composite is a **weighted** aggregate by class, not a flat mean |
 | Count trivial verifications | A `VERIFIED` claim requires an **admissible** evidence record — the kernel's rule, not ours. A claim with no citation counts as `UNCITED` and therefore at low weight |
 | Slow down to raise the ratio | **Wall-clock is in the denominator**, and the run-to-run spread is published — a system that idles to raise its density is visible in the latency axis |
-| Cache the easy answers forever | The cache is keyed on the **assembled request digest**; a policy or model change invalidates it, so a stale hit is impossible |
+| Cache the easy answers forever | The cache is keyed on the **assembled request digest** — including the policy and model version — so a policy or model change **cannot produce a stale hit through that path**. (A hit served by some *other* path is a different bug, and the drift check is what catches it) |
 
 ### 2.3 The honest limit
 
