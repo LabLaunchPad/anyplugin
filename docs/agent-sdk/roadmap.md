@@ -476,10 +476,10 @@ corpus is hash-stable across 30 consecutive runs in every environment.
 | Module | Tasks | Acceptance criterion |
 |---|---|---|
 | **2.1 Derivation** | `event log → GraphSnapshot`: materialise nodes and edges from recorded events, deterministically, from the log bytes alone | Byte-identical output for identical input. The derivation is a **pure function** of the log |
-| **2.2 Traversal** | Reachability, topological order, multi-hop walk, cycle detection, disconnected-component handling | **M5's acceptance criteria, verbatim**: deterministic traversal across branching, multi-hop, cycles and disconnected components; byte-identical output for identical input. Cycles are detected, not followed infinitely |
-| **2.3 Invalidation cascade** | Compute `InvalidationResultSchema`: `affectedNodes`, `staleDecisions`, `reopenedWork`, `requiresReverification` — by walking the graph from the invalidated node | Invalidating E1 flips the dependent claim to `INVALIDATED`, the dependent decision to `STALE`, and the dependent work contract to `REOPENED`, and **leaves unrelated decisions untouched** |
+| **2.2 Traversal** — **BUILT** | Reachability, topological order, multi-hop walk, cycle detection, disconnected-component handling | **M5's acceptance criteria, verbatim**: deterministic traversal across branching, multi-hop, cycles and disconnected components; byte-identical output for identical input. Cycles are detected, not followed infinitely. **Shipped in `packages/worker-runtime/src/graph/`** — `indexGraph`, `reachable`, `components`, `findCycles`, `topologicalOrder`, with an anomaly report for malformed graphs and no clock, no I/O and no randomness |
+| **2.3 Invalidation cascade** — **BUILT** | Compute `InvalidationResultSchema`: `affectedNodes`, `staleDecisions`, `reopenedWork`, `requiresReverification` — by walking the graph from the invalidated node | Invalidating E1 flips the dependent claim to `INVALIDATED`, the dependent decision to `STALE`, and the dependent work contract to `REOPENED`, and **leaves unrelated decisions untouched`. **Shipped as `computeInvalidation()`** — with the node→record resolution convention the contracts' two id spaces needed, and with the `SUPERSEDES` edge explicitly excluded from the cascade |
 | **2.4 The re-orient trigger** | The missing policy: when an invalidation lands, decide **abandon / re-plan / escalate** | A **re-orient policy** is specified and tested — this is the piece the literature does not have: the kernel has the trigger and the substrate but no policy. The decision is **recorded**, not inferred |
-| **2.5 The repository as its own graph** | Analyse AnyPlugin's own dependency graph as the first real corpus: branching, multi-hop, cycles, disconnected components | The expected output is a reviewed golden artefact. A change to a source file moves exactly the expected nodes |
+| **2.5 The repository as its own graph** — **BUILT** | Analyse AnyPlugin's own dependency graph as the first real corpus: branching, multi-hop, cycles, disconnected components | The expected output is a reviewed golden artefact. A change to a source file moves exactly the expected nodes. **Shipped as `repo-graph.test.ts`** — the corpus is built from the workspace's real `package.json` files, and it proves the workspace dependency graph is acyclic, that the kernel is a leaf, and that the multi-hop paths are the ones the architecture states |
 | **2.6 The AST kernel** | A fault-tolerant concrete-syntax-tree engine (Web-Tree-Sitter, WASM) producing a **symbol graph**: `{ symbol_id, file_path, kind, name, range{start,end}, has_syntax_errors }`. Incremental re-parsing; a parse failure becomes a **localised `ERROR` node** and leaves the valid adjacent trees intact | A broken region does not invalidate the file. The symbol graph is a **projection of the source**, rebuildable and byte-identical for identical input. The lexical-regex fallback is used when WASM is unavailable, and the **two paths are compared** so a divergence is a test failure, not a surprise |
 | **2.7 The code graph** | Join the symbol graph to the dependency graph: a `GraphNode` of kind `symbol` carries its `kind` (`function`/`class`/`interface`/`method`/`variable`/`error`) and its range; edges use the kernel's existing `EDGE_KINDS` (`IMPORTS`, `MODIFIES`, `TESTS`, `SUPPORTS`, `DEPENDS_ON`, `DERIVED_FROM`, `LEARNED_FROM`, `INVALIDATES`, `SUPERSEDES`) | A change to a function's *implementation* does not move the graph; a change to its *signature* does. `has_syntax_errors: true` is a **first-class node kind** (`error`), not a warning — the graph represents brokenness rather than hiding it |
 
@@ -488,6 +488,12 @@ passes; **no contract version bump is required** (traversal is a pure function
 over an existing contract); `core/src/boundaries/package-boundary.test.ts`
 still passes; the kernel still imports nothing workspace-internal; the AST
 kernel and the lexical fallback **agree** on the golden corpus.
+
+**Where the gate stands.** The first four clauses are **met** —
+`packages/worker-runtime/src/graph/graph.test.ts` (24 tests) and
+`repo-graph.test.ts` (8 tests). The last clause waits on modules 2.1, 2.4, 2.6
+and 2.7. **M5 is COMPLETE; M6 is PARTIAL** — the cascade computes the ids,
+and the `STALE` and `REOPENED` *transitions* are the state fold's job.
 
 ### 5.3 MVP 3 — The Persistent Orchestrator
 

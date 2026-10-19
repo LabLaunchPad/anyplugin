@@ -318,6 +318,15 @@ Each milestone follows the same shape — **Goal / Non-goals / Truth constraint 
 | **M11** | Agent adapter | Runtime passes its full suite with **zero agents installed and the CLI alone**; every hook-reachable capability also reachable via CLI | M1, M9 | F1, F2, F4, F5, F6, F8 |
 | **M12** | Falsification experiment | A real bounded task driven end to end, then deliberately broken and recovered. Every transition backed by an artifact | M10, M11 | — |
 
+### Milestone status — the two this cycle moved
+
+| Milestone | Status | Evidence |
+|---|---|---|
+| **M5** Dependency Graph | **COMPLETE** | `packages/worker-runtime/src/graph/` — a deterministic traversal engine: reachability, topological order, cycle detection, disconnected components, with branching, multi-hop, cycles, self-loops, duplicate edges and dangling endpoints each covered. The corpus is **this repository's own dependency graph**. `packages/worker-runtime/src/graph/graph.test.ts` (24 tests) and `repo-graph.test.ts` (8 tests) |
+| **M6** Invalidation Engine | **PARTIAL** | The **cascade** is built — `computeInvalidation()` computes `affectedNodes`, `staleDecisions`, `reopenedWork` and `requiresReverification`, and the E1→Claim→Decision→Work chain leaves unrelated decisions untouched. **What is not built:** the `STALE` and `REOPENED` **transitions** are the state fold's job (`LEGAL_TRANSITIONS` already permits them), and the *replacement evidence restores validity* half of the exit condition has no producer. |
+
+**M5 needed no contract version bump.** Traversal is a pure function over the existing `GraphSnapshotSchema`, and `InvalidationResultSchema` was already frozen — it simply had no producer. That is the cheapest high-value item in the SDK plan, and it is the only one that lands in this repository.
+
 **M11's exit condition was corrected.** It previously required the adapter to work "hooks-less (CLI + MCP only) against `opencode@v2`" — which is **impossible**, because that matrix row omits `mcp.*` entirely and `UNKNOWN` is a hard build error (F6). The bare CLI is the only floor that always holds. Making MCP work on `opencode@v2` is a **capability-matrix audit and extension** — a separate prerequisite task, not something the runtime can do.
 
 ### M0 — the next action

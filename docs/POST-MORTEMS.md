@@ -228,8 +228,9 @@ The repository's instincts held up, and the record should say so:
 
 ## 2. PM-002 — A contract with no engine
 
-**Class:** GAP · **Severity:** P1 · **Status:** OPEN, precisely specified ·
-**Backlog:** P1-13 · **Roadmap:** MVP 2 (`docs/agent-sdk/roadmap.md` §5.2)
+**Class:** GAP · **Severity:** P1 · **Status:** **PARTLY BUILT** — the traversal
+engine and the cascade shipped in this cycle · **Backlog:** P1-13 ·
+**Roadmap:** MVP 2 (`docs/agent-sdk/roadmap.md` §5.2)
 
 ### 2.1 Summary
 
@@ -350,6 +351,35 @@ schema regeneration, no certificate invalidation, no new dependency, and the
 kernel still imports nothing workspace-internal. It is the only item in the
 SDK roadmap that lands in **this** repository (D-047), and it is what makes
 `InvalidationResultSchema` — already shipped — mean something.
+
+### 2.7 What was built, and what was not
+
+**BUILT in this cycle** — `packages/worker-runtime/src/graph/`:
+
+| Piece | What it does |
+|---|---|
+| `indexGraph(snapshot)` | The indexed form: nodes, outgoing and incoming adjacency, and an **anomaly report** for duplicate nodes, duplicate edges, self-loops and dangling endpoints. The input is never mutated, and the output depends only on the node and edge **sets** — not their order. |
+| `reachable(index, from, opts)` | Multi-hop reachability with a visited set, so a cycle terminates the walk instead of truncating the answer. |
+| `propagatingReachable(index, from)` | The cascade's walk: `INVALIDATES` forwards, the seven dependency kinds backwards, `SUPERSEDES` never. |
+| `components(index)` | Every connected component, deterministically ordered. No single-root assumption. |
+| `findCycles(index)` | Tarjan's algorithm, iterative, plus every self-loop. |
+| `topologicalOrder(index)` | A dependency-first order — and a **refusal** when a cycle makes the order undefined. A partial order would be a wrong answer presented as right. |
+| `computeInvalidation(snapshot, input)` | The producer `InvalidationResultSchema` never had. It carries the **node→record resolution convention** of §2.3, so the two id spaces finally meet. |
+
+**The corpus is the repository's own dependency graph**, built from the
+workspace's real `package.json` files — so a change to a dependency would
+move exactly the expected nodes, and the workspace graph is proven **acyclic**
+(which is what makes the dependency direction's topological order defined).
+
+**NOT built** — the rest of the roadmap's MVP 2, and each is recorded in the
+backlog rather than implied: the **log → snapshot derivation** (module 2.1),
+the **re-orient policy** (2.4), and the **AST kernel** (2.6, 2.7).
+
+**And M6 is PARTIAL, not done.** The cascade computes the *ids*; the `STALE`
+and `REOPENED` **transitions** are the state fold's job — `LEGAL_TRANSITIONS`
+already permits them, and the kernel's rule is that it records and verifies
+and never infers. The *replacement evidence restores validity* half of M6's
+exit condition has no producer yet.
 
 ---
 

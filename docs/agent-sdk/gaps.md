@@ -110,7 +110,7 @@ correction and this cycle is a planning cycle.
 
 > | **M5** | Dependency Graph | Deterministic traversal across branching, multi-hop, cycles, disconnected components; byte-identical output for identical input | M1 | - |
 
-**It is not done, and nothing notices.** The kernel *has* the graph contracts:
+**It was not done, and nothing noticed.** The kernel *had* the graph contracts:
 
 ```ts
 // packages/worker-runtime/src/contracts/index.ts
@@ -122,17 +122,26 @@ export const GraphSnapshotSchema = z.object({ contractVersion, at, nodes, edges 
 `EDGE_KINDS` is a nine-value enum (`IMPORTS`, `MODIFIES`, `TESTS`, `SUPPORTS`,
 `DEPENDS_ON`, `DERIVED_FROM`, `LEARNED_FROM`, `INVALIDATES`, `SUPERSEDES`).
 
-A repository-wide search for those three symbols returns **only their own
-definitions** in `contracts/index.ts` plus one mention in
-`contracts/contracts.test.ts`. There is **no traversal engine**. Nothing
-walks the graph, nothing detects a cycle, nothing cascades an invalidation
-through it.
+A repository-wide search for those three symbols returned **only their own
+definitions** in `contracts/index.ts`. There was **no traversal engine**.
+Nothing walked the graph, nothing detected a cycle, nothing cascaded an
+invalidation through it.
 
-**This matters more than it looks.** `InvalidationResultSchema` — the
+**This mattered more than it looked.** `InvalidationResultSchema` — the
 invalidation engine's output — carries `affectedNodes`, `staleDecisions`,
 `reopenedWork` and `requiresReverification`. Without traversal, none of those
-fields can be computed. The invalidation engine has a **contract and no
-implementation**, and the graph is the missing half.
+fields could be computed. The invalidation engine had a **contract and no
+implementation**, and the graph was the missing half.
+
+> **RESOLVED in this cycle.** `packages/worker-runtime/src/graph/` now holds
+> the engine: `indexGraph`, `reachable`, `propagatingReachable`,
+> `components`, `findCycles`, `topologicalOrder` and `computeInvalidation` —
+> deterministic, free of I/O, clock and randomness, with an anomaly report
+> for malformed graphs and the node→record resolution convention the
+> contracts' two id spaces needed. The corpus is **this repository's own
+> dependency graph**. **M5 is COMPLETE; M6 is PARTIAL** — the cascade computes
+> the ids, and the `STALE` and `REOPENED` *transitions* are the state fold's
+> job. The post-mortem is `docs/POST-MORTEMS.md` PM-002.
 
 The user's requirement for "multi-tier graph engineering" therefore does not
 start from zero — it starts from a **half-built substrate with a working
@@ -246,7 +255,7 @@ has an MVP, a module, an exit gate, and a certification scenario.
 | **M3** Prompt compression and local cache | **4** | Modules 4.2, 4.4 | The draft's "40–60 % reduction" target became a **measured** quantity with a quality gate, because the compression library is **built, not depended on** (D-044) |
 | **M4** Provider-specific optimization | **4** | Module 4.3 | The provider table is **corrected** — OpenAI's 1.25× write for GPT-5.6+, DeepSeek's 1–3.3 %, Gemini's per-hour storage, implicit-first caching |
 | **M5** Multi-agent orchestration with persistent state | **3** | Modules 3.1–3.8 | The draft's SQLite store became **both stores with a defined direction of truth** (D-040), and the delegation gained **seventeen clauses** and a **gated topology decision** (D9) |
-| **M6** Graph engineering and evidence-gated progression | **2 → 3** | Kernel modules 2.1–2.5, SDK module 3.1 | **Split across the boundary** (D-041): deterministic traversal in the kernel, evidence-gated policy in the SDK. This also closes the undone M5 |
+| **M6** Graph engineering and evidence-gated progression | **2 → 3** | Kernel modules 2.1–2.5, SDK module 3.1 | **Split across the boundary** (D-041): deterministic traversal in the kernel, evidence-gated policy in the SDK. **M5 is now closed** (the traversal engine shipped); modules 2.1, 2.4, 2.6 and 2.7 remain |
 | **M7** Telemetry and bottleneck detection | **6** | Modules 6.1–6.5 | The draft's 9 span kinds were **wrong** (AgentTelemetry's real nine differ); the five OTel does not define went into a documented private namespace (D-046) |
 | **M8** Experimentation and simulation | **7 → 8** | Modules 7.1–7.6, 8.1–8.5 | Added the **safe-adaptation envelope** and the **Replay Gap** correction — the draft's "replay" is unsound if it re-asks the model |
 | **M9** Error boundaries and fallback matrix | **1** | Module 1.5 | Kept verbatim as the nine classes; each gained a **bound** and a **terminal condition** |
@@ -298,7 +307,7 @@ every one is an *exit gate* on an MVP.
 | Gap | Status |
 |---|---|
 | **The SDK has no code.** Every MVP is a plan. | **By design** — D-039 puts it in a separate repository, and the instruction was planning only. `docs/BACKLOG.md` P1-12 |
-| **The graph engine does not exist.** | P1-13. The cheapest high-value item in the plan, and the only one that lands in this repository |
+| **The graph engine does not exist.** | **RESOLVED in this cycle** — `packages/worker-runtime/src/graph/` ships the traversal engine and the invalidation cascade. What remains of MVP 2 is the log→snapshot derivation, the re-orient policy, and the AST kernel. P1-13; `docs/POST-MORTEMS.md` PM-002 |
 | **The two kernel contract changes** — `fallbackLegal` and the candidate-lifecycle event kinds | **P1-10 is DONE** (D-052): `fallbackLegal` was never a frozen contract, and the package is unpublished, so the blocker was a *behaviour* change rather than a contract migration. **P1-11 remains**: the candidate-lifecycle event kinds do version a frozen contract, so it needs its own migration |
 | **`ROADMAP.md` is a corrected strategy document, not a live status board** | P2-23 |
 | **Two region bundles cannot ship** — Brazil and US-health, on `UNKNOWN` regulatory claims | P2-25 |

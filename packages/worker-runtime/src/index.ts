@@ -123,6 +123,33 @@ export {
 } from "./log/event-log.js";
 export { REPLAY_ANOMALIES, isClean, replay, replayDigest, type ReplayReport } from "./log/replay.js";
 export {
+  EDGE_SEMANTICS,
+  NODE_REF_PREFIX,
+  PROPAGATING_KINDS,
+  components,
+  computeInvalidation,
+  findCycles,
+  indexGraph,
+  propagatingReachable,
+  reachable,
+  topologicalOrder,
+  type DecisionSummary,
+  type EdgeDirection,
+  type EvidenceSummary,
+  type GraphAnomaly,
+  type GraphAnomalyClassification,
+  type GraphEdge,
+  type GraphEdgeKind,
+  type GraphIndex,
+  type GraphNode,
+  type GraphNodeKind,
+  type InvalidationComputation,
+  type InvalidationInput,
+  type TopologicalOrder,
+  type TraverseOptions,
+  type VerificationSummary,
+} from "./graph/index.js";
+export {
   foldFromReplay,
   foldWorkerState,
   stateHash,

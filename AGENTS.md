@@ -40,6 +40,7 @@ pnpm clean                       # remove all dist/ output
 | Dependency-free YAML 1.2 core-schema parser (runtime) | `plugins/knowledge/runtime/yaml-lite.js` — must match the `yaml` package (differential test) |
 | Event log durability levels (best-effort / process-crash / power-loss) | `packages/worker-runtime/src/log/event-log.ts` (`DurabilityLevel`) |
 | Delegation failure taxonomy + circuit breaker (the wrapper's contract) | `packages/worker-runtime/src/telemetry/delegation.ts` |
+| Deterministic graph traversal engine + the invalidation cascade | `packages/worker-runtime/src/graph/` |
 | Backend registry (declarative, zod-strict, fail-closed on an unknown apiVersion) | `core/src/backends/index.ts` |
 | Delegation wrapper (probe, route, safe spawn, telemetry) | `cli/src/delegate.ts` |
 | Failure-mode catalogue (what goes wrong, and what the system does) | `docs/FAILURE-MODES.md` |
