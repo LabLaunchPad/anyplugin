@@ -1175,14 +1175,14 @@ pass, a second repository was found with a README asserting *"the code is
 MIT"* and **no licence file at all**, and a third whose licence is AGPL with
 an enterprise overlay reached through a path convention.
 
-**Decision.** The allowlist is checked against the **resolved licence file at
+**Decision:** The allowlist is checked against the **resolved licence file at
 the pinned version**, by CI, on every dependency. A README, a badge, a
 package-registry field, a GitHub detector, and a blog post are **not**
 evidence of a licence. Where the file is absent, the dependency is **not
 admitted** — an absent file is all-rights-reserved, and a README sentence is
 not a grant.
 
-**Consequences.** The check is a build step, not a review step, and it reads
+**Consequences:** The check is a build step, not a review step, and it reads
 the artefact rather than the metadata around it. The cost is that a licence
 that *changes* — as Kreuzberg's apparently did between two reads in the same
 month — becomes a CI failure until the allowlist is re-derived, which is the
@@ -1196,12 +1196,12 @@ forbidden one gets admitted.
 
 **Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `docs/agent-sdk/platform-engineering.md` §1, §4; `docs/agent-sdk/learnings.md` §4B
 
-**Context.** The plan needed real engineering patterns from real systems, and
+**Context:** The plan needed real engineering patterns from real systems, and
 the only honest way to get them is to **read the source** — not the
 marketing. That creates two risks: pulling unlicensed or copyleft code into
 the tree, and filling a document with copied expression.
 
-**Decision.** The mining happens in a **scratch directory outside the
+**Decision:** The mining happens in a **scratch directory outside the
 repository**, which is deleted afterwards. The output is **mechanisms,
 contracts, invariants and failure-mode defences**, with a `repo + path +
 lines` citation and **no excerpt**. Where a source's licence forbids reuse
@@ -1215,7 +1215,7 @@ vendor documentation only (the interesting parts — the failure-mode defences
 — are not in the documentation). Copying code into the plan (expression is
 copyrightable, and the plan is a document people will copy *from*).
 
-**Consequences.** The learnings are **citable and checkable** without
+**Consequences:** The learnings are **citable and checkable** without
 copying anything, and the repository stays free of the sources. The cost is
 that the citations are pointers, not quotes — a reader must clone the repo
 to verify a line number, which is exactly the discipline the evidence ledger
