@@ -32,29 +32,20 @@ const ARCHITECTURE = join(REPO_ROOT, "ARCHITECTURE.md");
 const DECISIONS = join(DOCS_DIR, "DECISIONS.md");
 const EVIDENCE = join(DOCS_DIR, "EVIDENCE.md");
 
-/** The documents this guard knows how to check. */
-const DOC_FILES = [
-  "docs/DECISIONS.md",
-  "docs/PERSONAS.md",
-  "docs/EVIDENCE.md",
-  "docs/FAILURE-MODES.md",
-  "docs/BACKLOG.md",
-  "docs/SESSION-LEARNINGS.md",
-  "docs/agent-sdk/README.md",
-  "docs/agent-sdk/trust.md",
-  "docs/agent-sdk/optimization.md",
-  "docs/agent-sdk/economics.md",
-  "docs/agent-sdk/roadmap.md",
-  "docs/agent-sdk/gaps.md",
-  "docs/agent-sdk/substrate.md",
-  "docs/agent-sdk/tools.md",
-  "docs/agent-sdk/simulations.md",
-  "docs/agent-sdk/learnings.md",
-  "docs/agent-sdk/platform-engineering.md",
+/**
+ * Every document whose section pointers are resolved.
+ *
+ * **Derived from the filesystem, not a hand-maintained list.** A
+ * hand-maintained list is a list that silently stops covering the documents
+ * added after it was written - which is exactly how a broken pointer in a
+ * new document goes unnoticed. Deriving it means the check covers
+ * everything, forever, with nothing to keep in sync.
+ */
+const DOC_FILES: string[] = [
+  ...docsMarkdownFiles(),
   "ARCHITECTURE.md",
   "AGENTS.md",
 ];
-
 /** Every markdown file under `docs/`, relative to the repo root, POSIX-style. */
 function docsMarkdownFiles(): string[] {
   const out: string[] = [];
