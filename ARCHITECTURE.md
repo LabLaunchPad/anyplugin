@@ -238,6 +238,7 @@ is worse than no guarantee.
 | What is the journal? | `cli/src/journal.ts` | `cli/src/transaction.ts` (the engine) |
 | How does an install roll back? | `cli/src/transaction.ts` | `cli/src/journal.ts` |
 | What is the kernel contract? | `packages/worker-runtime/src/contracts/index.ts` | `docs/WORKER-RUNTIME-KERNEL.md` (design input) |
+| What does the kernel's design say, and why? | **`docs/WORKER-RUNTIME-KERNEL.md`** | the contracts (the authority) |
 | What can be observed? | `packages/worker-runtime/src/resource/telemetry.ts` | prose |
 | What can go wrong, and what happens? | **`docs/FAILURE-MODES.md`** | scattered prose |
 | What is still open? | **`docs/BACKLOG.md`** | `ROADMAP.md` (strategy) |

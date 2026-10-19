@@ -1098,7 +1098,11 @@ branching, multi-hop, cyclic graph with a known-correct expected output.
 `docs/`. Seven planning and status documents live at the **repository
 root** — `ROADMAP.md`, `CURRENT_STATE.md`, `ENGINEERING_LEDGER.md`,
 `CORE-INVARIANTS-V2.md`, `REMEDIATION_PLAN.md`, `IMPLEMENTATION_PLAN.md`,
-`CHANGELOG.md` — and were therefore **outside the guard**. They are also
+  `SECURITY.md` — and were therefore **outside the guard**. (`CHANGELOG.md`
+  is the thirteenth root document and is deliberately **classified as
+  onboarding**, not as a plan or status record — the classification is
+  exhaustive, so a new root document cannot escape the guard by being
+  added to the wrong list.) They are also
 mutually contradictory: `IMPLEMENTATION_PLAN.md` says "COMPLETE … the
 repository's documentation gaps are closed" while `ROADMAP.md` says
 "implementation not started" and `CORE-INVARIANTS-V2.md` says "No
@@ -1108,16 +1112,29 @@ contradicts in five lines.
 
 **Decision:** Two mechanical changes, both implemented in this cycle:
 
-1. The ownership guard's scope extends from `docs/` to **every** markdown
-   file in the repository that carries a plan, a status, or a contract. Each
-   gets an owner row.
-2. A **status-consistency check**: a document that declares a status must use
-   a status from a closed vocabulary, and two documents that declare
-   incompatible statuses about the same subject fail the build.
+  1. The ownership guard's scope extends from `docs/` to **every** markdown
+     file in the repository that carries a plan, a status, or a contract, and
+     the classification is **exhaustive** — a new root-level markdown file
+     fails the build until it is classified as guarded or explicitly
+     unguarded. A document that declares a status must use a status from a
+     **closed vocabulary**, and **every** status line in it is checked (not
+     just the first), with fenced code blocks excluded so that an example
+     cannot satisfy the check.
+  2. The false claims are corrected: `ROADMAP.md`'s status line and its
+     `packages/` claim, `IMPLEMENTATION_PLAN.md`'s "the repository's
+     documentation gaps are closed", and the other five root documents each
+     declare a status from the vocabulary.
 
-The false `packages/` claim in `ROADMAP.md` is corrected in this cycle. The
-full rewrite of `ROADMAP.md` into a live document is deferred (BACKLOG
-P2-23), because a correction and a rewrite are different kinds of work.
+  The full rewrite of `ROADMAP.md` into a live document is deferred (BACKLOG
+  P2-23), because a correction and a rewrite are different kinds of work.
+
+  **What this does NOT do, stated plainly.** The guard does **not** compare
+  two documents' statuses about the same subject. That check was considered
+  and is **not implemented** — it needs a declared subject-to-status mapping
+  that does not exist yet, and inventing one to satisfy a test would be
+  ceremony rather than a check. The contradiction the guard *cannot* catch is
+  therefore caught by **review**, and it is recorded as an open item
+  (`docs/BACKLOG.md` P2-29) rather than being claimed as a guarantee.
 
 **Consequences:** The guard now covers the documents that actually describe
 what to build next — which is the gap that let a false "implementation not

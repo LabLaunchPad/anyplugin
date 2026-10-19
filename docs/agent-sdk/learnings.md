@@ -420,7 +420,7 @@ roadmap from repeating a published failure.
 
 A mapping table of SDK modules to OSS repos was verified entry-by-entry
 against primary sources. **21 of its rows needed correction**, and the pattern
-of the errors is the lesson: **every error overstates capability, and every
+of the errors is the lesson: **almost every error overstates capability, and almost every
 one of them errs in the direction of "we can depend on this".**
 
 | Row | As written | The correction |
@@ -452,8 +452,8 @@ one of them errs in the direction of "we can depend on this".**
 > the way any other claim is verified: against the primary source, with a
 > date, and with the errors counted.**
 
-Twenty-one corrections out of twenty-one rows is not a bad table — it is a
-table that had not been checked. The value of the corrections is not that
+Twenty-one corrections out of twenty-one original rows is not a bad table — it is a
+table that had not been checked. The corrected table below has **twenty rows**, because the M7 row — three near-identical telemetry repository names — was merged into one. The value of the corrections is not that
 they make the table right; it is that **the table was found to be wrong
 before it was designed against.**
 
@@ -605,4 +605,4 @@ confirmation that the rule is right.
 | `docs/agent-sdk/gaps.md` | The coverage matrix and what remains open |
 | `docs/agent-sdk/platform-engineering.md` | The patterns mined from Linux, Debian, Android, macOS and the clouds |
 | `docs/EVIDENCE.md` | Every external claim, with a source URL and an access date |
-| `docs/DECISIONS.md` | D-039 … D-049 — why each choice was made |
+| `docs/DECISIONS.md` | D-039 … D-051 — why each choice was made |

@@ -343,7 +343,10 @@ uncomfortable:**
 
 The four production failure classes — **memory exhaustion, infinite loop,
 parse error, state poison** — need a wire format that carries a *bounded*
-request and a *classified* response. This is the contract, and it is
+request and a *classified* response.
+
+> **This is a PROPOSAL, not existing code.** Nothing named here exists in
+> `core/`, `cli/`, `packages/`, `adapters/` or `plugins/` today. It is
 deliberately small enough to be implementable in every tier including a
 browser Worker.
 
@@ -595,8 +598,8 @@ chokepoint.
 | Module | Tasks | Acceptance criterion |
 |---|---|---|
 | **5.1 Tool registry** | The 18 tools with a **required tier field** in each schema. `local` and `network` are the only values | The model, the policy engine and the auditor all see the tier. A tool cannot be registered without one |
-| **5.2 The 16 local tools** | `doc.parse`, `ocr.page`, `calc.expr`, `units.convert`, `geo.resolve`, `tz.now/convert`, `locale.format`, `currency.round`, `holiday.calendar`, `tax.rate/compute`, `translate.text`, `transliterate`, `entities.extract`, `address/contact.normalize`, `code.run` (browser tier) | The **entire local tier works with the network disabled**. `currency.round` respects the ISO 4217 exponent (JPY 0, KWD 3). `holiday.calendar` handles China's **调休 make-up workdays**. Every local tool is content-addressable over its inputs **and** its versioned dataset |
-| **5.3 The 2 network tools** | `web.fetch_cited`, `web.search` — each returning a provenance bundle: final URL after redirects, retrieved-at, content sha256, quoted span + offset, HTTP status, content-type | Both are **disabled by default** for regulated tenants. Both produce a provenance bundle. Neither can create a capability |
+| **5.2 The 15 `local` tools** | `doc.parse`, `ocr.page`, `calc.expr`, `units.convert`, `geo.resolve`, `tz.now/convert`, `locale.format`, `currency.round`, `holiday.calendar`, `tax.rate/compute`, `translate.text`, `transliterate`, `entities.extract`, `address/contact.normalize`, `code.run` | The **entire local tier works with the network disabled**. `currency.round` respects the ISO 4217 exponent (JPY 0, KWD 3). `holiday.calendar` handles China's **调休 make-up workdays**. Every local tool is content-addressable over its inputs **and** its versioned dataset |
+| **5.3 The 3 `network` tools** | `web.fetch_cited`, `web.search`, `fx.rate` — the first two returning a provenance bundle: final URL after redirects, retrieved-at, content sha256, quoted span + offset, HTTP status, content-type | All three are **disabled by default** for regulated tenants. The first two produce a provenance bundle. None can create a capability. **15 + 3 = 18** |
 | **5.4 MCP servers** | Third-party MCP servers wired in, restricted to the `network` tier, with an explicit per-tenant grant | A third-party MCP server **cannot** be promoted to `local` by configuration and can never confer `AUTHORITATIVE` authority. **Token passthrough is forbidden**; handles are server-minted, random, expiring and bound to the authenticated principal |
 | **5.5 Region bundles** | Eight bundles — IN, SG, AE, SA, CN, BR, EU/EEA+UK, US — each with `locales`, `currency` (+ minor units), `timezone`, `taxRates` (+ `effectiveFrom`), `holidays` (+ shift rules), `complianceProfile`, `sources[]` | The compliance profile **changes which tools may run**. Every bundled dataset has a version, an effective date and a citation. **Brazil and US-health do not ship until their regulatory claims are re-verified** |
 | **5.6 The egress chokepoint** | One function: `entities.extract` → policy check → legal-basis record → event → return. **No second path** | A call with no derivable legal basis is **refused and recorded** — a `BLOCKED`, never a default-allow. Nothing reaches the network without passing it |
@@ -649,13 +652,13 @@ rollback re-verifies its hashes.
 
 | Module | Tasks | Acceptance criterion |
 |---|---|---|
-| **8.1 The full scenario set** | All 28 scenarios, plus **S-15 (injection persistence)** and **S-26 (cross-session pass^k over days)** — the two nobody has built | Both new scenarios are **specified before** the agents they test. A benchmark written after the implementation is a benchmark written to pass |
+| **8.1 The full scenario set** | All **29** scenarios - the twenty-eight in the catalogue plus **S-29 (cross-session pass^k over days)**; **S-15 (injection persistence)** and **S-29** are the two nobody has published — the two nobody has built | Both new scenarios are **specified before** the agents they test. A benchmark written after the implementation is a benchmark written to pass |
 | **8.2 The environment matrix** | E1–E14, automated | The matrix runs in CI on every commit. A scenario that cannot run in an environment is a **recorded skip with a reason**, and the report states skip counts per environment |
 | **8.3 The golden-align corpus** | G-CORP, G-ADV, G-EDGE, G-LOCALE, G-CORPUS | Every deterministic artefact's content hash is **identical** across 14 environments and 30 consecutive runs. **A golden file is never edited to make a test pass** — a changed golden is a reviewed artefact change with its own diff |
 | **8.4 The cross-session pass^k harness** | 20-step tasks, k = 1…8, over simulated days, with a **branched-rollout-with-control-forks** methodology for policy evaluation | The suite reports **pass^k**, not pass@1, and declares which of the three offline-evaluation biases applies |
 | **8.5 The injection-persistence harness** | A poison planted on day 1, checked for absence on day 4, in the memory store | The measurement exists. Whatever it finds is recorded honestly — **including if it finds a leak** |
 
-**Exit gate:** all 28 scenarios pass in every environment they claim; the
+**Exit gate:** all 29 scenarios pass in every environment they claim; the
 golden corpus is stable; S-15 and S-26 produce their first results.
 
 ### 5.9 MVP 9 — The Adaptive Loop
@@ -770,7 +773,7 @@ overall, **130.8 d** since 2023, **88.6 d** since 2024.
 | Discipline | Why |
 |---|---|
 | **Report confidence intervals** | Opus 4.5's upper bound was **2.3× its point estimate** |
-| **Measure the scaffold effect** | METR found GPT-4o and o3 scored **significantly higher** under Vivaria than under Inspect — a ~30 % effect on some models. Two models were "somewhat sensitive to scaffold" |
+| **Measure the scaffold effect** | METR found GPT-4o and o3 scored **significantly higher** under Vivaria than under Inspect — a ~30 % effect on some models, *derived from the time-horizon deltas METR reports rather than a figure METR itself states*. Two models were "somewhat sensitive to scaffold" |
 | **State the human baseline's thinness** | METR measured human baselines for only **5 of 31** long tasks |
 
 ### 7.3 The metric set, with its anti-gaming counter-measure
@@ -900,7 +903,7 @@ and broken in a browser is **two different signals**.
 | `ARCHITECTURE.md` §7 | Owner rows for the new and the root documents | — | D-048 |
 | `ROADMAP.md` | Status corrected; `packages/` claim corrected | — | `gaps.md` §1 |
 | `IMPLEMENTATION_PLAN.md` | The false "documentation gaps are closed" claim corrected | — | `gaps.md` §1.2 |
-| `docs/BACKLOG.md` | New items: P1-10, P1-11, P2-21, P2-22, P2-23, plus the SDK items | — | — |
+| `docs/BACKLOG.md` | **New in this cycle:** P1-13, P2-23 … P2-28. (P1-10, P1-11, P2-21 and P2-22 pre-exist on `main` — they were raised in PR #29.), plus the SDK items | — | — |
 
 ### 9.2 In the **SDK** repository (new, separate)
 
@@ -988,6 +991,6 @@ model.
 | `docs/agent-sdk/trust.md` | Identity, attestation, the commit-point protocol |
 | `docs/agent-sdk/optimization.md` | The learning loop, the twelve gates, the nine signals |
 | `docs/agent-sdk/economics.md` | Caching and batching, with the corrected provider table |
-| `docs/DECISIONS.md` | D-039 … D-049 — why each choice was made |
+| `docs/DECISIONS.md` | D-039 … D-051 — why each choice was made |
 | `docs/EVIDENCE.md` | Every external claim, with a source URL and an access date |
 | `docs/BACKLOG.md` | What is still open, classified |

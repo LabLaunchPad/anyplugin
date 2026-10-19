@@ -24,7 +24,7 @@ permanently.
 
 ## 1. The pattern catalogue
 
-**Fifty patterns**, each with the mechanism, what it buys, where it lands in
+**Sixty patterns**, each with the mechanism, what it buys, where it lands in
 the SDK, and the tier it belongs to. Tier = `worker` (any worker) ·
 `orchestrator` (the SDK's own coordinating tier) · `platform` (the SDK's
 operators) · `kernel` (the deterministic substrate).
@@ -100,7 +100,7 @@ operators) · `kernel` (the deterministic substrate).
 | **35** | Binder carries the caller's UID | The delegation contract's D11 ("a server-minted handle bound to the authenticated principal") is the same requirement, and Android solved it at the IPC layer thirty years ago. The SDK should copy the **mechanism**: identity travels *with the transaction*, not beside it |
 | **56** | Azure `doNotEnforce` | Our shadow mode was described as "run the candidate in parallel". Azure gives it a name and a **deployment posture**: `doNotEnforce` is a first-class mode, not a special case. MVP 7 `7.1` now says so |
 
-### 1.2 The four that were already ours
+### 1.2 The five that were already ours
 
 Patterns **1** (one path boundary), **4** (four-state capability matrix),
 **21** (prove a guard can fail), **25** (detect, don't assume) and **26** (an
@@ -214,7 +214,7 @@ from.
 | Vendor SDK internals, decompiled binaries, private APIs | §1201 exposure, and expression is copyrightable regardless |
 | Key/secret extraction from any OS store | The clearest §1201 case. Denied absolutely |
 | A deprecated enforcement surface | When the platform retires a mechanism, the successor is the new floor |
-| Vendor prose, error-message strings, documentation text, example code | Expression — the one thing all four fair-use cases leave unprotected |
+| Vendor prose, error-message strings, documentation text, example code | Expression — the one thing all three fair-use cases leave unprotected |
 | Vendor names as tier or feature names | Trademark risk. **Source attributions in the docs; descriptive naming in the code** |
 | Learning from any service in breach of its terms | Contract breach — and it is how supply-chain compromises arrive |
 | Behaviour inferred from a proprietary black box beyond its published contract | The clean-room protocol requires the specification to come from observation *or* documentation; proprietary observation may breach contract or trade-secret duty |
@@ -249,4 +249,4 @@ publication cannot be proven — and is marked as such rather than asserted.
 | `docs/agent-sdk/substrate.md` | The dependencies, and the licence allowlist |
 | `docs/agent-sdk/simulations.md` | The certification harness these patterns are tested in |
 | `docs/EVIDENCE.md` | Every source URL, access date and verdict |
-| `docs/DECISIONS.md` | D-039 … D-049 — why each choice was made |
+| `docs/DECISIONS.md` | D-039 … D-051 — why each choice was made |

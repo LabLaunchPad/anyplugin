@@ -81,7 +81,7 @@ lapsed must **escalate rather than guess**.
 |---|---|---|
 | **Differential replay** | Re-executing the hash-framed event log against a simulator produces **identical decisions** | Inspect, Harbor, Braintrust and promptfoo all produce *logs*; none exposes "replay a hash-framed event log and assert the same decisions". Temporal has replay but no simulator; Harbor has simulators but no replay. **The kernel has both halves and nobody has joined them** |
 | **Epistemic calibration** | The agent's `VERIFIED_KNOWLEDGE` claims are **calibrated against reality** | Every published metacognition work measures the model's **self-reported** confidence. Cacioli et al. measured that **accuracy rank and metacognitive-sensitivity rank are largely inverted** across 20 frontier LLMs — being good at the task does not imply being good at knowing you are failing. The kernel's `PASS`/`FAIL`/`BLOCKED` verifier is a **behavioural** channel that does not exist in the literature |
-| **Injection persistence** | A poisoned document read on day 1 does **not** survive in memory on day 4 | CaMeL and AgentDojo measure single-task injections. A multi-day agent accumulates state. **Nobody has measured whether an injection survives across a long-running agent's memory** |
+| **Injection persistence** | A poisoned document read on day 1 does **not** survive in memory on day 4 | CaMeL and AgentDojo measure single-task injections. A multi-day agent accumulates state. **We found no measurement of whether an injection survives across a long-running agent's memory** |
 
 ---
 
@@ -322,8 +322,11 @@ something published says it happens.
 
 ### 4.2 The two scenarios nobody has built
 
-**S-15 (injection persistence)** and **S-26 (cross-session pass^k over
-days)** are the two the research explicitly identifies as unclaimed. They are
+**S-15 (injection persistence)** and **S-29 (cross-session pass^k over
+days)** are the two the research explicitly identifies as unclaimed. S-29 is
+**appended** to the catalogue below, not part of the original twenty-eight:
+S-25 measures `pass^k` *within* a session, and S-29 measures it *across*
+sessions over days — a different property, and the one nobody has published. They are
 also the two that most directly test the claims this project makes. They are
 specified **before** the agents that would be tested by them, because a
 benchmark written after the implementation is a benchmark written to pass.
@@ -462,7 +465,7 @@ that moves silently is a test suite that has stopped testing.
 
 ## 7. The safe-adaptation envelope
 
-**Nobody has built this.** Every published self-improvement system —
+**We found no published system that does this** — and the absence of a publication is `UNKNOWN`, not proof of absence Every published self-improvement system —
 DSPy/MIPROv2, GEPA, TextGrad, AFlow — optimises an objective with **no notion
 of what the optimisation may not change**. STOP and ADAS go further and are
 explicitly self-modifying; STOP's own safety contribution is measuring *"the
@@ -547,7 +550,7 @@ combination"*. The envelope is the same discipline applied to the optimiser.
 | **Ecosystem + sandbox extension API** | [`inspect_ai`](https://inspect.aisi.org.uk/) (UK AI Security Institute) | 200+ pre-built evals; a sandboxing extension API for Docker/Kubernetes/Modal/Proxmox; **METR migrated its own time-horizon evaluation to it** — a state actor chose it | Licence **not verified this pass** → **UNKNOWN**; read it before adopting |
 | **Task format + rollout engine** | [`harbor`](https://docs.harborframework.com/) | "any agent with any model on any task in any sandbox in parallel"; Tasks → Rollout Engine → {Models, Agents, Sandboxes, Skills}. Newer and smaller — **flag it** | Licence not verified → **UNKNOWN** |
 | **Config + red-teaming** | [`promptfoo`](https://www.promptfoo.dev/docs/intro/) | Declarative test cases, caching, matrix views, a red-teaming engine, a "Model Audit" | Not verified this pass → **UNKNOWN** |
-| **Replay substrate** | **The kernel's log + `replay()`** | **None of the incumbents has one.** This is the contribution | VERIFIED by absence across the survey |
+| **Replay substrate** | **The kernel's log + `replay()`** | **We found no published incumbent with one.** This is the contribution | an absence across the survey — which is `UNKNOWN`, not `VERIFIED` |
 
 **Recommendation:** use **Inspect** for the ecosystem and the sandbox extension
 API, **Harbor**'s task/rollout format, and **the kernel's log** underneath
@@ -571,7 +574,7 @@ claims to support**, in CI, on every commit.
 | **MVP 5** | Tool surface | S-13, S-16, S-17, S-19, S-25 | E1–E5, E11–E14 |
 | **MVP 6** | Telemetry | S-27 | E1–E14 |
 | **MVP 7** | Promotion system | S-23, S-24, S-04 | E2–E5, E11–E14 |
-| **MVP 8** | Certification | **All 28**, plus S-15, S-26 | E1–E14 |
+| **MVP 8** | Certification | **All 29** — the twenty-eight in the catalogue plus S-29 | E1–E14 |
 
 **The rule that makes the suite trustworthy:** a scenario that **cannot run**
 in an environment is recorded as a **skip with a reason**, and the suite

@@ -25,6 +25,34 @@ can reach the network will reach the network. The only reliable way to make
 tool surface to have **no egress path at all**, and for egress to be an
 explicit, per-tenant, logged grant.
 
+**The taxonomy, stated so the arithmetic is checkable:**
+
+| | Count | Which |
+|---|---|---|
+| `local` | **15** | `doc.parse`, `ocr.page`, `calc.expr`, `units.convert`, `geo.resolve`, `tz.now/convert`, `locale.format`, `currency.round`, `holiday.calendar`, `tax.rate/compute`, `translate.text`, `transliterate`, `entities.extract`, `address/contact.normalize`, `code.run` |
+| `network` | **3** | `web.fetch_cited`, `web.search`, `fx.rate` |
+| **Total** | **18** | |
+
+**And the escalation rule, which is how two tools keep one tier each.** A
+tool's tier is **one value**, fixed in the registry. Two of the fifteen
+`local` tools — `code.run` and `translate.text` — have a **declared
+escalation** to the `network` path in a server deployment. The escalation is
+a *deployment profile* on the tool, **not a second tier value**, and it still
+passes through the egress chokepoint like any other network call.
+
+The reason this matters: a registry whose tier field could hold
+*"L browser / N server"* could not answer *"is this tool allowed in this
+tenant?"* with a membership test. **The tier is the thing the policy engine
+branches on**, so it has to be one value, and anything that varies by
+deployment is a profile.
+
+**Three grades of dependency, from Debian's own model** (`Depends` /
+`Recommends` / `Suggests`), applied to the tool surface: a tool the Worker
+**requires** is a hard dependency; a tool it **recommends** is present by
+default but its absence is a warning; a tool it only **suggests** is
+discoverable and optional. Each has different failure semantics, and the
+registry records which a given tool is.
+
 This is also where the compliance payoff lives. Under India's DPDP Act 2023,
 §3(1)(b) applies to processing **outside** India in connection with offering
 goods or services to Data Principals **in** India. A document parsed in the
@@ -45,7 +73,7 @@ Legend: **L** = local-only · **N** = requires network
 | 3 | `web.fetch_cited` | **N** | URL → markdown + a **citation bundle** (final URL after redirects, retrieved-at, content sha256, quoted span + offset, HTTP status, content-type) | The citation bundle *is* the product. A fetch without provenance is a fetch with no evidence |
 | 4 | `web.search` | **N** | Query → titles, URLs, snippets | Separate from fetch; provenance is provider + query + retrieved-at |
 | 5 | `calc.expr` | **L** | Deterministic arithmetic, percentiles, date arithmetic, unit-aware spreadsheet formulas | A real expression evaluator, **never `eval`**. Reproducible ⇒ hashable ⇒ replayable |
-| 6 | `code.run` | **L** browser / **N** server | Sandboxed execution of generated code | The tier split is the security boundary. Browser tier never egresses; server tier egress **is** a transfer |
+| 6 | `code.run` | **L** | Sandboxed execution of generated code | The tier is the security boundary. The browser tier never egresses. The **server tier is a deployment profile**, not a second tier value — see the escalation rule below |
 | 7 | `units.convert` | **L** | Dimensioned unit conversion, including local customary units | Bundled, versioned unit tables, with the table cited in the ledger |
 | 8 | `geo.resolve` | **L** only | Address/place → lat-lon + administrative hierarchy | **Never a hosted geocoder by default** — sending a user's address to a geocoder is a disclosure. See the licence note below |
 | 9 | `fx.rate` | **N** | Currency conversion with an **as-of date** and a rate source | FX rates move. The rate and its timestamp are part of the evidence record |
@@ -54,7 +82,7 @@ Legend: **L** = local-only · **N** = requires network
 | 12 | `currency.round` | **L** | Minor-unit-aware rounding, cash rounding, ISO 4217 | **A real correctness trap.** JPY/KRW/CLP have 0 decimals; BHD/KWD/JOD/TND have 3. Rounding a KWD invoice to 2 decimals is a data-integrity bug |
 | 13 | `holiday.calendar` | **L** | Public holidays, working days, days-between, for a jurisdiction | "Country-specific user needs" gold. **China's 调休 make-up workdays** are a genuine differentiator |
 | 14 | `tax.rate` / `tax.compute` | **L** | VAT/GST/sales-tax rate by jurisdiction + effective date; inclusive/exclusive computation | A **versioned table with `effective_from`**, not a live API. A live tax API is a transfer *and* a liability |
-| 15 | `translate.text` | **L** preferred / **N** opt-in | Translation between locales | The single largest cross-border transfer in the set. Local-first default, hosted opt-in |
+| 15 | `translate.text` | **L** | Translation between locales | The single largest cross-border transfer in the set. Local-first default; the hosted path is an **escalation**, not a tier change |
 | 16 | `transliterate` | **L** | Latin ↔ native script, ISO 15919 / UN romanisation | **Security note:** transliteration can evade name-match filters. Display utility only — **never** the sole key for a blocklist match |
 | 17 | `entities.extract` | **L** | NER + PII classification (name, email, phone, IBAN, national ID, card PAN) | **The egress chokepoint.** Everything passes through here before it leaves the device |
 | 18 | `address.normalize` / `contact.normalize` | **L** | Postal address normalisation; E.164 phone; email normalisation | libphonenumber metadata is Apache-2.0; ITU-T E.164. **Not** a hosted validation API by default |
@@ -94,7 +122,7 @@ categories, with a different trust posture each:
 
 | Category | Examples | Trust posture |
 |---|---|---|
-| **First-party `local` tools** | The 16 local tools above | Part of the SDK. Pinned by content hash. Full evidence tier |
+| **First-party `local` tools** | The 15 local tools above | Part of the SDK. Pinned by content hash. Full evidence tier |
 | **First-party `network` tools** | `web.fetch_cited`, `web.search`, `fx.rate` | Part of the SDK. Egress-gated, per-tenant grant, every call an event with a legal basis |
 | **Third-party MCP servers** | User-supplied | **Untrusted by default.** The MCP authorization spec applies to **HTTP transports only** — it explicitly says implementations using an STDIO transport SHOULD NOT follow it. A local stdio MCP server is a **local process**, and gets the `local` tier's containment rules, not an OAuth trust grant |
 
@@ -150,14 +178,14 @@ locale string; with it, it is an enforceable policy.
 | **Singapore** | `en-SG`, `zh-SG`, `ms-SG`, `ta-SG` | SGD (2) | GST 9% | SG public holidays | `PDPA-SG` — s.26 transfer limitation is a **contractual** problem, not a consent problem. PDPR 2021 reg 10–11; ASEAN MCCs reusable with MY/ID |
 | **UAE** | `ar-AE` (+ numerals variant), `en-AE` | AED (2) | VAT 5% | **Friday–Sunday weekend; Islamic-calendar holidays shift** | `PDPL-AE` — Art.22/23: transfer permitted where the destination has adequate legislation or an agreement. **No published UAE adequacy list** as of the source consulted ⇒ assume none; Art.23(b) explicit consent is the workable path. Free-zone regimes (DIFC/ADGM) have their own instruments — the profile should detect a free-zone controller |
 | **Saudi Arabia** | `ar-SA` (+ Hijri/Gregorian), `en-SA` | SAR (2) | VAT 15% | SA public holidays | `PDPL-SA` — Art.29(2)(c) limits transfer to the **minimum necessary** and requires appropriate protection; Transfer Regulation Art.5 permits BCRs, SDAIA-model SCCs, certification, or binding codes of conduct. **SCC-in-a-box is templateable** |
-| **China** | `zh-CN`, `zh-HK`, `zh-TW` | CNY (2) | VAT 13/9/6% by category | **调休 — make-up workdays: the calendar has working weekends** | `PIPL-CN` — Art.38: security assessment / certification / standard contract / other; Art.39: notice + **separate consent**. **Strictest of the seven.** The four gateways are slow and document-heavy ⇒ **local-only is the only realistic path** |
+| **China** | `zh-CN`, `zh-HK`, `zh-TW` | CNY (2) | VAT 13/9/6% by category | **调休 — make-up workdays: the calendar has working weekends** | `PIPL-CN` — Art.38: security assessment / certification / standard contract / other; Art.39: notice + **separate consent**. **The strictest of the eight.** The four gateways are slow and document-heavy ⇒ **local-only is the only realistic path** |
 | **Brazil** | `pt-BR` | BRL (2) | ICMS by state + DIFAL | National + state holidays | `LGPD-BR` — ⚠️ **UNVERIFIED.** The statutory transfer provisions were not re-fetched in the research pass. **Resolve before the Brazil bundle ships** |
 | **EU/EEA + UK** | Full CLDR set | EUR (2) | VAT OSS/IOSS | EU public holidays | `GDPR-EU` — Art. 5(1)(c) minimisation, Art. 9 special categories, Art. 44/46 transfers. The `local` tier is the mitigation: **if the bytes never leave, there is no transfer question.** SCCs + TIA; DPF adequacy for certified US recipients |
 | **United States** | `en-US` (+ `es-US`, `fr-CA`) | USD (2) | Sales tax by state + city | Federal/state/local | `HIPAA-US` — Safe Harbor's 18 identifier classes must be detectable by `entities.extract`. ⚠️ **The exact identifier list was not re-fetched — treat as UNVERIFIED until checked.** **HIPAA is a no-egress regime**: ePHI must not reach a hosted LLM, so `local` + a local model is the only compliant default |
 
 ### 5.1 The one differentiator worth stating plainly
 
-No mainstream platform ships **region-aware utilities**. The MCP reference
+We found no mainstream platform that ships **region-aware utilities** - a bounded observation, not a proof of absence. The MCP reference
 `Time` server does timezones; the archived `Google Maps` server did geocoding.
 Currency *rounding*, tax *effective dates*, holiday *shift rules*, and a
 *compliance profile* are not exposed anywhere as a first-class concept.

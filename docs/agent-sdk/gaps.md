@@ -67,9 +67,16 @@ that directory, and therefore outside the guard:
 | `CURRENT_STATE.md` | "**Commit**: `77729f8` on `lablp/relaxed-johnson-vq396s`", "**Verified**: 2026-08-24" | `main` is `d8c6059`; the branch named is gone; **~8 weeks stale** | **FALSE** |
 | `ENGINEERING_LEDGER.md` | Statuses `[OPEN]` … `[UNMAPPED]`; "this session's independent code review (PR #2 iteration 1)" | Findings A–L are all **FIXED** (PR #28) | **SUPERSEDED** |
 | `CORE-INVARIANTS-V2.md` | "Status: **DRAFT — awaiting founder approval. No implementation is authorized by this document.**" | M1, "Freeze kernel contract", is merged | **FALSE** |
-| `REMEDIATION_PLAN.md` | "Based on full repository audit (5 agents, 377 tests, Oct 2026)" | The suite is now 664 tests; the audit it plans from is the *old* one | **SUPERSEDED** |
+| `REMEDIATION_PLAN.md` | "Based on full repository audit (5 agents, 377 tests, Oct 2026)" | The suite is materially larger than the 377 the original audit measured; the audit it plans from is the *old* one | **SUPERSEDED** |
 | `IMPLEMENTATION_PLAN.md` | "**Status: COMPLETE.** … the repository's documentation gaps are closed." | The seven rows above | **FALSE about itself** |
-| `CHANGELOG.md` | `[Unreleased]` | — | Accurate, but with no release cut yet |
+| `SECURITY.md` | *(no status claim before this cycle)* | The security policy in force; it now declares `ACTIVE` and its sections are numbered so its pointers are checkable | **ADDED** |
+
+`CHANGELOG.md` is the thirteenth root document and is **deliberately classified
+as onboarding**, not as a plan or status record: a changelog describes what
+shipped, and what it describes is the history, not the state of the work. The
+classification is **exhaustive** — a new root-level markdown file fails the
+build until it is classified as guarded or explicitly unguarded, so a new root
+*plan* cannot escape the guard by being added to the wrong list.
 
 **The compounding failure:** `IMPLEMENTATION_PLAN.md` declares the
 documentation gaps closed while `ROADMAP.md` and `CORE-INVARIANTS-V2.md`
@@ -261,7 +268,7 @@ every one is an *exit gate* on an MVP.
 | 7. Batch | MVP 4 | **S-21** — a partial failure reconciles per request |
 | 8. Telemetry | MVP 6 | The bottleneck report names the top 3; domain success rates are present |
 | 9. Resume | MVP 3 | **S-05** — a killed orchestrator resumes without duplicating work |
-| 10. Documentation | Every MVP | **D-039 … D-049** in `docs/DECISIONS.md`, each with a context, a decision, rejected alternatives, evidence and consequences — and the guard that enforces it |
+| 10. Documentation | Every MVP | **D-039 … D-051** in `docs/DECISIONS.md`, each with a context, a decision, rejected alternatives, evidence and consequences — and the guard that enforces it |
 
 ### 5.4 The capabilities named in the follow-up, and where each landed
 

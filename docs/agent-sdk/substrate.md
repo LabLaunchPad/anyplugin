@@ -34,7 +34,7 @@ pluggable backends.**
 | 1. WASM client-side **PDF** | [`unjs/unpdf`](https://github.com/unjs/unpdf) · [`npm`](https://www.npmjs.com/package/unpdf) | MIT | 1,249★ · **4.1M weekly npm downloads** | v1.9.1, **2026-10-19** (the day before access) | **DEPEND** |
 | 1b. WASM multi-format (**Office/HTML/CSV/JSON/XML**) | [`kreuzberg-dev/kreuzberg-lts`](https://github.com/kreuzberg-dev/kreuzberg-lts) → [`xberg-io/xberg`](https://github.com/xberg-io/xberg) | MIT (v4 LTS confirmed from the raw LICENSE) | 8.5k★ (Kreuzberg) · 9.4k★ (Xberg) | v5.0.0-rc.9, 2026-06-09 | **DEPEND — pin to the MIT line** |
 | 2. Multi-agent orchestration, durable state | [`langchain-ai/langgraph`](https://github.com/langchain-ai/langgraph) | MIT | 43,500★ · 7,424 forks | v1.2.16, Oct 2026; **v1.0.0 since 2025-10-17** with a stated no-breaking-changes-until-2.0 policy | **DEPEND — behind an interface** |
-| 3. Graph / state machine, conditional edges, bounded loops | [`statelyai/xstate`](https://github.com/statelyai/xstate) | MIT | 30,323★ · **5.1M weekly downloads** · **zero dependencies** | v5.33.3 | **DEPEND** |
+| 3. Graph / state machine, conditional edges, bounded loops | [`statelyai/xstate`](https://github.com/statelyai/xstate) | MIT | 30,323★ · **3.0M weekly downloads** (measured 2026-10-20; an earlier draft said 5.1M, which was stale) · **zero dependencies** | v5.33.3 | **DEPEND** |
 | 4. Prompt compression / context engineering | — none — | — | LLMLingua: 6,756★ but **v0.2.2, 2024-04-09**, self-classified `Development Status :: 3 - Alpha` | ~2.5 years without a release | **BUILD** |
 | 5. Event-sourced SQLite + content-addressed cache | [`sqlite/sqlite-wasm`](https://github.com/sqlite/sqlite-wasm) · [`asg017/sqlite-vec`](https://github.com/asg017/sqlite-vec) · [`npm/cacache`](https://github.com/npm/cacache) | Apache-2.0 / MIT-Apache-2.0 dual / MIT | 1.1k★ / 8,194★ / 301★ | all three actively released | **DEPEND (2 of 3)** |
 | 6. Telemetry | [`open-telemetry/semantic-conventions-genai`](https://github.com/open-telemetry/semantic-conventions-genai) + OTel JS | Apache-2.0 | SIG-governed | Active; status **Development** (unstable) | **DEPEND — pin a commit** |
@@ -152,8 +152,9 @@ then a bounded change.
 **VERIFIED.** [GitHub](https://github.com/statelyai/xstate) ·
 [docs](https://stately.ai/docs/xstate) · accessed 2026-10-20
 
-MIT, **30,323★**, **zero dependencies**, **5.1M weekly downloads**, 270
-versions, 1.4k dependents.
+MIT, **30,323★**, **zero dependencies**, **3.0M weekly downloads** (measured
+2026-10-20 — an earlier draft carried 5.1M, which was a stale figure that had
+never been re-measured), 270 versions, 1.4k dependents.
 
 This is the right primitive for **evidence-gated transitions**: a guarded
 transition (`guard` predicate that must pass before an event is accepted) maps
@@ -369,7 +370,7 @@ date. This is the same discipline as the repo's existing
 
 ## 6. "Is there already a project that does the whole thing?"
 
-**No. Not at production scale.** Every project matching "local-first +
+**We found no production-scale project that does the whole thing** — and, as the ledger says, absence of a publication is `UNKNOWN`, not proof of absence. Every project matching "local-first +
 durable multi-agent + evidence gating" found in the sweep is small and young.
 
 | Project | Licence | Scale | What it does |

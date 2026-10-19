@@ -4,17 +4,17 @@
 failure catalogue it draws on is `docs/FAILURE-MODES.md`; the trust model it
 is consistent with is `docs/agent-sdk/trust.md`.
 
-## Supported versions
+## 1. Supported versions
 
 AnyPlugin is pre-1.0 (`0.1.x`). Security fixes are applied to the latest `main` only.
 
-## Reporting a vulnerability
+## 2. Reporting a vulnerability
 
 Report privately via [GitHub security advisories](https://github.com/LabLaunchPad/anyplugin/security/advisories/new) for this repository. Do not open a public issue describing a vulnerability.
 
 We will acknowledge reports within a few days and keep you informed through a fix and advisory.
 
-## Security model (what we defend against)
+## 3. Security model (what we defend against)
 
 AnyPlugin installs files into agent config directories and edits agent config files. The invariants the code must preserve — and that changes must not weaken:
 
