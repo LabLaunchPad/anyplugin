@@ -241,9 +241,26 @@ is worse than no guarantee.
 | What can be observed? | `packages/worker-runtime/src/resource/telemetry.ts` | prose |
 | What can go wrong, and what happens? | **`docs/FAILURE-MODES.md`** | scattered prose |
 | What is still open? | **`docs/BACKLOG.md`** | `ROADMAP.md` (strategy) |
+| Why was it done that way? | **`docs/DECISIONS.md`** | — |
+| Who is this for, and who is accountable? | **`docs/PERSONAS.md`** | `README.md` (onboarding) |
+| Where does every external claim come from? | **`docs/EVIDENCE.md`** | prose |
+| What did the last sessions establish? | **`docs/SESSION-LEARNINGS.md`** | — |
 | Which agents are supported? | `core/src/detect/index.ts` (`ALL_AGENTS`) | `README.md` (a table that may lag) |
 | What is the event map? | `core/src/events/index.ts` | `knowledge/adapters/event-mapping.md` (a drift-guarded mirror) |
 | Which backends exist? | `anyplugin.backends.json` (the registry) | prose |
+| What is the Agent/Worker SDK, and what does it consume? | **`docs/agent-sdk/README.md`** | — |
+| How does the SDK prove what it did? | **`docs/agent-sdk/trust.md`** | — |
+| How does the SDK improve itself, and how is that read? | **`docs/agent-sdk/optimization.md`** | — |
+| What do caching and batching actually cost? | **`docs/agent-sdk/economics.md`** | — |
+| Which adopted patterns the evidence supports, and which it does not? | `docs/PATTERNS.md` | — |
+| What procedures must a change follow? | `docs/ai-native/reusable-procedures.md` | — |
+| What did the external research audit find? | `docs/ai-native/harness-corpus-audit.md` | — |
+
+**The ownership map is machine-checked.**
+`core/src/boundaries/doc-ownership.test.ts` asserts that every markdown file
+under `docs/` is named in this table, and that every file this table names
+exists. A document with no owner fails the build — a document nobody owns is a
+document nobody maintains.
 
 **Mirrors are drift-guarded, not independent.** `knowledge/adapters/event-mapping.md`
 and `anyplugin.plugin.schema.json` are mirrors with a test that fails when they

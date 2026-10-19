@@ -157,7 +157,7 @@ design decisions live.
 
 ---
 
-## 3. What the sessions established, in one list
+## 3. What the audit sessions established, in one list
 
 1. **A contract with no test is a comment.** Every fix in this cycle ships
    with a regression test that fails without it.
@@ -183,3 +183,83 @@ design decisions live.
 10. **Adversarial review finds what tests do not.** The independent review
     of this branch found four defects that the full suite passed over, three
     of them in code written *for* this branch.
+
+---
+
+## 4. The design sessions (2026-10-20)
+
+Three parallel design passes produced the Agent/Worker SDK specification in
+`docs/agent-sdk/`. They are recorded here because **the way they failed is
+the lesson**, and because the failures were of a kind the audit had not
+previously surfaced.
+
+| Pass | Class | What it established |
+|---|---|---|
+| External-claim verification | **PRODUCED** | 19 external claims checked against primary sources: 6 `VERIFIED`, 8 `PARTLY VERIFIED`, 4 **`CONTRADICTED`**, 2 `UNKNOWN`. Full ledger in `docs/EVIDENCE.md`. |
+| Identity, attestation and trust | **PRODUCED** | The threat model, the per-mode signature schemes, the forgery surface for each, the revocation semantics, the commit-point protocol, and the honest limit on non-repudiation. `docs/agent-sdk/trust.md`. |
+| Autonomous optimisation and signals | **PRODUCED** | The candidate state machine reconciled with the kernel's epistemic ladder, the shadow protocol, twelve promotion gates, the ramp, the flapping detector, the optimizer budgets, the never-automated list, and nine anti-gaming signals. `docs/agent-sdk/optimization.md`. |
+
+### The failures worth recording
+
+**The pricing table was wrong in the direction that flatters the optimisation.**
+Two of the four contradicted claims made caching look *better* than it is: the
+OpenAI row omitted the cache-write charge that arrived with GPT-5.6, and the
+DeepSeek row overstated the cached-read discount by an order of magnitude. A
+third — the worked example — reproduced only by importing a write multiplier
+the provider does not publish and by using a price it does not charge. **A
+table that flatters the optimisation is the most dangerous kind of error to
+publish**, because it is the error nobody re-checks. The corrected table and
+the reasoning are in `docs/agent-sdk/economics.md` §1; the standing rule is
+that a price is quoted with a source URL and an access date, never from
+memory.
+
+**A "pattern" was cited that has no citable source.** The "AIWorker with a
+Soul" framing was presented as established practice. A search found 115
+repositories named `AIWorker`, all visibly unrelated, and zero matching both
+terms. The verdict is `UNKNOWN` rather than "does not exist" — the search was
+GitHub-only, so a private post could exist. The lesson generalises: **a
+pattern you cannot cite is a pattern you are proposing**, and it must be
+labelled as yours.
+
+**Both design passes independently proposed a SECOND evidence ledger and a
+SECOND trust ladder** — and the kernel already owns both. This was the
+single most instructive failure of the cycle: two independent expert passes,
+given the same problem, both reached for a new vocabulary instead of reading
+the existing contracts. The reconciliation (the evidence tier is a *projection*
+over `EvidenceSchema`; the trust axis is the kernel's `EPISTEMIC_RUNGS`, with
+a new *operational* axis alongside it) is recorded in `docs/DECISIONS.md` D-005,
+D-006 and D-017.
+
+**The trust design found a live defect in shipped code.** The commit-point
+protocol's analysis — an attempt can commit an *effect* while producing no
+output — showed that the shipped `fallbackLegal` rule is too narrow. It is
+recorded as an open P1 with the exact edit named (D-013), because it changes a
+frozen, certificate-bound contract and needs its own versioned migration.
+
+**The "completeness" request produced a mechanical guard, not a promise.** The
+user asked for complete, evidence-backed documentation. Rather than assert
+completeness, `core/src/boundaries/doc-ownership.test.ts` now enforces it:
+every document under `docs/` must be owned by `ARCHITECTURE.md`, every decision
+must carry a context, a decision and consequences, every evidence row must
+carry a verdict, a source and an access date, and every decision reference
+must resolve. **The guard immediately found three orphaned documents and 17
+under-specified decisions** — it paid for itself before it was finished.
+
+### What the cycle established, in one list
+
+11. **A price quoted from memory is a claim, not a fact.** Cite the URL and
+    the access date, and re-verify before publishing.
+12. **A pattern you cannot cite is a pattern you are proposing.** Label it.
+13. **Before inventing a vocabulary, read the contracts that exist.** Two
+    independent design passes proposed a second evidence ledger and a second
+    trust ladder; the kernel already owned both.
+14. **Completeness is a test, not a promise.** The guard found three orphans
+    and 17 gaps on its first run.
+15. **A design that only exercises the happy path is a design that will one
+    day run something it should not.** Every negative case in the trust and
+    optimisation designs is a specific, named failure with a specific
+    behaviour.
+16. **The honest limit is part of the deliverable.** "Not legal
+    non-repudiation", "not protection from a hostile OS", "not
+    confidentiality against the operator" — each is stated where a reader
+    would otherwise assume the stronger property.

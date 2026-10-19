@@ -44,6 +44,11 @@ pnpm clean                       # remove all dist/ output
 | Delegation wrapper (probe, route, safe spawn, telemetry) | `cli/src/delegate.ts` |
 | Failure-mode catalogue (what goes wrong, and what the system does) | `docs/FAILURE-MODES.md` |
 | Classified backlog (what is still open, and why) | `docs/BACKLOG.md` |
+| Decision record (why each choice was made, and what was rejected) | `docs/DECISIONS.md` |
+| Personas, intent, and the authority table | `docs/PERSONAS.md` |
+| External-claim ledger (every outside fact, with its source and access date) | `docs/EVIDENCE.md` |
+| The Agent/Worker SDK (a specification of intent, not this repo's scope) | `docs/agent-sdk/README.md` |
+| Document-ownership guard (a document with no owner fails the build) | `core/src/boundaries/doc-ownership.test.ts` |
 | Layer stack, dependency direction, "which doc owns what" | `ARCHITECTURE.md` |
 
 ## Repo layout
