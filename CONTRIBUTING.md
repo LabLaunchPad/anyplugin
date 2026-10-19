@@ -21,7 +21,7 @@ pnpm test
 
 ## What we look for in PRs
 
-1. `pnpm build` and `pnpm test` pass locally (86 tests, including runtime E2E that spawns the real runner and MCP server, and install-journal conflict suites).
+1. `pnpm build` and `pnpm test` pass locally (hundreds of tests, including runtime E2E that spawns the real runner and MCP server, and install-journal conflict suites).
 2. Schema changes update `anyplugin.plugin.schema.json` (a sync test enforces this).
 3. Event-mapping changes update `knowledge/adapters/event-mapping.md` (a drift test enforces this).
 4. New installer destinations are whitelisted templates with tests proving uninstall fully reverses them.

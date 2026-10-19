@@ -1,0 +1,122 @@
+# Backlog — classified
+
+Every known issue, classified, with the behaviour that is correct today and the
+work that closes it.
+
+**Classifications**
+
+| Class | Meaning | Definition of done |
+|---|---|---|
+| **BUG** | The code does something other than what the contract says. A test can fail. | A regression test exists that fails without the fix. |
+| **ERROR** | An error is produced where none should be, or is produced incorrectly (wrong code, wrong message, lost context). | The error is correct, specific, and actionable. |
+| **BEHAVIOUR** | The behaviour is intentional but surprising, undocumented, or inconsistent with a sibling. | It is documented in one place, and a test pins it. |
+| **GODEL** | Documented, deliberate, and not changing now. | It says so, in a way a reader can find. |
+| **DEBT** | Structural, not a defect. Costs time later. | Scheduled. |
+| **GAP** | Something is missing that the product needs. | Scoped and owned. |
+
+**Severity**
+
+| | Meaning |
+|---|---|
+| **P0** | Data loss, a security hole, or a wrong answer presented as right. |
+| **P1** | A documented behaviour does not work, or two components disagree. |
+| **P2** | Polish, consistency, or an operational gap. |
+
+---
+
+## 1. Closed in this cycle
+
+| ID | Class | Sev | Issue | Resolution |
+|---|---|---|---|---|
+| A | BUG | P0 | Hook id accepted leading `_`/`0-9`, unbounded length | Regex tightened to `^[a-z][a-z0-9-]{0,63}$`; `core/src/schema/hook-id-audit.test.ts` |
+| B | BUG | P0 | Manifest paths validated lexically only | Realpath containment added at parse time; `manifest-symlink-audit.test.ts` |
+| C | BUG | P0 | Installer had no destination-ownership classification | ABSENT/OWNED/CONFLICTING + ULID ownership proof + preflight + safe uninstall; `install-ownership-audit.test.ts` |
+| D | BUG | P1 | Journal cast JSON without shape/identity check; missing vs corrupt conflated | Strict Zod schema, `schemaVersion`, `migrateJournal()`, ENOENT vs EACCES distinguished; `journal-validation-audit.test.ts`, `journal-migration-audit.test.ts` |
+| E | BUG | P1 | Install mutated destinations before the journal was written | Transactional pipeline with staging/backup/verify/rollback; `install-transactional-audit.test.ts` |
+| F | BUG | P1 | `timeoutSec` declared but never enforced | `hooks/policies.json` written at build time; the runner enforces a hard deadline; `runner-timeout-audit.test.ts` |
+| G | BUG | P1 | `failurePolicy: "blocking"` never read by the runner | The runner reads the policy; "blocking" exits 2; `runner-failure-policy-audit.test.ts` |
+| H | BUG | P1 | OpenCode shim collapsed multiple hooks per native event | Event → ordered list; every hook dispatched, results merged; `opencode-collapse-audit.test.ts` |
+| I | BUG | P1 | The MCP frontmatter parser was not YAML | `yaml-lite.js` (YAML 1.2 core schema); a differential test proves it matches the `yaml` package for every file of the real bundle |
+| J | BUG | P1 | Replay gap detection was O(n²) | Single pass; proven by a test that passes an array whose `some` throws |
+| K | BEHAVIOUR | P1 | Event-log durability was unstated | `DurabilityLevel` per open: `best-effort` / `process-crash` / `power-loss`; `durability-audit.test.ts` |
+| L | GAP | P1 | No diagnostic for a stale writer lock | `anyplugin doctor` decides staleness by the HOLDER'S LIVENESS, not by file age; `--fix` releases a stale lock but never an active or unverifiable one |
+| M | BUG | P1 | The MCP server reported false facts about the bundle (`tags: [a,b]` became a string; `verified: []` gave the wrong trust tier) | Fixed by I. `mcp-parser-audit.test.ts` pins the corrected shapes |
+| N | BUG | P1 | `runner.js --batch` could not work: `require()` in ESM, a TDZ read of `env`, and an exit before the result was written | Rewritten with `spawn`; the summary now counts a non-blocking failure as an error; `runner-batch.test.ts` (5 tests) |
+| O | BUG | P2 | `packages/worker-runtime/package.json` declared a `bin` with no source, so pnpm could not create the shim | The dangling `bin` entry was removed |
+| P | BUG | P2 | Two exported symbols named `FAILURE_CLASSES` with disjoint value sets, resolved silently by the barrel | Renamed to `CONTRACT_FAILURE_CLASSES` and `DELEGATION_FAILURE_CLASSES` |
+| Q | BUG | P1 | `okf-reindex knowledge` overwrote the hand-curated root `index.md` with generated content — and `AGENTS.md` told agents to run exactly that command. It destroyed this repo's curated root index during this very cycle. | The root index is now only written when it does not exist, or with an explicit `--include-root`; `core/src/okf/root-index-guard.test.ts` (5 tests, including one against the real repo bundle) |
+| R | GAP | P1 | No component/dependency graph, no single architecture overview, no failure-mode catalogue, no classified backlog | `ARCHITECTURE.md` (Mermaid layer stack + dependency direction + "which doc owns what"), `docs/FAILURE-MODES.md`, `docs/BACKLOG.md` |
+| S | GAP | P1 | No telemetry/observability spec — only code | `packages/worker-runtime/src/telemetry/delegation.ts` is the contract; `docs/FAILURE-MODES.md` §2–§6 is its prose; `knowledge/adapters/delegation-wrapper.md` is the OKF concept |
+
+---
+
+## 2. Open — P0
+
+_None known._
+
+---
+
+## 3. Open — P1
+
+| ID | Class | Issue | Where | Correct behaviour today |
+|---|---|---|---|---|
+| P1-1 | BUG | `core/src/events/index.ts` (`toPlatformOutput`) and `plugins/knowledge/runtime/runner.js` implement the `HookResult` → output translation **twice**, with different `raw` precedence and a different Antigravity block exit code. | `core/src/events/index.ts:121` vs `runner.js` | The RUNNER is correct (`raw` is a fallback only; Antigravity blocks exit 0). The core helper is dead code with the opposite rules. **Nobody should call `toPlatformOutput` for platform output** — it is used only where no platform translation is needed. |
+| P1-2 | BEHAVIOUR | `AGENTS.md` documents runner exit code **3** ("capability unknown / fail-closed"). The runner never exits 3. | `AGENTS.md` | The runner exits 0/1/2/4. Code 3 is reserved, and the batch summary counts it as an error. |
+| P1-3 | BEHAVIOUR | `CLAUDE.md` and `SECURITY.md` say runtime failures are **always** non-blocking. `failurePolicy: "blocking"` makes a throw exit 2. | `CLAUDE.md`, `SECURITY.md` | The manifest decides. The default is non-blocking; a plugin that wants the host denied says so. |
+| P1-4 | BUG | The committed `knowledge/**/index.md` files are never compared against generator output, so index drift is silent. | `core/src/okf/knowledge-bundle.test.ts` | The root `index.md` is hand-curated; the sub-indexes are generated. A drift test should compare the generated sub-indexes and assert the root is untouched. |
+| P1-5 | BUG | `knowledge/adapters/detection-matrix.md` lists `CLAUDE_CODE_CHILD_SESSION` and `CLAUDE_PID` as detection signals; the code checks only `CLAUDE_CODE_SESSION_ID`. | `core/src/detect/index.ts:41` | The CODE is the source of truth. The document is stale and should either be corrected or drift-guarded. |
+
+---
+
+## 4. Open — P2
+
+| ID | Class | Issue | Where | Note |
+|---|---|---|---|---|
+| P2-1 | DEBT | **Eight different test counts** across seven documents. | `README.md`, `AGENTS.md`, `CURRENT_STATE.md`, `REMEDIATION_PLAN.md`, `ROADMAP.md`, `CORE-INVARIANTS-V2.md`, `IMPLEMENTATION_PLAN.md` | Any number in prose goes stale. The count should be generated, or the documents should say "see `pnpm test`" instead of a number. |
+| P2-2 | BEHAVIOUR | `CURRENT_STATE.md` is a 2026-08-24 snapshot presented as "repository ground truth": wrong commit, wrong branch, wrong project count, stale test counts, and three different numbers inside itself. | `CURRENT_STATE.md` | It should be regenerated, or explicitly dated and marked as a snapshot. |
+| P2-3 | BEHAVIOUR | `ROADMAP.md` says "implementation not started, M0 is the next action" and that `packages/` is not a workspace location. Both were untrue before this cycle. | `ROADMAP.md:3`, `ROADMAP.md:127` | The roadmap is a strategy document; it should not carry status claims that drift. |
+| P2-4 | BEHAVIOUR | `CORE-INVARIANTS-V2.md` is marked "DRAFT — awaiting founder approval. No implementation is authorized by this document", yet its mandates have been implemented. | `CORE-INVARIANTS-V2.md:4` | Either the approval gate is recorded, or the status line is corrected. |
+| P2-5 | BEHAVIOUR | `ENGINEERING_LEDGER.md` AP-019 still lists `failurePolicy` as `[OPEN]`. It shipped. | `ENGINEERING_LEDGER.md:126` | The ledger is the defect record; a shipped defect must be closed there. |
+| P2-6 | BUG | The manifest `version` regex is not end-anchored: `/^\d+\.\d+\.\d+/` accepts trailing garbage. | `core/src/schema/index.ts:56` | The regex must be anchored, and the JSON Schema mirror updated. |
+| P2-7 | BUG | The MCP server schema accepts inconsistent configs: HTTP without a URL, stdio without a command. | `core/src/schema/index.ts:38` | A `.refine()` should reject the inconsistent shapes. |
+| P2-8 | DEBT | Path-length checks use JS string `.length` (UTF-16 code units) rather than UTF-8 bytes. | `core/src/fs/safe-path.ts` | A non-BMP character counts as 2 in JS and 4 bytes in UTF-8. |
+| P2-9 | DEBT | The journal is written directly, not temp+flush+rename. | `cli/src/journal.ts` | A crash mid-write leaves a truncated journal — which then throws (fail-closed), so the impact is a failed uninstall rather than data loss, but the write is still not atomic. |
+| P2-10 | DEBT | `Adapter.targets()` is implemented by all four adapters and never called. | `core/src/adapters/index.ts:81` | A dead contract surface. Either wire it or remove it. |
+| P2-11 | DEBT | The adapters emit `destAbs` values that are not in the CLI's `TEMPLATES` whitelist, including a `{{PLUGIN_NAME}}` path token. | `adapters/*/src/index.ts` | They survive only because `copyDest()` short-circuits on `role: "root"`. This is a second, divergent destination registry. |
+| P2-12 | GAP | The `knowledge/` bundle, the plugin's own bundle, and the starter template bundle are three separate OKF bundles, none cross-validated. | `knowledge/`, `plugins/knowledge/plugin/knowledge/`, `templates/starter/knowledge/` | The starter bundle is never validated by CI, and its `index.md` links to five concepts that do not exist. |
+| P2-13 | GAP | `templates/starter/knowledge/tier-config.json` is a config with no schema, no consumer, and no documentation. | `templates/starter/knowledge/` | — |
+| P2-14 | GAP | The starter docs tell users to run `npx anyplugin okf-validate`, but the CLI is not published. | `templates/starter/README.md` | — |
+| P2-15 | GAP | `schema-sync.test.ts` does not assert `additionalProperties` parity, which is the exact gap `REMEDIATION_PLAN.md` asked to close. | `core/src/schema/schema-sync.test.ts` | — |
+| P2-16 | GAP | `.github/CODEOWNERS` does not cover `packages/worker-runtime/src/contracts/` or `core/src/capabilities/`. | `.github/CODEOWNERS` | The ten frozen contracts are the highest-leverage artifacts in the repo and are unowned by an explicit rule. |
+| P2-17 | GAP | There is no linter. `pnpm build` is the typecheck, and formatting is unenforced. | — | The repo says this is deliberate. It is a choice, not an oversight, and is recorded here so it is a decision rather than a gap. |
+| P2-18 | BEHAVIOUR | The dependency direction is stated in five places, with no single owner. | `ROADMAP.md`, `package-boundary.test.ts`, `worker-runtime/src/index.ts`, `storage.ts`, `docs/WORKER-RUNTIME-KERNEL.md` | `ARCHITECTURE.md` now owns it; the others should link rather than restate. |
+| P2-19 | GAP | No coverage measurement, and no coverage gate in CI. | `.github/workflows/ci.yml` | — |
+| P2-20 | GAP | `9router/` is an unrelated nested git repository inside the working directory. | `9router/` | It is a workspace-hygiene hazard: a nested `.git` and a `package.json` one `pnpm install` away from being picked up. It is NOT part of AnyPlugin. |
+
+---
+
+## 5. Deliberately not changing
+
+| ID | Class | Item | Why |
+|---|---|---|---|
+| G-1 | GODEL | The event log is not fsynced by default. | `DurabilityLevel: "best-effort"` is the default because the write path was measured (F10) at that level, and an fsync per append would invalidate those numbers. The stronger levels exist and are opt-in. The guarantee is STATED, not implied. |
+| G-2 | GODEL | A stale writer lock is never auto-broken. | A stale lock and a live second writer are indistinguishable from inside the lock. Breaking one to find out produces exactly the two-writer state the lock exists to prevent. The `doctor` diagnoses it; a human removes it. |
+| G-3 | GODEL | The hook runtime has no dependencies. | An emitted bundle must run on a machine that has Node and nothing else. That is why it ships its own YAML parser. |
+| G-4 | GODEL | `hooks/policies.json` is a build artifact, not a manifest field. | The manifest stays the single source of truth; the build projects the part the runtime needs into a format the runtime can read without a YAML parser. |
+| G-5 | GODEL | An `UNKNOWN` capability is excluded from routing, and an unknown health state is not. | Capability and health are different axes. Failing closed on health takes the system down; failing open on capability lets it corrupt things. |
+
+---
+
+## 6. How this document stays true
+
+| Claim type | How it is kept true |
+|---|---|
+| A behaviour | A test that fails without the fix. |
+| A count | Generated, or omitted. |
+| A status ("shipped", "open") | This file, and the ledger. |
+| A schema | The zod source, mirrored with a drift test. |
+| A file path | A link, so a moved file breaks the link rather than silently misleading. |
+
+**A row may not be added without a classification and a "correct behaviour
+today" column.** A backlog entry that does not say what the system does now
+is a wish list, not a backlog.

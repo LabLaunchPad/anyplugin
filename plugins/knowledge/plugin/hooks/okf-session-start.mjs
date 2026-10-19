@@ -1,15 +1,27 @@
 /**
  * okf-session-start — injects a pointer to the OKF knowledge bundle into the session
  * so the agent knows prior knowledge exists before answering.
+ * Untrusted input (payload.cwd, payload.pluginRoot) is validated through
+ * resolveAuthorizedPath (spec §1.1) before any filesystem operation.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { resolveAuthorizedPath } from "@lablaunchpad/core";
 
 export async function run(payload) {
+  // Validate cwd through SafePath before using it in a filesystem path
+  const safeCwd = payload.cwd
+    ? await resolveAuthorizedPath(process.cwd(), payload.cwd).catch(() => process.cwd())
+    : process.cwd();
+  // Validate pluginRoot through SafePath before using it in a filesystem path
+  const safePluginRoot = payload.pluginRoot
+    ? await resolveAuthorizedPath(process.cwd(), payload.pluginRoot).catch(() => process.cwd())
+    : process.cwd();
+
   const candidates = [
     process.env["ANYPLUGIN_OKF_BUNDLE"],
-    join(payload.pluginRoot ?? ".", "knowledge"),
-    join(payload.cwd ?? process.cwd(), "knowledge"),
+    join(safePluginRoot, "knowledge"),
+    join(safeCwd, "knowledge"),
   ].filter(Boolean);
 
   for (const dir of candidates) {

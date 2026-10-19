@@ -11,7 +11,7 @@ async function collect(dir) {
     return;
   }
   for (const entry of entries) {
-    if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".vitest") {
+    if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".vitest" || entry.name.endsWith(".tsbuildinfo")) {
       targets.push(join(dir, entry.name));
     } else if (entry.isDirectory() && entry.name !== ".git" && entry.name !== "research") {
       await collect(join(dir, entry.name));

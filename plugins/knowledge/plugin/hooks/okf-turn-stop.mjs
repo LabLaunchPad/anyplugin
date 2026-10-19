@@ -3,14 +3,23 @@
  * newest-first line to the bundle's log.md. Kept intentionally cheap: no LLM, no
  * transcript parsing; the agent (via the okf-reader skill or curator) writes
  * rich concepts — this hook only maintains the heartbeat so staleness is visible.
+ * Untrusted input (payload.cwd) is validated through resolveAuthorizedPath
+ * (spec §1.1) before any filesystem operation.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { resolveAuthorizedPath } from "@lablaunchpad/core";
 
 export async function run(payload) {
+  // Validate cwd through SafePath before joining it into a filesystem path.
+  // This is the ONE way untrusted input becomes a path (CORE-INVARIANTS-V2 §1.1).
+  const safeCwd = payload.cwd
+    ? await resolveAuthorizedPath(process.cwd(), payload.cwd).catch(() => process.cwd())
+    : process.cwd();
+
   const candidates = [
     process.env["ANYPLUGIN_OKF_BUNDLE"],
-    join(payload.cwd ?? process.cwd(), "knowledge"),
+    join(safeCwd, "knowledge"),
   ].filter(Boolean);
   const dir = candidates.find((d) => existsSync(join(d, "log.md")));
   if (!dir) return {};

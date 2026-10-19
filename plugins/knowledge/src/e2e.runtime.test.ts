@@ -65,6 +65,16 @@ describe("runner.js E2E (real process, real handler)", () => {
     expect(out.injectSteps[0].content).toMatch(/OKF v0\.2 knowledge bundle/);
   }, 30000);
 
+  it("opencode: additionalContext → hookSpecificOutput", async () => {
+    const r = await runNode([RUNNER, "okf-session-start"], {
+      input: JSON.stringify({ cwd: REPO_ROOT, conversationId: "c1" }),
+      env: { ANYPLUGIN_HOST: "opencode" },
+    });
+    expect(r.code).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.hookSpecificOutput.additionalContext).toMatch(/OKF v0\.2 knowledge bundle/);
+  }, 30000);
+
   it("codex host marker is detected (payload.platform)", async () => {
     const r = await runNode([RUNNER, "okf-session-start"], {
       input: JSON.stringify({ cwd: REPO_ROOT }),

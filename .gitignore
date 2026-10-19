@@ -12,6 +12,19 @@ research/reports/raw/
 .prism-build/
 .anyplugin-build/
 
+# ── Foreign projects in the working directory ───────────────────────────────
+#
+# 9router/ is a SEPARATE project (an LLM router with its own .git, package.json,
+# and docs). It is NOT part of AnyPlugin and must never be committed here: it has
+# its own git history, and a nested repository in a working tree is a hazard for
+# every repo-wide search and every naive `git add .`.
+#
+# ROADMAP.md lists "another LLM router" under what AnyPlugin is deliberately NOT
+# building as a product. The delegation wrapper in cli/src/delegate.ts is the
+# in-repo answer, and it borrows the SLO-gate and chaos-testing patterns from
+# 9router rather than vendoring the project.
+/9router/
+
 # ── Worker Runtime state boundary ───────────────────────────────────────────
 #
 # Classification of everything the runtime touches. Only RUNTIME STATE is
