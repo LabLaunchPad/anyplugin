@@ -564,7 +564,7 @@ confirmation that the rule is right.
 ## 4D. The cycle that found a live defect in its own shipped code
 
 **Source:** the P1-10 investigation and its post-mortem, `docs/POST-MORTEMS.md`
-PM-001. **Status:** `ADOPTED` and `BUILT`.
+PM-001. **Status:** `BUILT` — every learning below is implemented, not proposed.
 
 | Learning | Why it generalises |
 |---|---|
