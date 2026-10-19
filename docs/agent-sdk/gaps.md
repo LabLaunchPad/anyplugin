@@ -276,6 +276,15 @@ every one is an *exit gate* on an MVP.
 | **"Steal like an artist"** — the patterns mined from real source, lawfully | `docs/agent-sdk/platform-engineering.md` | — |
 | **Self-scalable AI SDLC** — the loop that improves itself inside a machine-checked envelope | `roadmap.md` §10 | 7 + 9 |
 | **A study-and-learn step** — deliberate practice with recorded practice and optimisation | `roadmap.md` §5.3.2 (the signature catalogue) and §5.9 (module 9.6) | 3 + 9 |
+| **The three-layer separation** — Graph Engineering, the Kernel, the Runtime | `roadmap.md` §3A | — |
+| **The reasoning/execution split**, with the two layers' engineering constraints | `roadmap.md` §3A.1 | — |
+| **The reducer contract** for parallel-safe state merges — and where this repository is *stricter* | `roadmap.md` §3A.2 | — |
+| **The runtime configuration schema**, and the policy-is-a-constant / parameters-are-configuration split | `roadmap.md` §3A.3 | — |
+| **A harness that saturates the machine without exceeding it** — and the four things it must never do | `simulations.md` §1A | — |
+| **The task-envelope wire format** and the four failure classes it must carry | `roadmap.md` §4.3 | — |
+| **The platform API matrix** and its bounded fallbacks | `roadmap.md` §4.4 | — |
+| **The AST kernel** — a fault-tolerant CST, and a symbol graph that represents brokenness rather than hiding it | `roadmap.md` §5.2 (modules 2.6, 2.7) | 2 |
+| **A reverse-engineering agent's evidence discipline** — `rea`'s coverage declaration, per-facet availability, and bounded transport | `learnings.md` §4C | — |
 
 ### 5.5 The gaps that remain, honestly
 
