@@ -1,5 +1,9 @@
 # Security Policy
 
+**Status:** ACTIVE — this is the repository's security policy in force. The
+failure catalogue it draws on is `docs/FAILURE-MODES.md`; the trust model it
+is consistent with is `docs/agent-sdk/trust.md`.
+
 ## Supported versions
 
 AnyPlugin is pre-1.0 (`0.1.x`). Security fixes are applied to the latest `main` only.

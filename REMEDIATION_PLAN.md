@@ -1,5 +1,11 @@
 # AnyPlugin Remediation Plan
 
+**Status:** SUPERSEDED — this is the *original* remediation, from the audit
+of 5 agents and 377 tests (October 2026). It was overtaken by
+`IMPLEMENTATION_PLAN.md`, which covers the A–L findings, and by
+`docs/BACKLOG.md`, which holds the live defect list. Kept for the record of
+*why* each fix was chosen.
+
 **Based on full repository audit (5 agents, 377 tests, Oct 2026)**
 **Goal:** Production-grade fixes, no architecture changes, quickest possible turnaround
 

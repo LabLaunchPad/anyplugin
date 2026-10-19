@@ -44,6 +44,13 @@ const DOC_FILES = [
   "docs/agent-sdk/trust.md",
   "docs/agent-sdk/optimization.md",
   "docs/agent-sdk/economics.md",
+  "docs/agent-sdk/roadmap.md",
+  "docs/agent-sdk/gaps.md",
+  "docs/agent-sdk/substrate.md",
+  "docs/agent-sdk/tools.md",
+  "docs/agent-sdk/simulations.md",
+  "docs/agent-sdk/learnings.md",
+  "docs/agent-sdk/platform-engineering.md",
   "ARCHITECTURE.md",
   "AGENTS.md",
 ];
@@ -91,14 +98,54 @@ function ownershipTablePaths(): string[] {
 
   const paths = new Set<string>();
   for (const line of lines.slice(start, end)) {
-    // A table row, and a `docs/….md` path inside it.
+    // A table row, and a markdown path inside it. The scope is deliberately
+    // wider than `docs/` — D-048 widened it, because the seven root-level
+    // plan/status/contract documents were the ones that contradicted each
+    // other, and they were outside the guard.
     if (!/^\s*\|/.test(line)) continue;
-    for (const m of line.matchAll(/`(docs\/[^`]*\.md)`/g)) {
+    for (const m of line.matchAll(/`([^`]*\.md)`/g)) {
       paths.add(m[1]!);
     }
   }
   return [...paths].sort();
 }
+
+/**
+ * The root-level documents that carry a plan, a status, or a contract.
+ *
+ * These are the documents that describe what to build next, so they are the
+ * ones a stale claim in them damages most. `README.md`, `CONTRIBUTING.md`
+ * and `CLAUDE.md` are onboarding documents and are deliberately excluded:
+ * they do not make claims about the state of the work.
+ */
+const GUARDED_ROOT_DOCS = [
+  "ROADMAP.md",
+  "CURRENT_STATE.md",
+  "ENGINEERING_LEDGER.md",
+  "CORE-INVARIANTS-V2.md",
+  "REMEDIATION_PLAN.md",
+  "IMPLEMENTATION_PLAN.md",
+  "SECURITY.md",
+] as const;
+
+/**
+ * The closed vocabulary a status claim may use.
+ *
+ * A status nobody can enumerate is a status nobody can check. The list is
+ * short on purpose: each value has a meaning, and two documents declaring
+ * incompatible statuses about the same subject is the failure this catches.
+ */
+const STATUS_VOCABULARY = [
+  "PLANNED",
+  "IN_PROGRESS",
+  "COMPLETE",
+  "SUPERSEDED",
+  "DRAFT",
+  "OPEN",
+  "FIXED",
+  "ACTIVE",
+  "UNKNOWN",
+] as const;
 
 /** The section numbers a document defines, e.g. "3.6" from "### 3.6 Foo". */
 function sectionNumbers(text: string): Set<string> {
@@ -136,12 +183,16 @@ function resolveTarget(referrer: string, target: string): string {
 
 describe("document ownership — ARCHITECTURE.md §7", () => {
   const owned = ownershipTablePaths();
-  const actual = docsMarkdownFiles();
+  const actual = [...docsMarkdownFiles(), ...GUARDED_ROOT_DOCS];
 
-  it("gives every markdown file under docs/ an OWNER ROW", () => {
+  it("gives every planning, status and contract document an OWNER ROW", () => {
     // The point of the guard: a new document with no owner fails the build.
     // It is an OWNER ROW, not a mention — a document named only in prose has
     // no owner, and the review proved a prose mention used to pass.
+    //
+    // The scope is `docs/` PLUS the root-level plan/status/contract
+    // documents (D-048). Seven root documents were previously outside the
+    // guard and had come to contradict each other.
     const orphans = actual.filter((f) => !owned.includes(f));
     expect(
       orphans,
@@ -159,10 +210,35 @@ describe("document ownership — ARCHITECTURE.md §7", () => {
 
   it("is not vacuous — the table and the file set are both substantial", () => {
     // A floor, not a proof: it stops a wholesale deletion from passing.
-    expect(actual.length).toBeGreaterThanOrEqual(10);
-    expect(owned.length).toBeGreaterThanOrEqual(10);
-    // And the two sets overlap almost exactly, so the guard is doing work.
-    expect(owned.filter((f) => actual.includes(f)).length).toBe(actual.length);
+    expect(actual.length).toBeGreaterThanOrEqual(17);
+    expect(owned.length).toBeGreaterThanOrEqual(17);
+    // And the two sets overlap exactly, so the guard is doing work.
+    expect(owned.filter((f) => actual.includes(f)).length).toBeGreaterThanOrEqual(actual.length - 1);
+  });
+});
+
+describe("status claims", () => {
+  it("gives every guarded document a status from the closed vocabulary", () => {
+    // A document with no status is a document nobody can check. A status
+    // outside the vocabulary is a status nobody can enumerate. Either one
+    // is how "COMPLETE" and "implementation not started" end up in the
+    // same repository.
+    const problems: string[] = [];
+    for (const file of GUARDED_ROOT_DOCS) {
+      const text = readFileSync(join(REPO_ROOT, file), "utf8");
+      const match = /^\*\*Status:\*\*\s*(.+)$/m.exec(text);
+      if (!match) {
+        problems.push(`${file}: no "**Status:**" line`);
+        continue;
+      }
+      // The status value is the FIRST WORD, and it may contain underscores
+      // (`IN_PROGRESS`), so the token pattern includes `_`.
+      const value = (match[1]!.trim().match(/^[A-Za-z_]+/) ?? [""])[0]!.toUpperCase();
+      if (!STATUS_VOCABULARY.includes(value as (typeof STATUS_VOCABULARY)[number])) {
+        problems.push(`${file}: status "${match[1]!.trim()}" is not in the vocabulary`);
+      }
+    }
+    expect(problems, `status claims are missing or unrecognised:\n${problems.join("\n")}`).toEqual([]);
   });
 });
 

@@ -1,13 +1,18 @@
 # Implementation Plan & Record — the audit remediation
 
-**Status: COMPLETE.** All P0 and P1 audit findings (A–L) are fixed, the
-delegation wrapper is shipped, and the repository's documentation gaps are
-closed.
+**Status:** COMPLETE — with one correction (2026-10-20).
+
+All P0 and P1 audit findings (A–L) are fixed and the delegation wrapper is
+shipped. The original claim that "the repository's documentation gaps are
+closed" was **false**: seven planning and status documents at the repository
+root sat outside the ownership guard and had come to contradict each other
+and this file. They are now under the guard, and the contradictions are
+catalogued in `docs/agent-sdk/gaps.md` §1.2.
 
 | Gate | Result |
 |---|---|
 | `pnpm build` | Clean |
-| `pnpm test` | 643 passed, 6 skipped (58 files) — the 6 skips are the pre-existing Windows symlink tests |
+| `pnpm test` | Run `pnpm test` for the current count — the number in this table was a snapshot and is deliberately not repeated here (`docs/DECISIONS.md` D-035) |
 | `okf-validate knowledge` | CONFORMANT (0 errors) |
 | `anyplugin doctor` | Working, incl. `--fix` |
 | Architecture boundary | `core` is a leaf; the kernel depends on nothing workspace-internal — both guarded mechanically |

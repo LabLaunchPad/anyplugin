@@ -1,5 +1,12 @@
 # AnyPlugin Core Invariants & Minimal Manifest v2 Contract
 
+**Status:** IN_PROGRESS — the Phase 0 contract this document specifies was
+frozen and shipped as `CONTRACT_VERSION = "1.0.0"` in
+`packages/worker-runtime/src/contracts/`. The statement that *"No
+implementation is authorized by this document"* no longer reflects reality;
+the implemented contracts are the authority. This document is the **design
+input** they were built from.
+
 **Design Specification — Phase 0 (Layer 1: Trust)**
 Status: **DRAFT — awaiting founder approval. No implementation is authorized by this document.**
 Scope owners: Rahul Paul · Lab LaunchPad. Ledger: `ENGINEERING_LEDGER.md`.

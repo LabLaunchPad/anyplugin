@@ -1,5 +1,10 @@
 # CURRENT_STATE.md
 
+**Status:** SUPERSEDED — this snapshot describes commit `77729f8` (2026-08-24).
+The live state is `docs/agent-sdk/roadmap.md` for plans and
+`docs/BACKLOG.md` for open work. Read this document as a historical
+reconnaissance record, not as current ground truth.
+
 Repository ground truth, established by reconnaissance. **No code was modified to produce this.**
 
 - **Commit**: `77729f8` on `lablp/relaxed-johnson-vq396s` · working tree clean
