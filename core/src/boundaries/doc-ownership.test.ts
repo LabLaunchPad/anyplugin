@@ -129,6 +129,23 @@ const GUARDED_ROOT_DOCS = [
 ] as const;
 
 /**
+ * Root documents that are onboarding, policy or ownership maps rather than
+ * plans or status records.
+ *
+ * They are listed here so that the check below is **exhaustive**: a new
+ * root-level markdown file has to be classified, which means a new root-level
+ * *plan* cannot quietly escape the guard by being added to the wrong place.
+ */
+const UNGUARDED_ROOT_DOCS = [
+  "AGENTS.md",
+  "ARCHITECTURE.md",
+  "CHANGELOG.md",
+  "CLAUDE.md",
+  "CONTRIBUTING.md",
+  "README.md",
+] as const;
+
+/**
  * The closed vocabulary a status claim may use.
  *
  * A status nobody can enumerate is a status nobody can check. The list is
@@ -218,6 +235,27 @@ describe("document ownership — ARCHITECTURE.md §7", () => {
 });
 
 describe("status claims", () => {
+  it("classifies every root-level markdown document", () => {
+    // The guarded list is a constant, which would be a hole if a NEW root
+    // plan could be added and simply not appear in it. So the check is
+    // EXHAUSTIVE: every root-level markdown file must be classified as
+    // guarded (a plan/status/contract) or explicitly unguarded (onboarding,
+    // policy, ownership map). Adding a root document is therefore a
+    // deliberate act that fails the build until it is classified.
+    const rootFiles = readdirSync(REPO_ROOT)
+      .filter((f) => f.endsWith(".md"))
+      .sort();
+    const classified = new Set<string>([...GUARDED_ROOT_DOCS, ...UNGUARDED_ROOT_DOCS]);
+    const unclassified = rootFiles.filter((f) => !classified.has(f));
+    expect(
+      unclassified,
+      `these root-level documents are not classified - add them to GUARDED_ROOT_DOCS (a plan, status or contract) or to UNGUARDED_ROOT_DOCS (onboarding):\n${unclassified.join("\n")}`,
+    ).toEqual([]);
+    // And the classification itself is not stale: every named file exists.
+    const missing = [...classified].filter((f) => !existsSync(join(REPO_ROOT, f)));
+    expect(missing, `classified root documents that do not exist: ${missing.join(", ")}`).toEqual([]);
+  });
+
   it("gives every guarded document a status from the closed vocabulary", () => {
     // A document with no status is a document nobody can check. A status
     // outside the vocabulary is a status nobody can enumerate. Either one

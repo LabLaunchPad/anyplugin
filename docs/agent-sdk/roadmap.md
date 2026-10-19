@@ -109,6 +109,114 @@ decision, not a performance one.
 
 ---
 
+## 3A. The three layers, and why conflating them is the leading cause of failure
+
+**Graph Engineering · the Kernel · the Runtime.** Three layers with three
+different failure signatures, and the separation is not cosmetic — it is the
+difference between a *bug* (a race in a state write) and an *outage* (a
+runaway loop, an unhandled concurrency spike, an unbounded fan-out).
+
+| Layer | Responsibility | Core components | What it manages | Where it lives in *this* project |
+|---|---|---|---|---|
+| **Graph Engineering** | Topology and flow design | Nodes, edges, state schemas, conditional routers | Who talks to whom, what data flows along edges, how parallel writes compose | **The SDK** — MVP 3's orchestrator, MVP 2's graph, the D9 delegation gate |
+| **The Kernel** | State and memory control | Checkpointers, reducers, thread ids, memory stores | Immutable execution history, session persistence, conflict resolution across state updates | **`packages/worker-runtime/`** — already built: the framed event log, the replay fold, `foldWorkerState`, the `LEGAL_TRANSITIONS` table |
+| **The Runtime** | Execution infrastructure | Sandboxes, async/sync workers, concurrency limits, retries | Process lifecycles, crash recovery, timeout ceilings, hardware and rate-limit safety | **The execution tier** — the `ExecutionBackend` shapes (`LocalProcessBackend` today; `ContainerBackend`, `VMBackend`, `RemoteBackend` are shape-only) |
+
+### 3A.1 The reasoning/execution separation — already ours, and it is load-bearing
+
+| | **The reasoning loop (LLM nodes)** | **The execution layer (deterministic nodes and tools)** |
+|---|---|---|
+| **What it does** | Analyses input, generates plans, evaluates intermediate outcomes, decides the next step | Executes code, queries databases, calls APIs, does file I/O |
+| **Engineering constraint** | Bounded by token limits, schema output validation, and **strict maximum turn/recursion caps** | **Completely isolated from model interpretation.** Strict schemas, transactional guarantees, idempotent retry wrappers |
+| **Where it lives here** | The SDK's orchestrator | The kernel + the execution tier |
+
+> `AGENTS.md` already states the invariant in one line: **"the model is not
+> memory, not knowledge, not experience, not authority, not the verifier, and
+> not the execution environment."** That *is* the reasoning/execution
+> separation, and it is enforced mechanically by
+> `core/src/boundaries/package-boundary.test.ts` — the kernel imports nothing
+> workspace-internal, so **no inference can reach the state layer**.
+
+### 3A.2 The reducer contract — and where this repository is *stricter*
+
+The reference pattern for parallel-safe state is an **append-only reducer**
+per key: `Annotated[List[dict], operator.add]`, so two parallel workers
+merging into the same collection compose deterministically instead of racing.
+
+**This repository already has the stronger version.** `foldWorkerState` folds
+the event log into state, and the kernel's rule is that there is **one
+authoritative writer** — a parallel write is not made safe by a reducer, it
+is **refused** (`FOREIGN_OWNED_PATHS`, and the storage-root / install-whitelist
+disjointness test).
+
+| | Append-only reducers with parallel writers | This repository's single-writer log |
+|---|---|---|
+| **Parallel writes** | Allowed; composed by a declared reducer | **Refused** — one writer, by construction |
+| **Merge determinism** | Depends on the reducer being correct and associative | **Free** — the log is ordered, so the fold is a fold |
+| **Cost** | A reducer bug silently corrupts merged state | A second writer is a **refusal**, not a corruption |
+| **Cost of the stricter rule** | — | **Serialisation.** Parallel fan-out cannot write concurrently, so the orchestrator's parallelism is *compute* parallelism, not *write* parallelism |
+| **Right trade?** | — | For a **kernel** that must be replayable byte-for-byte, yes. For a **hot path** that needs parallel writes, the reducer pattern wins — which is why the SDK's orchestrator may adopt reducers **at the SDK layer**, above the kernel, and never inside it |
+
+**The reconciliation, and it is a real decision:** the SDK's graph layer may
+use append-only reducers for its own working state, because it is *not* the
+kernel and does not need byte-identical replay. The kernel keeps the
+single-writer rule. **Two layers, two disciplines, one boundary** — and the
+boundary is the same one the package-boundary test already draws.
+
+### 3A.3 The runtime configuration — policy is a constant; parameters are configuration
+
+**Never hardcode limits inside a prompt or in agent code.** A centralised
+configuration schema governs runtime behaviour, concurrency and safety
+bound-checks. The reference shape:
+
+| Setting | Reference value | Where it lands here |
+|---|---|---|
+| `max_recursion_limit` | 25 | MVP 3 `3.8` — the **super-step** cap, distinct from a microstep loop cap |
+| `max_concurrency_bound` | 4 | MVP 3 `3.2` — the fan-out cap, applied at the **dispatch site** |
+| `max_tool_execution_timeout` | 30 s | MVP 3 `3.5`; MVP 5 `5.6` — the tool deadline |
+| `fail_closed_on_error` | true | The kernel's existing capability rule, verbatim |
+| `persistence.isolation_level` | serializable | MVP 3 `3.3` — the SQLite (WAL) projection's transaction isolation |
+
+> **A conflict worth recording.** Two official pages of one framework
+> disagree on the default recursion limit — **25 on one, 1000 on the other.**
+> That is the whole argument for **not inheriting a default**: a limit you
+> did not choose is a limit you did not reason about. Every cap in this plan
+> is **named, sourced, and labelled** — and the microstep-loop cap in
+> particular must be **finite by default**, because a cycle in a graph is a
+> *correctness* bug, not a tuning question.
+
+**And the distinction that makes this consistent with the rest of the
+plan:** the repository's rule is that the **unsafe combination** is a
+constant in code, not configuration an operator can relax (D-022's
+never-automated list, the `FAIL_POLICY` axes). The reconciliation is precise:
+
+| | A constant in code | Configuration |
+|---|---|---|
+| **What** | The *policy* — what is forbidden, what never happens | The *parameters* — the magnitudes, TTLs, budgets, timeouts |
+| **Why** | An operator must not be able to configure the unsafe combination | The magnitudes change per deployment, and a value that cannot change is a value that is wrong somewhere |
+| **Examples** | The never-automated list; `fail_closed_on_error`; capability-closed vs health-open | The recursion cap, the concurrency bound, the tool timeout, the cache TTL |
+| **Where** | `packages/worker-runtime/src/telemetry/delegation.ts`; the never-automated list | The SDK's `RuntimeConfig` schema — a **single, validated** document, never scattered across code or prompts |
+
+### 3A.4 The four-point scenario checklist, mapped to the plan
+
+| Check | Where it is satisfied | The gate that proves it |
+|---|---|---|
+| **1. State atomicity** — the checkpointer and state database handle concurrent writes via **atomic transactions**, not in-memory volatile maps | MVP 3 `3.3` — the SQLite (WAL) projection, with a serializable isolation level and a sequence number per row | The `doctor` drift check: SQLite's max sequence against the log head. A difference is a `BLOCKED` finding, not a silent inconsistency |
+| **2. Explicit fan-out bounds** — if the planner can spawn 1 to 1,000 sub-tasks, place a strict **code-level slice or semaphore cap at the dispatch site** | MVP 3 `3.2` and `3.5` — the cap is at the dispatch site, not in the prompt, and the **D9 gate** refuses an unjustified fan-out in the first place | The handoff-depth cap, the concurrency bound, and a test that a violating delegation is **refused with a reason** |
+| **3. A human-in-the-loop gate** — a **durable interrupt checkpoint** that pauses execution **without consuming active compute** | MVP 3 `3.4` — a checkpoint is a *state* transition, and a paused contract consumes no budget while it waits | The human approval must **name the `contentHash`** it approves (D-022). A pause that keeps burning budget is not a pause |
+| **4. Resumability** — kill the process mid-run; the runtime reloads the thread state from the checkpointer and resumes from the **exact node-failure boundary** | MVP 3 `3.4`; MVP 2 `2.3` — the invalidation cascade | **S-05**: a `kill -9` resumes without duplicating completed work, verified by the recorded artefacts' hashes |
+
+**And the one the checklist implies but does not say:** a resume must resume
+from the **failure boundary**, not from the **start of the node**. The
+published research on this is unambiguous — a node that is re-executed from
+its start **repeats every side effect before the interrupt** — which is why
+the SDK's resume semantics are: *a completed step is replayed from its
+recorded result, never recomputed* (the kernel's replay), and a step whose
+result is unrecordable is treated as **not durable** and reported, never
+silently re-run.
+
+---
+
 ## 4. The delegation contract
 
 **Seventeen clauses.** Each is citable; each is either **[KERNEL]** (this

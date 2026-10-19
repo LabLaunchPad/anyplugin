@@ -19,7 +19,7 @@ the guard was pointed at the wrong directory.**
 
 ### 1.1 The repository's roadmap still describes a repository that no longer exists
 
-`ROADMAP.md` line 3 reads:
+`ROADMAP.md` line 3 read, **before this PR corrected it**:
 
 > **Status:** strategy frozen, implementation not started. M0 is the next action.
 
@@ -30,7 +30,9 @@ verification engine, an invalidation engine, a delegation wrapper with a
 declarative backend registry, and a `doctor` command. M1 through M12 are
 largely shipped.
 
-`ROADMAP.md` line 127 makes a checkably false claim:
+`ROADMAP.md` also made a checkably false claim, **before this PR corrected
+it** (the text below is quoted as it stood; `ROADMAP.md` now carries a
+correction banner in its place):
 
 > **`packages/` is not currently a workspace location - this is a setup step,
 > not an existing property.** `pnpm-workspace.yaml` declares exactly `core`,
