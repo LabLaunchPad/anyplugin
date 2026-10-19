@@ -139,3 +139,83 @@ describe("MCP runtime YAML parser — equivalence with the yaml package (Finding
     expect(parseYaml("\n\n")).toBeNull();
   });
 });
+
+/**
+ * The differential test above covers the REAL bundle, which is 15 files of
+ * ordinary frontmatter. It does not cover the constructs a hand-written
+ * parser is most likely to get wrong. This table pins each one, so a
+ * divergence is a failing test rather than a false fact reported to a user.
+ */
+describe("YAML parser — constructs the real bundle does not exercise", () => {
+  /** Parse with both parsers and require the same result. */
+  function agrees(yaml: string): void {
+    const expected = parseYamlPkg(yaml);
+    const actual = parseYaml(yaml);
+    expect(actual, `diverged on:\n${yaml}`).toEqual(expected);
+  }
+
+  it("handles a multi-line flow sequence", () => {
+    agrees("tags: [alpha,\n  beta]");
+  });
+
+  it("handles a multi-line flow mapping", () => {
+    agrees("meta: {a: 1,\n  b: 2}");
+  });
+
+  it("folds a plain scalar that continues on the next line", () => {
+    agrees("description: this is\n  a long description");
+  });
+
+  it("handles a nested sequence", () => {
+    agrees("a:\n  - - 1\n    - 2");
+  });
+
+  it("handles an exponent without a decimal point", () => {
+    agrees("v: 1e3");
+  });
+
+  it("rejects an anchor rather than returning a plausible string", () => {
+    // Returning "&x 1" would report a value that is not the value.
+    expect(() => parseYaml("a: &x 1")).toThrow(/anchor/i);
+  });
+
+  it("rejects an alias rather than returning a plausible string", () => {
+    expect(() => parseYaml("b: *x")).toThrow(/alias/i);
+  });
+
+  it("rejects a tag rather than returning a plausible string", () => {
+    expect(() => parseYaml("a: !!str 123")).toThrow(/tag/i);
+  });
+
+  it("rejects an explicit key rather than dropping the document", () => {
+    expect(() => parseYaml("? a\n: b")).toThrow(/explicit key/i);
+  });
+
+  it("rejects a duplicate key, as the yaml package does", () => {
+    expect(() => parseYaml("a: 1\na: 2")).toThrow(/duplicate/i);
+  });
+
+  it("handles a literal block scalar", () => {
+    agrees("body: |\n  line one\n  line two");
+  });
+
+  it("handles a folded block scalar", () => {
+    agrees("body: >\n  line one\n  line two");
+  });
+
+  it("handles an empty flow sequence and mapping", () => {
+    agrees("a: []\nb: {}");
+  });
+
+  it("handles nested flow collections", () => {
+    agrees("a: [[1, 2], {b: 3}]");
+  });
+
+  it("handles a quoted value containing a colon", () => {
+    agrees('a: "key: value"');
+  });
+
+  it("handles a value containing a URL", () => {
+    agrees("resource: https://example.com/path?x=1");
+  });
+});

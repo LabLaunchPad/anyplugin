@@ -294,6 +294,10 @@ export async function executeBackend(
     const child = spawn(spec.command!, [...spec.args, ...args], {
       // NEVER a shell: the argv array is passed to the OS unchanged.
       shell: false,
+      // Its own process group, so a deadline can take down the whole TREE and
+      // not just the direct child. A backend that forks must not leave
+      // orphans behind when it is killed.
+      detached: process.platform !== "win32",
       cwd: opts.cwd,
       env: childEnv(spec, opts.env),
       stdio: ["ignore", "pipe", "pipe"],
@@ -309,12 +313,30 @@ export async function executeBackend(
 
     const timer = setTimeout(() => {
       timedOut = true;
-      // Kill the whole tree on Windows, where a signal is not delivered the
-      // way it is on POSIX. SIGKILL is the strongest portable option.
+      // Kill the PROCESS TREE, not just the direct child. `child.kill()`
+      // terminates only the process it spawned; a backend that forked a
+      // grandchild would leave it running, still holding the stdio pipes.
+      //
+      // On POSIX the child is started in its own process group, so the
+      // negative pid signals the whole group. On Windows there is no
+      // process group in the POSIX sense and `taskkill /T` is the
+      // documented way to take a tree down.
       try {
-        child.kill("SIGKILL");
+        if (process.platform === "win32") {
+          spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", shell: false });
+        } else if (child.pid) {
+          process.kill(-child.pid, "SIGKILL");
+        } else {
+          child.kill("SIGKILL");
+        }
       } catch {
-        /* already gone */
+        // The child may already be gone, or the group may be unkillable.
+        // Fall back to killing the direct child.
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* already gone */
+        }
       }
     }, timeoutMs);
 
@@ -352,7 +374,13 @@ export async function executeBackend(
     child.on("error", (err: NodeJS.ErrnoException) => {
       settle({ code: null, signal: null, stdout, stderr, timedOut, cancelled, stdoutTruncated, stderrTruncated, spawnError: err });
     });
-    child.on("close", (code, signal) => {
+    // Resolve on "exit", NOT on "close".
+    //
+    // "close" fires only after the process has ended AND every stdio stream
+    // has closed. A backend that leaves a grandchild holding the pipe would
+    // keep "close" pending forever, so the wrapper would await a deadline
+    // it had already enforced — the deadline would be a lie.
+    child.on("exit", (code, signal) => {
       settle({ code, signal, stdout, stderr, timedOut, cancelled, stdoutTruncated, stderrTruncated });
     });
   });

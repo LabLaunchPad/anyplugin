@@ -25,6 +25,7 @@ import { parseCliArgv, type CommandName } from "./strict-args.js";
 import { setIntensityMode, getActivePlugin } from "./state.js";
 import { JOURNAL_SCHEMA_VERSION as CURRENT_JOURNAL_SCHEMA_VERSION } from "./journal.js";
 import { delegate, probeBackend } from "./delegate.js";
+import { BACKUPS_DIRNAME, STAGING_DIRNAME } from "./transaction.js";
 import { readFile } from "node:fs/promises";
 
 const HELP = `anyplugin — agent-agnostic plugin development for Claude Code, OpenCode, Codex, Antigravity
@@ -370,9 +371,25 @@ async function runDoctor(values: ParsedFlags): Promise<void> {
           unfixable.push(`could not release ${issue.path}: ${(err as Error).message}`);
         }
       } else if (issue.type === "orphaned-transaction" && issue.path) {
+        // The scratch space holds the staged payload AND the backups of every
+        // destination. It is the crash-recovery material for an install that
+        // died mid-flight, so the backups are NOT deleted on a whim: only the
+        // staging area is purged, and the backups are preserved and named.
         try {
-          await removeTree(issue.path);
-          fixed.push(`removed orphaned transaction scratch space: ${issue.path}`);
+          const { readdir: readEntries } = await import("node:fs/promises");
+          const entries = await readEntries(issue.path).catch(() => [] as string[]);
+          if (entries.includes(BACKUPS_DIRNAME)) {
+            const backupsPath = join(issue.path, BACKUPS_DIRNAME);
+            const stagingPath = join(issue.path, STAGING_DIRNAME);
+            await removeTree(stagingPath);
+            fixed.push(
+              `purged the staging area of ${issue.path}; the pre-install backups were KEPT at ${backupsPath} ` +
+                `(they are the only copy of the content the crashed install replaced)`,
+            );
+          } else {
+            await removeTree(issue.path);
+            fixed.push(`removed orphaned transaction scratch space: ${issue.path}`);
+          }
         } catch (err) {
           unfixable.push(`could not remove ${issue.path}: ${(err as Error).message}`);
         }
@@ -574,6 +591,22 @@ async function runDelegate(values: ParsedFlags, positionals: string[]): Promise<
   const sep = positionals.indexOf("--");
   const backendArgs = sep >= 0 ? positionals.slice(sep + 1) : [];
 
+  // The timeout is a number the user typed. `Number("abc")` is NaN, and
+  // `setTimeout(fn, NaN)` fires IMMEDIATELY — so an unvalidated timeout
+  // would kill every backend instantly and report it as a timeout.
+  let timeoutMs: number | undefined;
+  if (values.timeout !== undefined) {
+    const parsed = Number(values.timeout);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      const message = `anyplugin delegate: --timeout must be a positive number of milliseconds (got ${JSON.stringify(values.timeout)})`;
+      if (values.json) console.log(JSON.stringify({ command: "delegate", error: message }, null, 2));
+      else console.error(message);
+      process.exitCode = 4; // invalid input
+      return;
+    }
+    timeoutMs = parsed;
+  }
+
   const result = await delegate({
     catalog: loaded.catalog,
     args: backendArgs,
@@ -582,7 +615,7 @@ async function runDelegate(values: ParsedFlags, positionals: string[]): Promise<
       ...(values.capability ? { capability: values.capability } : {}),
       ...(values.domain ? { domain: values.domain } : {}),
     },
-    ...(values.timeout ? { timeoutMs: Number(values.timeout) } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
   });
 
   if (values.json) {

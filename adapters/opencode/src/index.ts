@@ -205,9 +205,9 @@ function matches(entry: HookEntry, toolName: string | undefined): boolean {
   try {
     return new RegExp(entry.match).test(toolName);
   } catch {
-    // An invalid matcher must not silently disable the hook — treat it as a
-    // plain-name comparison, then fall back to "matches everything".
-    return entry.match === toolName || true;
+    // An invalid matcher must not silently disable the hook. A matcher that
+    // is not a valid regex is treated as a plain tool name.
+    return entry.match === toolName;
   }
 }
 
@@ -258,13 +258,30 @@ async function runAll(hookName: string, payload: unknown, toolName?: string): Pr
   for (const entry of entries) {
     if (!matches(entry, toolName)) continue;
     const result = await run(entry.id, payload);
-    // A non-zero exit means the hook denied or failed — the runner already
-    // decided what that means; the shim must not reinterpret it.
-    if (result.code !== 0 || !result.stdout.trim()) continue;
+    // The runner writes its payload to stdout BEFORE exiting, and a BLOCKING
+    // hook exits 2 (Antigravity: "deny", exit 0). So a non-zero exit does
+    // NOT mean "there is no output" — it very often means "the output is a
+    // denial". Skipping a non-zero result would silently ignore a guard
+    // plugin's refusal, which is the one thing a guard exists to do.
+    if (!result.stdout.trim()) {
+      // No payload at all. The exit code is then the only signal left, and a
+      // blocking exit is still a denial.
+      if (result.code === 2) {
+        merged.blocked = true;
+        merged.reason = merged.reason ?? ("hook " + entry.id + " blocked the tool");
+      }
+      continue;
+    }
     let out: Record<string, unknown>;
     try {
       out = JSON.parse(result.stdout) as Record<string, unknown>;
     } catch {
+      // Unparseable output: the runner's exit code is the only signal left.
+      // A blocking exit (2) with no parseable payload is still a denial.
+      if (result.code === 2) {
+        merged.blocked = true;
+        merged.reason = merged.reason ?? ("hook " + entry.id + " blocked the tool");
+      }
       continue;
     }
     const ctx = contextOf(out);
@@ -275,7 +292,7 @@ async function runAll(hookName: string, payload: unknown, toolName?: string): Pr
       const rank = (d: string) => (d === "deny" ? 3 : d === "ask" ? 2 : d === "allow" ? 1 : 0);
       if (!merged.decision || rank(decision) > rank(merged.decision)) merged.decision = decision;
     }
-    if (out["block"] === true || out["decision"] === "block" || out["decision"] === "deny") {
+    if (out["block"] === true || out["decision"] === "block" || out["decision"] === "deny" || result.code === 2) {
       merged.blocked = true;
       if (!merged.reason && typeof out["reason"] === "string") merged.reason = out["reason"];
     }
@@ -300,13 +317,19 @@ export const ${shimConstName(name)}Plugin = async () => ({
   "tool.execute.before": async (input: Record<string, unknown>, output: { args: unknown }) => {
     const toolName = typeof input["tool"] === "string" ? input["tool"] : undefined;
     const merged = await runAll("tool.execute.before", { ...input, hook_event_name: "tool.execute.before" }, toolName);
+    // The MERGED result is what the host must see. Copying only the context
+    // would silently discard a denial: the merge computes "block" and the
+    // reason, and then throws them away. A guard plugin that refuses a tool
+    // would appear to succeed.
+    const target = output as Record<string, unknown>;
+    for (const [key, value] of Object.entries(merged.output)) {
+      if (key === "updatedInput") continue;
+      target[key] = value;
+    }
     const updated = merged.output["updatedInput"];
     if (updated && typeof updated === "object") {
       const args = (updated as Record<string, unknown>)["args"];
-      if (args !== undefined) (output as Record<string, unknown>)["args"] = args;
-    }
-    if (merged.output["additionalContext"]) {
-      Object.assign(output, { additionalContext: merged.output["additionalContext"] });
+      if (args !== undefined) target["args"] = args;
     }
   },
   "tool.execute.after": async (input: Record<string, unknown>, output: Record<string, unknown>) => {

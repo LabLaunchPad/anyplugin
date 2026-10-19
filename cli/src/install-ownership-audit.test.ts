@@ -43,6 +43,13 @@ describe.sequential("Installer destination ownership — audit regression tests 
       const root = installedRoot(agent, { home, projectDir: project, codexHome: project, pluginName: "test-plugin" });
       try { await rm(root, { recursive: true, force: true }); } catch {}
     }
+    // The opencode adapter also copies skills/commands into SHARED directories
+    // outside the installed root. They are managed by the plugin journal, so
+    // removing the journal without removing them would leave the next install
+    // with a legitimately-unmanaged destination (fail-closed conflict).
+    for (const shared of [join(project, ".opencode", "skills"), join(project, ".opencode", "commands")]) {
+      try { await rm(shared, { recursive: true, force: true }); } catch {}
+    }
   });
 
   afterAll(async () => {
@@ -106,14 +113,41 @@ describe.sequential("Installer destination ownership — audit regression tests 
     await mkdir(existingRoot, { recursive: true });
     await writeFile(join(existingRoot, "user-file.txt"), "USER DATA");
     
-    // Try to install (may fail or succeed depending on implementation)
-    try {
-      await executeInstall(agent, bundles.opencode, opts);
-    } catch {}
+    // The install must REFUSE (the directory is unmanaged) — and the refusal
+    // must leave the user's file exactly as it was.
+    await expect(executeInstall(agent, bundles.opencode, opts)).rejects.toThrow();
 
-    // The user file should still exist after uninstall
-    // This test documents the gap - removeTree blindly deletes everything
+    // The user file should still exist, byte-identical.
     const userFile = join(existingRoot, "user-file.txt");
     expect(await pathExists(userFile)).toBe(true);
+    expect(await readFile(userFile, "utf8")).toBe("USER DATA");
+  });
+
+  it("uninstall removes only the files the journal records, leaving the rest", async () => {
+    const agent = "opencode" as const;
+    const opts = { home, projectDir: project, pluginName: "test-plugin", version: "0.1.0", dryRun: false };
+
+    // Install cleanly into a fresh destination.
+    await executeInstall(agent, bundles.opencode, opts);
+    const existingRoot = installedRoot(agent, {
+      home, projectDir: project, codexHome: project, pluginName: "test-plugin",
+    });
+
+    // The user adds a file of their own AFTER the install.
+    const userFile = join(existingRoot, "user-file.txt");
+    await writeFile(userFile, "USER DATA");
+
+    // The uninstall removes exactly what the journal records. The user's file
+    // is not in the journal, so it is not removed — and the directory is not
+    // empty afterwards, so the directory is not removed either.
+    const touched = await executeUninstall(agent, bundles.opencode, opts);
+    expect(touched.length).toBeGreaterThan(0);
+    expect(touched.some((t) => t.includes("user-file.txt"))).toBe(false);
+
+    // The user's file survives, byte-exact.
+    expect(await pathExists(userFile)).toBe(true);
+    expect(await readFile(userFile, "utf8")).toBe("USER DATA");
+    // And the directory survives, because it is not empty.
+    expect(await pathExists(existingRoot)).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, cp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { regenerateIndexes } from "@lablaunchpad/core";
@@ -94,11 +94,25 @@ bundle lost information that no regeneration can bring back.
 
   it("the repo's own bundle keeps its curated root across a reindex", async () => {
     // The real bundle: this is the exact hazard the guard exists for.
+    //
+    // The reindex is run against a COPY, never against the tracked tree. A
+    // test that rewrites tracked files is a test that can fail the build by
+    // accident — and, worse, one that leaves the working tree dirty.
     const repoBundle = join(process.cwd(), "knowledge");
     const before = await readFile(join(repoBundle, "index.md"), "utf8");
-    await regenerateIndexes(repoBundle);
-    const after = await readFile(join(repoBundle, "index.md"), "utf8");
-    expect(after).toBe(before);
-    expect(after).toContain("AnyPlugin Knowledge Index");
+
+    const copy = await mkdtemp(join(tmpdir(), "okf-repo-copy-"));
+    try {
+      await cp(repoBundle, copy, { recursive: true });
+      await regenerateIndexes(copy);
+      const after = await readFile(join(copy, "index.md"), "utf8");
+      expect(after).toBe(before);
+      expect(after).toContain("AnyPlugin Knowledge Index");
+    } finally {
+      await rm(copy, { recursive: true, force: true });
+    }
+
+    // And the tracked file is still exactly as it was.
+    expect(await readFile(join(repoBundle, "index.md"), "utf8")).toBe(before);
   });
 });

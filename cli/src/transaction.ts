@@ -265,8 +265,16 @@ export async function backupDestinations(
 /**
  * Restore every destination from its backup.
  * Destinations that did not exist before the install are removed.
+ *
+ * A directory is restored by copying the backup to a SIBLING and then
+ * renaming it into place — never by deleting the destination first. A
+ * delete-then-copy has a window in which a failed copy leaves the user with
+ * nothing at all; a copy-then-rename does not.
+ *
  * Failures are collected, never thrown — rollback must not mask the
- * original failure that triggered it.
+ * original failure that triggered it. The CALLER decides whether to purge
+ * the backups, and it must not purge them when a restore failed: the backup
+ * is then the only copy of the user's pre-install content.
  */
 export async function restoreFromBackups(manifest: BackupManifest): Promise<string[]> {
   const failures: string[] = [];
@@ -278,9 +286,13 @@ export async function restoreFromBackups(manifest: BackupManifest): Promise<stri
         continue;
       }
       if (record.isDirectory) {
-        // Replace the directory wholesale with the backed-up copy.
+        // Copy to a sibling, then swap it in. The destination is only
+        // removed once the replacement is complete.
+        const staged = `${record.dest}.anyplugin-restore`;
+        await removeTree(staged);
+        await copyDir(record.backupPath, staged);
         await removeTree(record.dest);
-        await copyDir(record.backupPath, record.dest);
+        await rename(staged, record.dest);
       } else {
         const buf = await readFile(record.backupPath);
         await writeFile(record.dest, buf);

@@ -195,7 +195,7 @@ From `ROADMAP.md` and `CURRENT_STATE.md`:
 - **AnyPlugin** (`core/`, `adapters/`, `cli/`) is the distribution layer — never owns evidence, decisions, experience, dependency graph, invalidation, certificates, or authoritative worker state.
 - **Hook runtime** (`plugins/knowledge/runtime/`) stays dependency-light, self-contained; executes one hook or serves OKF via MCP.
 - **Dependencies point inward**: CLI/MCP/Adapters → Worker Runtime; never reverse.
-- `packages/worker-runtime/` needs workspace glob + tsconfig reference added (not yet in `pnpm-workspace.yaml`).
+- `packages/worker-runtime/` IS a workspace location: `pnpm-workspace.yaml` has the `packages/*` glob, the root `tsconfig.json` references it, and `core/src/boundaries/package-boundary.test.ts` guards the direction mechanically.
 
 ### Immediate next actions (from audit priority order)
 

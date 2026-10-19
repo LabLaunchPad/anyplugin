@@ -165,10 +165,78 @@ function splitFlow(text) {
   return parts;
 }
 
+/**
+ * Thrown for a construct this parser does not implement.
+ *
+ * The alternative is worse: returning a plausible-looking string for a
+ * construct we do not understand. `tags: [a,` on two lines would become the
+ * string "[a," — and the MCP tools would then report that the concept has
+ * no tags, which is a FALSE fact rather than an absent one. A loud failure is
+ * strictly better than a confident wrong answer.
+ */
+export class YamlUnsupportedError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "YamlUnsupportedError";
+  }
+}
+
+/** Reject the YAML constructs this parser deliberately does not implement. */
+function rejectUnsupported(text, what) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("&")) {
+    throw new YamlUnsupportedError(`YAML anchors are not supported (${what}: ${trimmed})`);
+  }
+  if (trimmed.startsWith("*")) {
+    throw new YamlUnsupportedError(`YAML aliases are not supported (${what}: ${trimmed})`);
+  }
+  if (trimmed.startsWith("!")) {
+    throw new YamlUnsupportedError(`YAML tags are not supported (${what}: ${trimmed})`);
+  }
+  if (trimmed.startsWith("? ")) {
+    throw new YamlUnsupportedError(`YAML explicit keys are not supported (${what}: ${trimmed})`);
+  }
+}
+
+/** Is a flow collection's bracket structure balanced? */
+function flowBalanced(text) {
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inSingle) {
+      if (c === "'") inSingle = false;
+      continue;
+    }
+    if (inDouble) {
+      if (c === "\\") {
+        i++;
+        continue;
+      }
+      if (c === '"') inDouble = false;
+      continue;
+    }
+    if (c === "'") {
+      inSingle = true;
+      continue;
+    }
+    if (c === '"') {
+      inDouble = true;
+      continue;
+    }
+    if (c === "[" || c === "{") depth++;
+    if (c === "]" || c === "}") depth--;
+  }
+  return depth === 0;
+}
+
 /** Core-schema scalar resolution. */
 function parseScalar(text) {
   const trimmed = text.trim();
   if (trimmed === "") return null;
+
+  rejectUnsupported(trimmed, "scalar");
 
   if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) {
     return trimmed.slice(1, -1).replace(/''/g, "'");
@@ -205,7 +273,8 @@ function parseScalar(text) {
   if (/^[-+]?[0-9]+$/.test(trimmed)) return Number(trimmed);
   if (/^0o[0-7]+$/.test(trimmed)) return parseInt(trimmed.slice(2), 8);
   if (/^0x[0-9a-fA-F]+$/.test(trimmed)) return parseInt(trimmed.slice(2), 16);
-  if (/^[-+]?([0-9]+\.[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?$/.test(trimmed)) return Number(trimmed);
+  // YAML 1.2 core schema float: [-+]? ( . [0-9]+ | [0-9]+ ( . [0-9]* )? ) ( [eE] [-+]? [0-9]+ )?
+  if (/^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?$/.test(trimmed)) return Number(trimmed);
   if (/^[-+]?\.(inf|Inf|INF)$/.test(trimmed)) return trimmed.startsWith("-") ? -Infinity : Infinity;
   if (/^\.(nan|NaN|NAN)$/.test(trimmed)) return NaN;
 
@@ -312,6 +381,26 @@ function parseInlineValue(text, state, indent) {
   if (text === "|" || text === ">" || /^[|>][-+]?$/.test(text)) {
     return parseBlockScalar(text, state, indent);
   }
+  // A flow collection may span lines:
+  //
+  //     tags: [alpha,
+  //            beta]
+  //
+  // Stopping at the first line would leave "[alpha," — a STRING — and the
+  // tags would silently vanish. So the collection is joined until balanced.
+  if ((text.startsWith("[") || text.startsWith("{")) && !flowBalanced(text)) {
+    let joined = text;
+    while (state.i < state.lines.length) {
+      const next = splitLine(state.lines[state.i]).text;
+      state.i++;
+      joined += " " + next;
+      if (flowBalanced(joined)) break;
+    }
+    if (!flowBalanced(joined)) {
+      throw new YamlUnsupportedError("unterminated flow collection: " + text);
+    }
+    return parseScalar(joined);
+  }
   return parseScalar(text);
 }
 
@@ -343,6 +432,20 @@ function parseSequence(state, indent) {
     state.i++;
     if (rest === "") {
       items.push(parseBlock(state, indent + 1));
+      continue;
+    }
+
+    // A NESTED sequence may start on the dash line: `- - 1`.
+    // The nested sequence's FIRST element is on this line; the rest are the
+    // following lines at the nested indent.
+    if (rest === "-" || rest.startsWith("- ")) {
+      const nested = [];
+      const first = rest === "-" ? "" : rest.slice(2).trim();
+      if (first !== "") {
+        nested.push(parseInlineValue(first, state, indent + 4));
+      }
+      nested.push(...parseSequence(state, indent + 2));
+      items.push(nested);
       continue;
     }
 
@@ -381,18 +484,30 @@ function parseMappingEntries(state, indent, map) {
     const { indent: ind, text } = splitLine(state.lines[state.i]);
     if (ind < indent) break;
     if (ind > indent) {
-      // Stray over-indented line with no owning key — skip it rather than
-      // corrupting the surrounding mapping.
-      state.i++;
+      // Stray over-indented line with no owning key — it is a continuation of
+      // the previous plain scalar, and it is folded in below. If there is no
+      // previous scalar to fold it into, it is a malformed document.
+      if (!foldContinuation(state, map)) {
+        state.i++;
+        continue;
+      }
       continue;
     }
     if (text === "-" || text.startsWith("- ")) break; // a sequence ends this mapping
+    if (text.startsWith("? ")) {
+      throw new YamlUnsupportedError("YAML explicit keys are not supported (" + text + ")");
+    }
     const entry = matchKey(text);
     if (!entry) {
       state.i++;
       continue;
     }
     state.i++;
+    if (Object.prototype.hasOwnProperty.call(map, entry.key)) {
+      // The `yaml` package refuses a duplicate key. Silently keeping the last
+      // one would hide a real authoring mistake.
+      throw new YamlUnsupportedError('duplicate mapping key "' + entry.key + '"');
+    }
     if (entry.rest === "") {
       map[entry.key] = parseBlock(state, indent + 1);
     } else {
@@ -400,6 +515,39 @@ function parseMappingEntries(state, indent, map) {
     }
   }
   return map;
+}
+
+/**
+ * Fold an over-indented continuation line into the previous plain scalar.
+ *
+ * YAML plain scalars may span lines:
+ *
+ *     description: this is
+ *       a long description
+ *
+ * The `yaml` package folds that into "this is a long description". Skipping
+ * the continuation instead would DROP CONTENT — the worst possible failure
+ * for a parser, because the result looks complete.
+ */
+function foldContinuation(state, map) {
+  const key = lastKeyOf(map);
+  if (key === null) return false;
+  const current = map[key];
+  if (typeof current !== "string" || current === "") return false;
+  // A continuation is only a continuation if the line is not a new key and
+  // not a sequence item.
+  const { text } = splitLine(state.lines[state.i]);
+  if (text.startsWith("- ") || text === "-") return false;
+  if (matchKey(text)) return false;
+  map[key] = current + " " + text;
+  state.i++;
+  return true;
+}
+
+/** The last key written into a mapping, in insertion order. */
+function lastKeyOf(map) {
+  const keys = Object.keys(map);
+  return keys.length === 0 ? null : keys[keys.length - 1];
 }
 
 /**

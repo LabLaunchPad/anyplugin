@@ -121,6 +121,16 @@ event so the log distinguishes "fell back safely" from "failed after commit".
 This is the single most-missed detail in delegation wrappers, and it is
 cheap to get right: it is one boolean.
 
+**What "committed" means today.** The `anyplugin delegate` CLI **buffers** a
+backend's output and returns it when the attempt ends, so nothing is streamed
+to a host mid-attempt and `committed` is always `false` there. The flag is
+real and enforced — `canFallback()` refuses a fallback when it is set — and
+it is what a *streaming* wrapper (one that forwards output as it arrives)
+must set. The CLI's own chain is therefore unbounded by this rule today,
+which is honest: the CLI is a batch tool, not a streaming proxy. **A wrapper
+that streams must set `committed`; the kernel already refuses the fallback.**
+The claim is enforced where it can be, and stated where it cannot.
+
 ---
 
 ## 6. Circuit breaker
@@ -141,6 +151,15 @@ rate-limited backend is alive; a cancelled request was the caller's doing.
 The breaker is deliberately free of I/O and of wall-clock reads — the caller
 supplies `now` — so every transition is testable without waiting.
 
+**Where the breaker is live today.** The breaker is a *library* contract. The
+`anyplugin delegate` CLI is stateless per invocation: it creates no breakers
+and attempts each backend at most once, so a breaker could never reach its
+threshold there. A caller that keeps breakers across delegations (a long-lived
+process, or one that persists them to the worker-runtime event log) gets the
+full behaviour. The CLI's own chain is therefore bounded by the *candidate
+list*, not by a breaker. This is stated rather than implied: the mechanism
+exists and is tested, and its consumer does not yet exist.
+
 ---
 
 ## 7. Install-time failures
@@ -154,12 +173,24 @@ supplies `now` — so every transition is testable without waiting.
 | A marker block is unterminated | **Throw** | Stripping it would silently delete everything after it. |
 | A failure during the mutation phase | **Roll back** every destination from its backup | A partial install is worse than no install: the user cannot tell what state they are in. |
 | A post-mutation hash does not match | **Roll back** and abort | The write did not land as intended. |
+| The rollback itself fails | **Keep the backups** and name their path | The backups are then the only copy of the user's pre-install content. Purging them would destroy the data the rollback was trying to preserve. |
 | The journal is corrupt | **Throw** — never fall back to legacy cleanup | The journal is the only record of which bytes the plugin owns. Guessing would delete user data. |
 | A journaled file was edited after the install | **Abort the whole uninstall** before any mutation | The user's edit wins over the plugin's cleanup. |
 
 The install pipeline is transactional:
 `preflight → stage → intent → backup → apply → verify → commit`.
-Any failure after `stage` restores every destination.
+Any failure after `stage` restores every destination **within the same
+process**.
+
+**A process crash is a different thing, and it is not yet recovered.** If the
+process is killed between `apply` and `commit`, the destinations are mutated
+and the journal was never written. The `install_intent.json` and the backups
+are left in the transaction scratch space, and `anyplugin doctor` reports the
+orphan — but **nothing yet reads the intent and finishes or undoes the
+install.** That recovery path is an open P1 in `docs/BACKLOG.md`. Until it
+exists, the accurate statement is: *a failed install inside one process leaves
+no partial state; a killed install leaves a recoverable scratch space that no
+tool yet acts on.*
 
 ---
 

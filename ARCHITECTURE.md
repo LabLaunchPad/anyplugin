@@ -184,7 +184,10 @@ The rules that make it safe are in `cli/src/delegate.ts` and the contract in
   event, including the ones that could not be classified.
 - **Never a fallback after the turn committed.** Once output has been
   committed to the host, the chain is closed: another backend would splice two
-  answers together and re-run whatever the first one already did.
+  answers together and re-run whatever the first one already did. The kernel
+  enforces it (`canFallback()`); the `anyplugin delegate` CLI buffers its
+  output, so it never sets the flag — see `docs/FAILURE-MODES.md` §5 for the
+  exact scope.
 
 Two fail-policy axes, deliberately separate:
 
@@ -213,6 +216,15 @@ the user edited after the install.
 The native path is transactional (`cli/src/transaction.ts`):
 preflight → stage → intent → backup → apply → verify → commit, with rollback
 on any failure. A failed install leaves no partial state.
+
+**The exact scope of that guarantee.** A failure *inside the process* restores
+every destination. A *killed process* (crash, SIGKILL, power loss) between
+`apply` and `commit` leaves the destinations mutated and the journal
+unwritten — the intent and the backups survive in the transaction scratch
+space, and `anyplugin doctor` reports the orphan, but **no tool yet acts on
+it**. That recovery path is an open P1 in `docs/BACKLOG.md`. Stating the
+boundary is the point: a guarantee that is silently narrower than advertised
+is worse than no guarantee.
 
 ---
 
@@ -255,9 +267,10 @@ knowledge/
 ```
 
 `anyplugin okf-validate knowledge` checks it against the conformance matrix.
-`anyplugin okf-reindex` regenerates the **sub**-directory indexes — note that
-the ROOT `index.md` is hand-curated, and regenerating it would replace it with
-generated content.
+`anyplugin okf-reindex` regenerates the **sub**-directory indexes. The ROOT
+`index.md` is hand-curated and is **left alone** by default; `--include-root`
+is required to replace it. (It was overwritten before this cycle, which is
+why the guard exists.)
 
 ---
 

@@ -1000,20 +1000,28 @@ export async function executeInstall(
     await tx.cleanup();
   } catch (err) {
     // ── ROLLBACK ────────────────────────────────────────────────────────────
-    // Restore every destination to its pre-install state, then purge staging.
+    // Restore every destination to its pre-install state.
     const rollbackFailures: string[] = [];
     if (backups) {
       rollbackFailures.push(...(await restoreFromBackups(backups)));
     }
-    await tx.cleanup();
 
     if (rollbackFailures.length > 0) {
+      // The rollback did NOT fully succeed, so the backups are now the ONLY
+      // copy of the user's pre-install content. Purging them would destroy
+      // the data the rollback was trying to preserve. Keep them, and say
+      // exactly where they are.
       throw new Error(
         `install failed and rollback was incomplete:\n` +
           rollbackFailures.map((f) => `  ${f}`).join("\n") +
-          `\nOriginal error: ${(err as Error).message}`,
+          `\nThe pre-install backups have been KEPT at ${tx.backupsDir} — they are the only copy of the original content. ` +
+          `Copy them back manually, or inspect them before removing them.\n` +
+          `Original error: ${(err as Error).message}`,
       );
     }
+
+    // The rollback succeeded, so the scratch space can be purged.
+    await tx.cleanup();
     throw err;
   }
 
@@ -1176,10 +1184,27 @@ export async function executeUninstall(
     for (const entry of copyEntries) {
       const destDir = entry.file;
       const managedFiles = entry.copiedFiles ?? [];
-      
+
+      // If the destination root is already gone, there is nothing to remove.
+      // Resolving paths under a root that does not exist would throw, and
+      // aborting the whole uninstall for it would be wrong.
+      if (!(await pathExists(destDir))) continue;
+
       // Remove managed files in reverse order (deepest first)
       for (const relPath of [...managedFiles].sort((a, b) => b.length - a.length)) {
-        const filePath = join(destDir, relPath);
+        // The relative path comes from the journal, which is a FILE ON DISK.
+        // A journal that has been tampered with could carry "../../etc/passwd"
+        // and uninstall would then delete it. So the path is constrained to
+        // the destination root before anything is removed.
+        let filePath: string;
+        try {
+          filePath = await resolveAuthorizedPath(destDir, relPath);
+        } catch {
+          throw new Error(
+            `uninstall aborted — the journal for ${destDir} lists a file outside its own directory (${relPath}). ` +
+              `The journal has been modified or corrupted; restore it from a backup before uninstalling.`,
+          );
+        }
         if (await pathExists(filePath)) {
           if (opts.dryRun) {
             touched.push(`would remove ${filePath}`);
