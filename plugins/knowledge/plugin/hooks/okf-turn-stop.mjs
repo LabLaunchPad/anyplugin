@@ -3,19 +3,19 @@
  * newest-first line to the bundle's log.md. Kept intentionally cheap: no LLM, no
  * transcript parsing; the agent (via the okf-reader skill or curator) writes
  * rich concepts — this hook only maintains the heartbeat so staleness is visible.
- * Untrusted input (payload.cwd) is validated through resolveAuthorizedPath
- * (spec §1.1) before any filesystem operation.
+ *
+ * This handler ships in an EMITTED bundle, which must run with no
+ * node_modules at all. So it imports nothing but node builtins: the SafePath
+ * validation of the untrusted `cwd` happens in the RUNNER, at the single
+ * point where untrusted input enters the runtime, and this handler consumes
+ * the already-validated `payload.cwd`.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveAuthorizedPath } from "@lablaunchpad/core";
 
 export async function run(payload) {
-  // Validate cwd through SafePath before joining it into a filesystem path.
-  // This is the ONE way untrusted input becomes a path (CORE-INVARIANTS-V2 §1.1).
-  const safeCwd = payload.cwd
-    ? await resolveAuthorizedPath(process.cwd(), payload.cwd).catch(() => process.cwd())
-    : process.cwd();
+  // Already validated by the runner (spec §1.1).
+  const safeCwd = payload.cwd ?? process.cwd();
 
   const candidates = [
     process.env["ANYPLUGIN_OKF_BUNDLE"],

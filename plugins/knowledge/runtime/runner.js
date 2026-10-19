@@ -28,9 +28,9 @@
  * how `anyplugin run` and the tests exercise the paths directly.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync, lstatSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, parse, sep, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const RUNNER_DIR = dirname(fileURLToPath(import.meta.url));
@@ -48,6 +48,98 @@ const DEFAULT_FAILURE_POLICY = "non-blocking";
  * cannot tell a success from a failure the policy let through.
  */
 const FAILURE_NOTE_PREFIX = "anyplugin runner ";
+
+/**
+ * The runtime's own SafePath — the ONE way untrusted input becomes a path.
+ *
+ * This mirrors `core/src/fs/safe-path.ts` exactly, but it is INLINED because
+ * the runtime ships with no dependencies: an emitted bundle must run on a
+ * machine that has Node and nothing else. A handler that imported
+ * `@lablaunchpad/core` for this would break that contract, and the Node 20 CI
+ * job exists to catch exactly that.
+ *
+ * The equivalence with the core implementation is not assumed — it is proven
+ * by a differential test over a hostile corpus.
+ */
+function isContained(candidate, root) {
+  const norm = (p) => (process.platform === "win32" ? p.toLowerCase() : p);
+  if (norm(candidate) === norm(root)) return true;
+  const withSep = root.endsWith(sep) ? root : root + sep;
+  return norm(candidate).startsWith(norm(withSep));
+}
+
+function tryRealpath(p) {
+  try {
+    return realpathSync(p);
+  } catch {
+    return null;
+  }
+}
+
+function entryExists(p) {
+  try {
+    lstatSync(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Lexical validation of an untrusted RELATIVE path. Returns the posix form. */
+function assertSafeRelative(input) {
+  if (typeof input !== "string" || input.length === 0) throw new Error("unsafe path: empty input");
+  if (input.length > 4096) throw new Error("unsafe path: longer than 4096 bytes");
+  if (input.includes("\0")) throw new Error("unsafe path: NUL byte");
+  if (isAbsolute(input)) throw new Error(`unsafe path: absolute path ${JSON.stringify(input)}`);
+  if (/^[A-Za-z]:/u.test(input) || input.startsWith("\\\\") || input.startsWith("//")) {
+    throw new Error(`unsafe path: drive/UNC path ${JSON.stringify(input)}`);
+  }
+  if (sep === "/" && input.includes("\\")) throw new Error("unsafe path: backslash separator on posix");
+  const segments = [];
+  for (const raw of input.split(/[\\/]+/u)) {
+    if (raw === "" || raw === ".") continue;
+    if (raw === "..") throw new Error(`unsafe path: traversal segment in ${JSON.stringify(input)}`);
+    if (raw.length > 255) throw new Error("unsafe path: segment longer than 255 bytes");
+    if (/^[A-Za-z]:/u.test(raw)) throw new Error(`unsafe path: drive-letter segment ${JSON.stringify(input)}`);
+    if (/[\x00-\x1f\x7f]/.test(raw)) throw new Error("unsafe path: control characters");
+    segments.push(raw);
+  }
+  if (segments.length === 0) throw new Error("unsafe path: resolves to the authorized root itself");
+  return segments.join("/");
+}
+
+/**
+ * Resolve an untrusted relative path against an authorized root, with
+ * two-sided realpath containment. Throws on any escape.
+ */
+function resolveAuthorizedPath(authorizedRoot, untrustedInput) {
+  const rel = assertSafeRelative(untrustedInput);
+  const rootReal = tryRealpath(resolve(authorizedRoot));
+  if (rootReal === null) throw new Error(`unsafe path: authorized root does not exist: ${authorizedRoot}`);
+  const candidate = resolve(authorizedRoot, rel);
+
+  let probe = candidate;
+  for (;;) {
+    const probed = tryRealpath(probe);
+    if (probed !== null) {
+      if (!isContained(probed, rootReal)) {
+        throw new Error(`path escape detected: ${JSON.stringify(untrustedInput)} resolves outside the authorized root`);
+      }
+      return candidate;
+    }
+    // realpath failed but the entry EXISTS => an unresolvable link, whose
+    // target may live outside the root. Refuse rather than treat it as absent.
+    if (entryExists(probe)) {
+      throw new Error(`path escape detected: ${JSON.stringify(untrustedInput)} passes through an unresolvable link`);
+    }
+    if (probe === parse(probe).root || probe.length <= 2) {
+      throw new Error(`unsafe path: authorized root does not exist: ${authorizedRoot}`);
+    }
+    const idx = probe.lastIndexOf(sep);
+    if (idx < 0) throw new Error(`unsafe path: cannot resolve ${JSON.stringify(untrustedInput)}`);
+    probe = probe.slice(0, idx);
+  }
+}
 
 // --- batch mode ---
 if (args[0] === "--batch") {
@@ -264,6 +356,28 @@ const payloadContext = {
   },
 };
 
+/**
+ * Resolve the untrusted `cwd` from the host's payload.
+ *
+ * The host's `cwd` is UNTRUSTED input: it arrives over stdin and is used to
+ * build filesystem paths. It is validated here — at the single point where
+ * untrusted input enters the runtime — so that a handler can trust
+ * `payload.cwd` without repeating the check (and without importing a
+ * SafePath implementation, which the dependency-free runtime cannot do).
+ *
+ * A `cwd` that escapes falls back to the process's own directory rather than
+ * failing the hook: a wrong directory is recoverable, a broken host is not.
+ */
+function safeCwd() {
+  const rawCwd = raw["cwd"] ?? raw["cwdPath"];
+  if (typeof rawCwd !== "string" || rawCwd.trim() === "") return process.cwd();
+  try {
+    return resolveAuthorizedPath(process.cwd(), rawCwd);
+  } catch {
+    return process.cwd();
+  }
+}
+
 // --- execute handler -------------------------------------------------------
 // The runtime policy is resolved BEFORE the payload so handlers can see it.
 const policyOverride = {
@@ -280,7 +394,8 @@ const payload = {
   intensityMode,
   sessionId: raw["session_id"] ?? raw["sessionId"],
   conversationId: raw["conversationId"],
-  cwd: raw["cwd"] ?? process.cwd(),
+  // Validated above: a handler may trust this.
+  cwd: safeCwd(),
   transcriptPath: raw["transcript_path"] ?? raw["transcriptPath"],
   permissionMode: raw["permission_mode"] ?? raw["permissionMode"],
   toolName: raw["tool_name"] ?? raw["toolName"],
