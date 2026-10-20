@@ -285,6 +285,6 @@ describe("every frozen contract", () => {
   });
 
   it("pins the contract version so a change is deliberate", () => {
-    expect(CONTRACT_VERSION).toBe("1.1.0");
+    expect(CONTRACT_VERSION).toBe("1.2.0");
   });
 });

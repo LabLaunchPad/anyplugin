@@ -1,5 +1,5 @@
 {
-  "$id": "https://lablaunchpad.dev/worker-runtime/1.1.0/decision.schema.json",
+  "$id": "https://lablaunchpad.dev/worker-runtime/1.2.0/decision.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "allOf": [
@@ -28,7 +28,7 @@
       }
     }
   ],
-  "description": "Worker Runtime frozen contract: Decision (contract version 1.1.0).",
+  "description": "Worker Runtime frozen contract: Decision (contract version 1.2.0).",
   "properties": {
     "alternatives": {
       "default": [],
@@ -51,7 +51,7 @@
       "type": "string"
     },
     "contractVersion": {
-      "const": "1.1.0",
+      "const": "1.2.0",
       "type": "string"
     },
     "id": {

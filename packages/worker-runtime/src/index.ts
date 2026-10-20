@@ -136,6 +136,30 @@ export {
   type DecisionProjection,
 } from "./log/decisions.js";
 export {
+  foldEvidence,
+  invalidatedEvidence,
+  usableEvidence,
+  type EvidenceFoldResult,
+  type EvidenceProjection,
+} from "./log/evidence.js";
+export {
+  foldExperience,
+  planPromotion,
+  type ExperienceFoldResult,
+  type ExperienceProjection,
+  type PromotionInput,
+  type PromotionPlan,
+} from "./log/experience.js";
+export {
+  dependencyConsistencyClaim,
+  evidenceIntegrityClaim,
+  graphConsistencyClaim,
+  verify,
+  type VerificationClaim,
+  type VerificationInput,
+  type VerificationOutcome,
+} from "./verify/index.js";
+export {
   EDGE_SEMANTICS,
   NODE_REF_PREFIX,
   PROPAGATING_KINDS,

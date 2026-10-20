@@ -64,12 +64,6 @@ const SRC_DIR = resolve(import.meta.dirname, "..");
 const UNBOUND_CONTRACTS: Readonly<Record<string, string>> = {
   WorkContract:
     "M2 (Worker State + Contract) binds it: the work contract is written BEFORE work begins, and the executor must read it.",
-  Evidence:
-    "M3 (Evidence Ledger) binds it: the ledger's producer is the derivation from the event log, which is not built.",
-  Experience:
-    "M4 (Decision + Experience) binds it: the learning loop's producer is the optimiser, which lives in the SDK (D-014).",
-  VerificationResult:
-    "M7 (Verification Engine) binds it: the verifier does not exist yet, so nothing produces a verdict.",
   Certificate:
     "M10 (Certificate) binds it: a certificate is issued over completed work, and the verification engine that would complete it is not built.",
 };

@@ -1485,6 +1485,57 @@ And the next widening is now **mechanical**: P1-11's candidate-lifecycle
 kinds need a `1.1.0 → 1.2.0` migration, and the machinery for it already
 exists. That is the whole value of doing the migration once, properly.
 
+### D-055 — A ledger is a **projection**, a promotion is an **event**, and a verifier refuses unusable evidence
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `packages/worker-runtime/src/log/evidence.ts`; `packages/worker-runtime/src/log/experience.ts`; `packages/worker-runtime/src/verify/index.ts`; `packages/worker-runtime/src/log/ledgers.test.ts`; `packages/worker-runtime/src/verify/verify.test.ts`
+
+**Context:** M3 (Evidence Ledger), M4 (Decision + Experience) and M7
+(Verification Engine) had frozen contracts and no implementation. The
+invalidation engine, built earlier this cycle, already touched evidence and
+decisions — so these were the closest contracts to a real engine.
+
+**Decision:**
+
+1. **A ledger is a PROJECTION, and a record is immutable.** The Evidence
+   Ledger's acceptance criterion is *"Invalidating E1 preserves history
+   **and** flips current validity"*. So invalidation appends an event and the
+   projection flips; the record's source, hash and authority never change.
+   This is not tidiness — a Certificate (M10) binds a record by content
+   hash, so a record that changed under a certificate would make every
+   certificate over it unverifiable.
+2. **The epistemic ladder is append-only, and `planPromotion()` is the only
+   thing that can move a rung.** A promotion advances by **exactly one**
+   rung — no skipping, no demotion, no lateral move — and
+   `VERIFIED_KNOWLEDGE` requires evidence, because authoritative knowledge is
+   knowledge that cites its evidence. The fold does not promote; the
+   verifier does not promote; only a promotion event, with an actor and a
+   justification, can.
+3. **The verifier has three gates, in this order: presence, usability, then
+   the check.** Missing evidence ⇒ `BLOCKED`. **Unusable** evidence — that
+   is, invalidated or superseded — ⇒ `BLOCKED`. Only then does the check
+   run, and only then may it say `PASS`.
+4. **The contract moves to `1.2.0`, and both widenings are loosenings.**
+   The event-kind vocabulary gained the candidate-lifecycle and
+   policy-promotion kinds (P1-11), and `VerificationResultSchema.inputHashes`
+   may now be empty **for a `BLOCKED` result** — because a verifier that
+   found *no* evidence has nothing to bind, and `BLOCKED` exists precisely
+   so that absence of evidence has somewhere to go that is not success. A
+   `PASS` still must bind its inputs.
+
+**Consequences:** The two halves of the kernel interlock, and that is the
+part worth stating: invalidating the evidence a decision rests on makes the
+decision's verification `BLOCKED`, which is exactly the
+`requiresReverification` the invalidation cascade computes. **The cascade
+names the work; the verifier refuses to call it done.** Neither half knows
+about the other, and the behaviour is still exactly right.
+
+And the `1.2.0` migration is the second use of the machinery `1.1.0`
+built: `migrateRecord()` upgrades a `1.0.0` or `1.1.0` record on read, the
+bytes on disk are never rewritten, and an unknown future version is refused
+rather than guessed at. **P1-11's remaining widening is now mechanical**,
+and the next one will be too.
+
+---
 ## Related documents
 
 | Question | Owner |

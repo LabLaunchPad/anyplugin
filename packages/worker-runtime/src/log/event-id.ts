@@ -19,6 +19,9 @@
 import { contentHash } from "../canonical.js";
 import type { WorkerEvent } from "../contracts/index.js";
 
+/** An event the log has not yet sequenced. */
+export type WorkerEventDraft = Omit<WorkerEvent, "sequence">;
+
 /** A deterministic id for an event, derived from the event's own content. */
 export function eventIdOf(event: Omit<WorkerEvent, "id" | "sequence">): string {
   const digest = contentHash({

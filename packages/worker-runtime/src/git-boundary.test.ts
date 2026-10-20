@@ -33,8 +33,12 @@ function isIgnored(relPath: string): boolean {
 
 const gitAvailable = existsSync(join(REPO_ROOT, ".git"));
 
+// P2-28: this file spawns `git check-ignore` once per path, so it is slow
+// enough to exceed vitest's default 5 s when the machine is under load —
+// and a timeout here is a FALSE ALARM about the guard, which is worse than
+// no guard. The same treatment as the other two files P2-28 found.
 describe.skipIf(!gitAvailable)("git boundary for runtime state", () => {
-  it("ignores the runtime storage root and every ledger subdirectory", () => {
+  it("ignores the runtime storage root and every ledger subdirectory", { timeout: 60_000 }, () => {
     expect(isIgnored(`${STORAGE_ROOT_DIRNAME}/`), STORAGE_ROOT_DIRNAME).toBe(true);
     for (const sub of STORAGE_SUBDIRS) {
       const p = `${STORAGE_ROOT_DIRNAME}/${sub}/record.json`;
@@ -42,14 +46,14 @@ describe.skipIf(!gitAvailable)("git boundary for runtime state", () => {
     }
   });
 
-  it("does NOT ignore the generated schemas — their hashes must be diff-reviewable", () => {
+  it("does NOT ignore the generated schemas — their hashes must be diff-reviewable", { timeout: 60_000 }, () => {
     // If these were ignored, a schema change would vanish from review while
     // the drift test still passed locally.
     expect(isIgnored("packages/worker-runtime/schemas/certificate.schema.json")).toBe(false);
     expect(isIgnored("packages/worker-runtime/schemas/")).toBe(false);
   });
 
-  it("does NOT ignore kernel source, contracts, or tests", () => {
+  it("does NOT ignore kernel source, contracts, or tests", { timeout: 60_000 }, () => {
     for (const p of [
       "packages/worker-runtime/src/index.ts",
       "packages/worker-runtime/src/storage.ts",
@@ -63,18 +67,18 @@ describe.skipIf(!gitAvailable)("git boundary for runtime state", () => {
     }
   });
 
-  it("ignores build output but not the package itself", () => {
+  it("ignores build output but not the package itself", { timeout: 60_000 }, () => {
     expect(isIgnored("packages/worker-runtime/dist/index.js")).toBe(true);
     expect(isIgnored("packages/worker-runtime/")).toBe(false);
   });
 
-  it("does not ignore a NESTED .worker-runtime, which would be a deliberate fixture", () => {
+  it("does not ignore a NESTED .worker-runtime, which would be a deliberate fixture", { timeout: 60_000 }, () => {
     // The rule is root-anchored (`/.worker-runtime/`). A fixture directory
     // deep in the tree must stay visible rather than disappearing silently.
     expect(isIgnored(`packages/worker-runtime/src/__fixtures__/${STORAGE_ROOT_DIRNAME}/x.json`)).toBe(false);
   });
 
-  it("has no runtime-state file currently tracked", () => {
+  it("has no runtime-state file currently tracked", { timeout: 60_000 }, () => {
     const tracked = execFileSync("git", ["ls-files"], { cwd: REPO_ROOT, encoding: "utf8" });
     const offenders = tracked
       .split("\n")

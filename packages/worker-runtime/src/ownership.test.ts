@@ -177,7 +177,7 @@ describe("I6 — derived state stays rebuildable (PASSED as of Gate 3)", () => {
     const events = [
       {
         id: "EVT-1",
-        contractVersion: "1.1.0",
+        contractVersion: "1.2.0",
         sequence: 0,
         at: "2026-08-24T20:00:00Z",
         actor: "worker-runtime/1.0.0",

@@ -33,7 +33,7 @@ import {
  * `contracts/migration.ts` upgrades it on read, and an unknown **future**
  * version is refused rather than guessed at.
  */
-export const CONTRACT_VERSION = "1.1.0";
+export const CONTRACT_VERSION = "1.2.0";
 
 // ── 1. Work Contract ─────────────────────────────────────────────────────────
 
@@ -148,6 +148,21 @@ export const EventSchema = z
        * the same thing nine times.
        */
       "DELEGATION_RECORDED",
+      /**
+       * The candidate lifecycle and the policy promotions (P1-11).
+       *
+       * These are the SDK's optimiser's own vocabulary. They live in the
+       * frozen enum rather than in a sidecar log because D-037 already
+       * rejected the sidecar: *two write paths, two hash chains, and no
+       * answer to "which is authoritative?"*.
+       */
+      "CANDIDATE_CAPTURED",
+      "CANDIDATE_STAGE_CHANGED",
+      "SHADOW_EVAL_COMPLETED",
+      "POLICY_PROMOTED",
+      "POLICY_ROLLED_BACK",
+      "POLICY_PINNED",
+      "BUDGET_EXHAUSTED",
     ]),
     /** Id of the record this event concerns. */
     subject: z.string().min(1),
@@ -377,8 +392,16 @@ export const VerificationResultSchema = z
     contractVersion: z.literal(CONTRACT_VERSION),
     verifierId: z.string().min(1),
     outcome: VerificationOutcomeSchema,
-    /** Hashes of what was checked, so a result cannot be reused for other inputs. */
-    inputHashes: z.array(ContentHashSchema).min(1),
+    /**
+     * Hashes of what was checked, so a result cannot be reused for other
+     * inputs.
+     *
+     * **May be empty for a `BLOCKED` result** — a verifier that found *no*
+     * evidence has nothing to bind, and `BLOCKED` exists precisely so that
+     * absence of evidence has somewhere to go that is not success. A `PASS`
+     * still must bind its inputs: the refinement below.
+     */
+    inputHashes: z.array(ContentHashSchema).default([]),
     observations: z.array(z.string()).default([]),
     at: TimestampSchema,
     /** Required for BLOCKED and FAIL: why. Silence is not a result. */
@@ -388,6 +411,12 @@ export const VerificationResultSchema = z
   .refine((v) => v.outcome === "PASS" || v.reason !== undefined, {
     message: "FAIL and BLOCKED must state a reason",
     path: ["reason"],
+  })
+  .refine((v) => v.outcome !== "PASS" || v.inputHashes.length > 0, {
+    // A PASS that binds nothing can be reused for any input, which is the
+    // opposite of what the hashes are for.
+    message: "a PASS must bind the inputs it was checked against",
+    path: ["inputHashes"],
   });
 export type VerificationResult = z.infer<typeof VerificationResultSchema>;
 

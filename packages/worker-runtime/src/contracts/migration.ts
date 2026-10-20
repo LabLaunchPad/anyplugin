@@ -37,7 +37,10 @@
 import { CONTRACT_VERSION } from "./index.js";
 
 /** The contract versions this build can read. */
-export const READABLE_CONTRACT_VERSIONS = ["1.0.0", CONTRACT_VERSION] as const;
+export const READABLE_CONTRACT_VERSIONS = ["1.0.0", "1.1.0", CONTRACT_VERSION] as const;
+
+/** The versions this build can UPGRADE from. */
+const UPGRADABLE: readonly string[] = ["1.0.0", "1.1.0"];
 
 export type MigrationResult =
   | { readonly ok: true; readonly value: unknown }
@@ -73,8 +76,10 @@ export function migrateRecord(raw: unknown): MigrationResult {
     return { ok: false, kind: "NOT_A_RECORD", reason: "no contract version" };
   }
   if (version === CONTRACT_VERSION) return { ok: true, value: record };
-  if (version === "1.0.0") {
-    // A widening migration: the version string, and nothing else.
+  if (typeof version === "string" && UPGRADABLE.includes(version)) {
+    // A widening migration: the version string, and nothing else. Every
+    // widening so far has LOOSENED a constraint, so a record written under
+    // an earlier version still satisfies the current one.
     return { ok: true, value: { ...record, contractVersion: CONTRACT_VERSION } };
   }
   return {

@@ -37,6 +37,20 @@ describe("JSON Schema mirror", () => {
     }
   });
 
+  it("parses strictly — additionalProperties is false everywhere", () => {
+    // P2-15: the mirror did not assert `additionalProperties` parity, which
+    // is the exact gap `REMEDIATION_PLAN.md` asked to close.
+    //
+    // It matters because the frozen contracts are all `.strict()`. A mirror
+    // that dropped `additionalProperties: false` would describe a contract
+    // that ACCEPTS unknown fields, while the zod source rejects them — so
+    // an external consumer would validate a record the kernel would refuse.
+    for (const { file, content } of generated) {
+      const parsed = JSON.parse(content) as { additionalProperties?: unknown };
+      expect(parsed.additionalProperties, `${file} must reject unknown properties`).toBe(false);
+    }
+  });
+
   it("targets Draft 2020-12 and is self-identifying", () => {
     for (const { file, content } of generated) {
       const parsed = JSON.parse(content) as Record<string, unknown>;

@@ -54,11 +54,10 @@ import {
   type WorkerPhase,
   type WorkerState,
 } from "../contracts/index.js";
-import { eventIdOf } from "../log/event-id.js";
+import { eventIdOf, type WorkerEventDraft } from "../log/event-id.js";
 import type { RejectedTransition } from "../log/worker-state.js";
 
-/** An event the log has not yet sequenced. */
-export type WorkerEventDraft = Omit<WorkerEvent, "sequence">;
+export type { WorkerEventDraft } from "../log/event-id.js";
 
 // ── The invalidation consequences ─────────────────────────────────────────
 
