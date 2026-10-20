@@ -27,30 +27,55 @@
  * exercised, and calling that "passed" would manufacture confidence.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { copyDir } from "./index.js";
 
+/**
+ * Whether this platform lets us create a symlink at all.
+ *
+ * **Determined SYNCHRONOUSLY, at module load.** `it.skipIf(condition)` reads
+ * its condition when the test is *defined* — that is, while this module is
+ * being evaluated. A capability probed in `beforeAll` would still be `false`
+ * at that moment, and every symlink test would be skipped **everywhere**,
+ * silently, including on the platform that can do it.
+ *
+ * That is the guard version of the defect this repository exists to prevent:
+ * a check that cannot fire, reporting itself as passing.
+ */
+const canSymlink = ((): boolean => {
+  let dir: string | undefined;
+  try {
+    dir = mkdtempSync(join(tmpdir(), "symlink-probe-"));
+    writeFileSync(join(dir, "target"), "x", "utf8");
+    symlinkSync(join(dir, "target"), join(dir, "link"), "file");
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (dir) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        /* best effort */
+      }
+    }
+  }
+})();
+
+if (!canSymlink) {
+  console.info(
+    "\nsymlink containment: ARMED — this platform refused to create a symlink, so the guard was not exercised.\n",
+  );
+}
+
 let root: string;
-/** Whether this platform lets us create a symlink at all. */
-let canSymlink = false;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "copydir-containment-"));
-  const probe = join(root, "probe-target");
-  const link = join(root, "probe-link");
-  await writeFile(probe, "x", "utf8");
-  try {
-    await symlink(probe, link, "file");
-    canSymlink = true;
-  } catch {
-    canSymlink = false;
-    console.info(
-      "\nsymlink containment: ARMED — this platform refused to create a symlink, so the guard was not exercised.\n",
-    );
-  }
 });
 
 afterAll(async () => {
