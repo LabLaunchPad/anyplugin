@@ -20,7 +20,20 @@ import {
   idSchema,
 } from "./primitives.js";
 
-export const CONTRACT_VERSION = "1.0.0";
+/**
+ * The contract version.
+ *
+ * **1.1.0** widened the event-kind vocabulary with `DELEGATION_RECORDED`, so
+ * the delegation telemetry can live in the SAME log as the work events
+ * rather than in a second log nobody replays. The record's *shape* did not
+ * change; its vocabulary did, and a record labelled `1.0.0` carrying a kind
+ * that did not exist in `1.0.0` would be a lie.
+ *
+ * A record written under `1.0.0` is still readable: `migrateRecord()` in
+ * `contracts/migration.ts` upgrades it on read, and an unknown **future**
+ * version is refused rather than guessed at.
+ */
+export const CONTRACT_VERSION = "1.1.0";
 
 // ── 1. Work Contract ─────────────────────────────────────────────────────────
 
@@ -125,6 +138,16 @@ export const EventSchema = z
       "EXPERIENCE_PROMOTED",
       "VERIFICATION_RUN",
       "CERTIFICATE_ISSUED",
+      /**
+       * A delegation event: a probe, a routing decision, an attempt, a
+       * fallback, a circuit change, a budget exhaustion.
+       *
+       * ONE kind, with the delegation event's own vocabulary in the
+       * payload, because the contract already delegates payload shapes to
+       *"the engine that emits it"*. Nine new enum members would have said
+       * the same thing nine times.
+       */
+      "DELEGATION_RECORDED",
     ]),
     /** Id of the record this event concerns. */
     subject: z.string().min(1),

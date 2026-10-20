@@ -39,7 +39,6 @@ export {
 } from "./invalidation.js";
 
 export {
-  eventIdOf,
   planInvalidationEvents,
   planRestoration,
   type InvalidationEventInput,
@@ -48,3 +47,5 @@ export {
   type RestorationPlan,
   type WorkerEventDraft,
 } from "./reopen.js";
+
+export { eventIdOf } from "../log/event-id.js";

@@ -32,6 +32,8 @@
  * must be identical no matter which wrapper uses them.
  */
 import { z } from "zod";
+import { CONTRACT_VERSION, type WorkerEvent } from "../contracts/index.js";
+import { eventIdOf } from "../log/event-id.js";
 
 /** The kinds of event a delegation layer records. */
 export const DELEGATION_EVENT_TYPES = [
@@ -750,4 +752,39 @@ export function delegationEvent(event: unknown): DelegationEvent {
  */
 export function delegationEventId(event: DelegationEvent): string {
   return `DEL-${event.type}-${event.backendId}-${event.at}-${event.attempt}`;
+}
+
+/**
+ * A delegation event, as a worker-runtime event.
+ *
+ * ── Why this exists ───────────────────────────────────────────────────────
+ *
+ * The delegation telemetry used to have nowhere to live. `toLogRecords()`
+ * existed and had **zero call sites**; the events were printed by `--json`
+ * and otherwise dropped. So the wrapper's own account of what it did was
+ * invisible — which is the opposite of what a telemetry record is for, and
+ * it is why the OKF bundle's claim that *"the telemetry goes to the
+ * worker-runtime event log, not a log file"* was false.
+ *
+ * The event kind is **ONE** — `DELEGATION_RECORDED` — with the delegation
+ * event's own vocabulary in the payload, because the contract already
+ * delegates payload shapes to *"the engine that emits it"*. Nine new enum
+ * members would have said the same thing nine times.
+ *
+ * The `subject` is the backend the event is about, following the one
+ * convention the kernel has: the subject is the record the event concerns.
+ */
+export function delegationEventToWorkerEvent(
+  event: DelegationEvent,
+  opts: { at: string; actor: string },
+): Omit<WorkerEvent, "sequence"> {
+  const draft: Omit<WorkerEvent, "id" | "sequence"> = {
+    contractVersion: CONTRACT_VERSION,
+    at: opts.at,
+    actor: opts.actor,
+    kind: "DELEGATION_RECORDED",
+    subject: event.backendId,
+    payload: { delegation: event },
+  };
+  return { ...draft, id: eventIdOf(draft) };
 }

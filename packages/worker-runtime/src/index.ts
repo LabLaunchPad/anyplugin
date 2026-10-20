@@ -23,6 +23,11 @@
 export const RUNTIME_VERSION = "0.0.1";
 
 export * from "./contracts/index.js";
+export {
+  READABLE_CONTRACT_VERSIONS,
+  migrateRecord,
+  type MigrationResult,
+} from "./contracts/migration.js";
 export { canonicalJson, contentHash, isContentHash, CanonicalizationError } from "./canonical.js";
 export { exportSchemas, schemaFileName, type ExportedSchema } from "./schema-export.js";
 
@@ -97,6 +102,7 @@ export {
   classifyHttpStatus,
   delegationEvent,
   delegationEventId,
+  delegationEventToWorkerEvent,
   failureSpec,
   fallbackLegal,
   type AttemptObservation,

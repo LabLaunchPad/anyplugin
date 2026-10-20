@@ -44,7 +44,6 @@
  *    ids, so re-appending one is idempotent — the same property the
  *    delegation telemetry has.
  */
-import { contentHash } from "../canonical.js";
 import {
   CONTRACT_VERSION,
   DecisionSchema,
@@ -55,30 +54,11 @@ import {
   type WorkerPhase,
   type WorkerState,
 } from "../contracts/index.js";
+import { eventIdOf } from "../log/event-id.js";
 import type { RejectedTransition } from "../log/worker-state.js";
 
 /** An event the log has not yet sequenced. */
 export type WorkerEventDraft = Omit<WorkerEvent, "sequence">;
-
-/**
- * A deterministic id for an event.
- *
- * Derived from the event's own content, so identical events get identical
- * ids and re-appending one changes nothing. The digest is truncated to 24
- * hex characters, which is 96 bits — enough that a collision is not a
- * practical concern, and the id schema's slug limit is 64.
- */
-export function eventIdOf(event: Omit<WorkerEvent, "id" | "sequence">): string {
-  const digest = contentHash({
-    contractVersion: event.contractVersion,
-    kind: event.kind,
-    subject: event.subject,
-    at: event.at,
-    actor: event.actor,
-    payload: event.payload,
-  });
-  return `EVT-${digest.slice("sha256:".length, "sha256:".length + 24)}`;
-}
 
 // ── The invalidation consequences ─────────────────────────────────────────
 

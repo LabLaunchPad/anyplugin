@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { replay, findGaps } from "./replay.js";
 import type { WorkerEvent } from "../contracts/index.js";
 import { frameOf } from "./event-log.js";
-import { EventSchema } from "../contracts/index.js";
+import { CONTRACT_VERSION, EventSchema } from "../contracts/index.js";
 
 /**
  * Replay gap detection — audit regression tests (Finding J).
@@ -21,7 +21,7 @@ function event(sequence: number) {
     id: `EVT-test-${sequence}`,
     sequence,
     kind: "STATE_TRANSITION",
-    contractVersion: "1.0.0",
+    contractVersion: CONTRACT_VERSION,
     at: "2024-01-01T00:00:00Z",
     actor: "process:test",
     subject: "test",

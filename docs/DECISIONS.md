@@ -1430,6 +1430,61 @@ project, and none of them said what it meant.
 
 ---
 
+### D-054 — The contract version moves for a **widening**, and the migration happens on **read**
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `packages/worker-runtime/src/contracts/migration.ts`; `packages/worker-runtime/src/contracts/migration.test.ts`; `packages/worker-runtime/src/log/replay.ts`; `packages/worker-runtime/src/telemetry/delegation.ts`; `cli/src/delegate.ts`
+
+**Context:** The delegation telemetry had nowhere to live. `toLogRecords()`
+existed and had **zero call sites**; the events were printed by `--json` and
+otherwise dropped. A `DelegationEvent` was *structurally un-appendable* —
+the frozen `EventSchema`'s `kind` enum contained no delegation kinds — and
+the alternative (a sidecar log) was already rejected in D-037: *two write
+paths, two hash chains, and no answer to "which is authoritative?"*
+
+So the delegation telemetry had to go **into the work's own log**, which
+means the contract had to change. A frozen contract changes by a **versioned
+migration**, not a refactor, because Certificates (M10) bind records by
+content hash.
+
+**Decision:**
+
+1. **The contract moves `1.0.0 → 1.1.0`.** The record's *shape* did not
+   change — the same fields, the same constraints — but its **vocabulary**
+   did, and a record labelled `1.0.0` carrying a kind that did not exist in
+   `1.0.0` would be a lie. A lie in a version field is the one lie the
+   whole mechanism exists to prevent.
+2. **ONE new kind: `DELEGATION_RECORDED`**, with the delegation event's own
+   vocabulary in the payload — because the contract already delegates payload
+   shapes to *"the engine that emits it"*. Nine new enum members would have
+   said the same thing nine times.
+3. **The migration happens on READ.** `migrateRecord()` upgrades a
+   `1.0.0` record on the way in; the bytes on disk are never rewritten.
+   History is never mutated, in the log exactly as in the journal.
+4. **The migration is the version string and nothing else**, because
+   `1.1.0` was a **widening**: the same fields, the same constraints, one
+   more permitted value. A widening migration is trivially safe in meaning —
+   the upgraded record means exactly what it meant before, so a certificate
+   binding a `1.0.0` record's content still verifies against it.
+5. **The hash is checked against the RAW body, before the migration.** The
+   frame's hash describes what was **written**; the migration changes the
+   record. Checking the hash after the migration would report every legacy
+   record as tampered — a false positive that would make the tamper
+   detection worthless, which is worse than no tamper detection.
+6. **An unknown version is REFUSED, not guessed at.** A future version may
+   have changed the shape, and reading it as if it had not would be inventing
+   a record. It gets its own diagnosis (*"this build does not read that
+   version"*), because that is more useful than *"does not satisfy the
+   schema"*.
+
+**Consequences:** the delegation's own account of what it did — which
+backend it probed, which one it chose, why it stopped — is now **in the same
+log, and under the same hash chain**, as everything else the runtime records.
+The OKF bundle's claim is true again rather than corrected.
+
+And the next widening is now **mechanical**: P1-11's candidate-lifecycle
+kinds need a `1.1.0 → 1.2.0` migration, and the machinery for it already
+exists. That is the whole value of doing the migration once, properly.
+
 ## Related documents
 
 | Question | Owner |

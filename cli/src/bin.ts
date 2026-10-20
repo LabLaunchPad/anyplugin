@@ -24,7 +24,7 @@ import { ALL_AGENTS, removeTree, pathExists, BackendCatalog } from "@lablaunchpa
 import { parseCliArgv, type CommandName } from "./strict-args.js";
 import { setIntensityMode, getActivePlugin } from "./state.js";
 import { JOURNAL_SCHEMA_VERSION as CURRENT_JOURNAL_SCHEMA_VERSION } from "./journal.js";
-import { delegate, probeBackend } from "./delegate.js";
+import { delegate, persistDelegationTelemetry, probeBackend } from "./delegate.js";
 import { BACKUPS_DIRNAME, STAGING_DIRNAME } from "./transaction.js";
 import { readFile } from "node:fs/promises";
 
@@ -643,6 +643,12 @@ async function runDelegate(values: ParsedFlags, positionals: string[]): Promise<
     ...(values["re-runnable"] === true ? { reRunnable: true } : {}),
   });
 
+  // The telemetry is PERSISTED, not printed. It used to be printed by
+  // `--json` and otherwise dropped, which made the wrapper's own account of
+  // what it did invisible — and the OKF bundle's claim that the telemetry
+  // goes to the worker-runtime event log was false while that was the case.
+  const telemetry = persistDelegationTelemetry(result.events, process.cwd());
+
   if (values.json) {
     console.log(
       JSON.stringify(
@@ -651,6 +657,7 @@ async function runDelegate(values: ParsedFlags, positionals: string[]): Promise<
           ok: result.ok,
           selected: result.selected?.id ?? null,
           reason: result.reason ?? null,
+          telemetry: { written: telemetry.written, error: telemetry.error ?? null },
           attempts: result.attempts.map((a) => ({
             backendId: a.backendId,
             attempt: a.attempt,
@@ -692,6 +699,12 @@ async function runDelegate(values: ParsedFlags, positionals: string[]): Promise<
       if (attempt.stderr.trim()) console.error(attempt.stderr.trimEnd());
     }
     if (!result.ok && result.reason) console.error(`anyplugin delegate: ${result.reason}`);
+    // A telemetry failure is REPORTED, not silent. The delegation's answer
+    // matters more than its telemetry, so this does not fail the command —
+    // but an operator who cannot record what happened must be told.
+    if (telemetry.error) {
+      console.error(`anyplugin delegate: the telemetry could not be persisted: ${telemetry.error}`);
+    }
   }
 
   if (!result.ok) {

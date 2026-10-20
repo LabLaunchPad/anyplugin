@@ -141,12 +141,13 @@ recover and that a fold can summarise, rather than lines in a file nobody
 can audit.
 
 **What is true today, stated exactly.** The event vocabulary is closed and an
-event is produced for every attempt, but the events are **not yet
-persisted**: `anyplugin delegate` reports them through `--json` and otherwise
-drops them. Persisting them needs the delegation event kinds in the frozen
-`EventSchema`, which is a versioned migration (`docs/BACKLOG.md` P1-11,
-P1-14). Until that lands, "the telemetry goes to the event log" is the
-*intent*, not the behaviour.
+event is produced for every attempt, and the events are **persisted**: the
+contract moved to `1.1.0` with a `DELEGATION_RECORDED` kind, and
+`anyplugin delegate` appends one event per delegation event into the
+worker-runtime event log. The delegation's own account of what it did —
+which backend it probed, which one it chose, why it stopped — is therefore
+**in the same log, and under the same hash chain**, as everything else the
+runtime records.
 
 The event vocabulary is small and closed: `BACKEND_PROBED`, `ROUTE_SELECTED`,
 `FALLBACK_SELECTED`, `DELEGATION_STARTED`, `DELEGATION_SUCCEEDED`,

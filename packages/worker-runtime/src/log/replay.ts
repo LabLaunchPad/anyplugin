@@ -23,6 +23,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { EventSchema, type WorkerEvent } from "../contracts/index.js";
+import { migrateRecord } from "../contracts/migration.js";
 import { canonicalJson } from "../canonical.js";
 import { LOG_FILENAME } from "./event-log.js";
 import { recordHash } from "./write-contract.js";
@@ -180,8 +181,24 @@ function decodeEvent(line: string, size: number): { event: WorkerEvent } | { ano
     return { anomaly: { classification: "REJECTED", reason: REPLAY_ANOMALIES.UNPARSEABLE, bytes: size } };
   }
 
-  const result = EventSchema.safeParse(parsed);
+  // The migration is a version widening, so it happens BEFORE the schema
+  // check: a `1.0.0` record does not satisfy the `1.1.0` schema, and
+  // refusing it for that reason would be refusing a record this build can
+  // read.
+  //
+  // An unknown version is refused rather than guessed at: a future version
+  // may have changed the shape, and reading it as if it had not would be
+  // inventing a record. It gets its OWN diagnosis, because "this build does
+  // not read that version" is more useful than "does not satisfy the schema".
+  const migrated = migrateRecord(parsed);
+  const candidate = migrated.ok ? migrated.value : parsed;
+  const result = EventSchema.safeParse(candidate);
   if (!result.success) {
+    if (!migrated.ok && migrated.kind === "UNKNOWN_VERSION") {
+      return {
+        anomaly: { classification: "REJECTED", reason: `contract version: ${migrated.reason}`, bytes: size },
+      };
+    }
     // A well-formed frame carrying something that is not an Event. Rejected
     // rather than coerced: replay must not invent a valid event from an
     // invalid one.
@@ -189,7 +206,12 @@ function decodeEvent(line: string, size: number): { event: WorkerEvent } | { ano
   }
   const event = result.data;
 
-  if (recordHash({ id: event.id, payload: event }) !== declaredHash) {
+  // The hash covers the record AS IT WAS WRITTEN, so it is checked against
+  // the RAW body and not the migrated one: the migration changes the record,
+  // and the frame's hash describes what was written. Checking it afterwards
+  // would report every migrated record as tampered.
+  const raw = parsed as { id: string };
+  if (recordHash({ id: raw.id, payload: parsed }) !== declaredHash) {
     return { anomaly: { classification: "REJECTED", reason: REPLAY_ANOMALIES.HASH_MISMATCH, bytes: size } };
   }
   return { event };

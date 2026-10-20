@@ -45,6 +45,8 @@ import {
   classifyAttempt,
   delegationEvent,
   delegationEventId,
+  delegationEventToWorkerEvent,
+  EventLog,
   type DelegationErrorEnvelope,
   type DelegationEvent,
   type DelegationFailureClass,
@@ -989,6 +991,58 @@ export async function delegate(opts: DelegateOptions): Promise<DelegationResult>
 /** Serialize delegation events for the worker-runtime event log. */
 export function toLogRecords(events: DelegationEvent[]): Array<{ id: string; payload: unknown }> {
   return events.map((e) => ({ id: delegationEventId(e), payload: e }));
+}
+
+/**
+ * Persist the delegation telemetry into the worker-runtime event log.
+ *
+ * ── Why this exists ───────────────────────────────────────────────────────
+ *
+ * The telemetry used to have nowhere to live. `toLogRecords()` existed and
+ * had **zero call sites**; the events were printed by `--json` and
+ * otherwise dropped. So the wrapper's own account of what it did — which
+ * backend it probed, which one it chose, why it stopped — was **invisible**,
+ * and the OKF bundle's claim that *"the telemetry goes to the worker-runtime
+ * event log, not a log file"* was false.
+ *
+ * Now it is in the event log: one log, one replay, one hash chain — so a
+ * delegation can be reconstructed from the bytes exactly like any other
+ * recorded fact.
+ *
+ * ── A telemetry failure is reported, not fatal ───────────────────────────
+ *
+ * The delegation's ANSWER matters more than its telemetry, so a log that
+ * cannot be claimed — another writer holds it, the disk is full — must not
+ * fail the work. But it must not be silent either: the error is returned
+ * and the command reports it.
+ */
+export function persistDelegationTelemetry(
+  events: readonly DelegationEvent[],
+  projectDir: string,
+  opts: { actor?: string } = {},
+): { written: number; error?: string } {
+  if (events.length === 0) return { written: 0 };
+  const actor = opts.actor ?? "process:anyplugin-delegate";
+  let log: EventLog | undefined;
+  try {
+    log = EventLog.open(projectDir, telemetryRelPath());
+    for (const event of events) {
+      // The delegation event carries its own instant, so the worker event
+      // carries that one — not the time of the write.
+      log.append(
+        delegationEventToWorkerEvent(event, { at: new Date(event.at).toISOString(), actor }),
+      );
+    }
+    return { written: events.length };
+  } catch (err) {
+    return { written: 0, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    try {
+      log?.close();
+    } catch {
+      /* the lock is best-effort to release */
+    }
+  }
 }
 
 /** Where the wrapper writes its telemetry, relative to a workspace root. */

@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { CONTRACTS } from "./contracts/index.js";
+import { CONTRACTS, CONTRACT_VERSION } from "./contracts/index.js";
 import { exportSchemas, schemaFileName } from "./schema-export.js";
 import { VerificationResultSchema, WorkContractSchema } from "./contracts/index.js";
 
@@ -86,7 +86,7 @@ describe("JSON Schema mirror", () => {
    */
   it("rejects structurally what zod rejects semantically", () => {
     const base = {
-      id: "VER-1", contractVersion: "1.0.0", verifierId: "t", outcome: "FAIL",
+      id: "VER-1", contractVersion: CONTRACT_VERSION, verifierId: "t", outcome: "FAIL",
       inputHashes: [`sha256:${"a".repeat(64)}`], observations: [], at: "2026-08-24T12:00:00Z",
     };
     // zod rejects: FAIL with no reason
@@ -120,7 +120,7 @@ describe("JSON Schema mirror", () => {
     expect(parsed.required).not.toContain("constraints");
     // ...but it is always present on a parsed record.
     const parsedRecord = WorkContractSchema.parse({
-      id: "WC-1", contractVersion: "1.0.0", goal: "g", scope: ["a"],
+      id: "WC-1", contractVersion: CONTRACT_VERSION, goal: "g", scope: ["a"],
       successConditions: ["t"], riskLevel: "low",
       provenance: { by: "worker-runtime/0.0.1", at: "2026-08-24T12:00:00Z" },
     });
