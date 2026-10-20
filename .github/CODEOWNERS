@@ -6,3 +6,11 @@
 /core/src/events/    @LabLaunchPad
 /core/src/adapters/  @LabLaunchPad
 /cli/src/index.ts    @LabLaunchPad
+
+# The kernel's frozen contracts: every record is certificate-bound, so a
+# change here changes what a certificate means.
+/packages/worker-runtime/src/contracts/  @LabLaunchPad
+
+# The capability matrix: what the system says it CAN do. A wrong entry here
+# is a promise the runtime cannot keep.
+/core/src/capabilities/  @LabLaunchPad

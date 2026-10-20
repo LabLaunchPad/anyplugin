@@ -8,7 +8,7 @@ the implemented contracts are the authority. This document is the **design
 input** they were built from.
 
 **Design Specification — Phase 0 (Layer 1: Trust)**
-Status: **DRAFT — awaiting founder approval. No implementation is authorized by this document.**
+Status: **IN FORCE.** The mandates below are implemented and enforced; the sections that are still *design* are marked DRAFT individually. (This line previously said "DRAFT — awaiting founder approval. No implementation is authorized by this document", which was false: §1.3.3's `failurePolicy` shipped and is read by the runner.)
 Scope owners: Rahul Paul · Lab LaunchPad. Ledger: `ENGINEERING_LEDGER.md`.
 
 ---

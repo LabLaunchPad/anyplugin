@@ -31,7 +31,8 @@ sources:
 
 ## Secondary signals (fingerprints)
 
-- Claude Code: `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_CHILD_SESSION=1`, `CLAUDE_PID`; `~/.claude/`
+- Claude Code: `CLAUDE_CODE_SESSION_ID`; `~/.claude/`
+- Claude Code, published but **not relied on**: `CLAUDE_CODE_CHILD_SESSION=1` and `CLAUDE_PID` are documented by Claude Code, but a child-session flag and a parent PID are *fingerprints* rather than signals — the detector does not check them, so the matrix does not list them as detection signals.
 - OpenCode: **no marker exists** — v1: detect `OPENCODE_CONFIG` / `OPENCODE_CONFIG_CONTENT` / `OPENCODE_CONFIG_DIR` or any `OPENCODE_*` env override; v2 adds `OPENCODE_TERMINAL=1` for PTY sessions only (not bash children); server on `localhost:4096`; `~/.config/opencode/`, `opencode.json`, `.opencode/`. Our plugin injects `ANYPLUGIN_HOST=opencode` via the `shell.env` hook on released v1 builds so descendants self-identify.
 - Codex: `CODEX_SANDBOX_NETWORK_DISABLED`, `CODEX_POWERSHELL_PAYLOAD` (win); `~/.codex/config.toml`
 - Antigravity: `VSCODE_PID`/`TERM_PROGRAM=vscode` (fork markers) + `~/.gemini/` or workspace `.agents/`; `agy` on PATH

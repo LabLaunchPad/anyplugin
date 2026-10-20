@@ -53,7 +53,7 @@ export type McpServer = z.infer<typeof McpServerSchema>;
  */
 export const AnyPluginManifestSchema = z.object({
   name: z.string().regex(/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/, "kebab-case, starts with a letter"),
-  version: z.string().regex(/^\d+\.\d+\.\d+/),
+  version: z.string().regex(/^\d+\.\d+\.\d+$/),
   description: z.string().min(1),
   displayName: z.string().optional(),
   author: z.object({ name: z.string(), email: z.string().optional(), url: z.string().optional() }).optional(),

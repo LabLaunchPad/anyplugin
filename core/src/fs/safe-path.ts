@@ -29,7 +29,13 @@ export function assertSafeRelative(input: string, what = "relative path"): strin
   if (typeof input !== "string" || input.length === 0) {
     throw new SecurityError(`unsafe ${what}: empty input`);
   }
-  if (input.length > MAX_INPUT) {
+  // The limits are in BYTES, and the filesystem counts bytes. JavaScript's
+  // `length` counts UTF-16 code units, so a path of multi-byte characters
+  // measures SHORTER than the filesystem will see it — and a 4096-byte path
+  // of CJK characters is ~1400 code units. Measuring in code units made the
+  // check UNDER-strict, which is the wrong direction for a limit that exists
+  // to stop a path the filesystem will refuse.
+  if (Buffer.byteLength(input, "utf8") > MAX_INPUT) {
     throw new SecurityError(`unsafe ${what}: longer than ${MAX_INPUT} bytes`);
   }
   if (input.includes("\0")) {
@@ -50,7 +56,7 @@ export function assertSafeRelative(input: string, what = "relative path"): strin
     if (raw === "..") {
       throw new SecurityError(`unsafe ${what}: traversal segment in ${JSON.stringify(input)}`);
     }
-    if (raw.length > MAX_SEGMENT) {
+    if (Buffer.byteLength(raw, "utf8") > MAX_SEGMENT) {
       throw new SecurityError(`unsafe ${what}: segment longer than ${MAX_SEGMENT} bytes`);
     }
     if (/^[A-Za-z]:/u.test(raw)) {
