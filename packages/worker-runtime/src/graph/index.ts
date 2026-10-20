@@ -49,3 +49,5 @@ export {
 } from "./reopen.js";
 
 export { eventIdOf } from "../log/event-id.js";
+
+export { deriveGraph, graphHash, type DerivedNodeKind } from "./derive.js";
