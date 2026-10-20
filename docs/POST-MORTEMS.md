@@ -451,6 +451,22 @@ that the implementation is self-consistent, which is not the same as
 proving it is correct — and a test that compares two empty objects is
 **theatre**.
 
+**And the fixes were verified with the review's own method**, not with a
+new test that could be wrong in the same way. The same fuzz — random
+**schema-valid** graphs, with deliberately near-miss refs — was run again:
+
+| | Before | After |
+|---|---|---|
+| Graphs that threw an unhandled error | 117 of 4 000 | **0 of 8 000** |
+| Malformed refs silently passed the check | the rest | **1 682, each REPORTED as `MALFORMED_REF` and excluded** |
+| Results that depended on the input order | 294 of 3 000 | **0 of 2 000** |
+
+The second row is the one worth reading twice: **21% of the fuzzed graphs
+contained a malformed ref, and every one of them now produces an anomaly
+instead of a crash.** A crash is the worst possible absorption of a defect,
+because it converts a data problem into an outage and takes the diagnosis
+with it.
+
 ---
 
 ## 3. The checklist, filled in
