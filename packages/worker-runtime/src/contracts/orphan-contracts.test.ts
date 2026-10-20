@@ -51,13 +51,21 @@ const SRC_DIR = resolve(import.meta.dirname, "..");
  * exists, is frozen, is mirrored, and is not yet part of anything. Removing
  * an entry fails the build — so the list cannot silently grow, and cannot
  * silently shrink either.
+ *
+ * **What this guard does and does not claim.** It tracks whether a contract
+ * is *consumed* — whether anything outside the contracts file reads or
+ * writes it. It does not track whether the feature the contract describes is
+ * *complete*. `Decision` left this list when the invalidation engine began
+ * reading and re-recording decisions; the **Decision Ledger** of M4 — the
+ * full record, its provenance, its alternatives, its supersession, and the
+ * experience ledger beside it — is still not built, and M3's Evidence Ledger
+ * is still not built either.
  */
 const UNBOUND_CONTRACTS: Readonly<Record<string, string>> = {
   WorkContract:
     "M2 (Worker State + Contract) binds it: the work contract is written BEFORE work begins, and the executor must read it.",
   Evidence:
     "M3 (Evidence Ledger) binds it: the ledger's producer is the derivation from the event log, which is not built.",
-  Decision: "M4 (Decision + Experience) binds it: no decision is recorded outside the contracts file yet.",
   Experience:
     "M4 (Decision + Experience) binds it: the learning loop's producer is the optimiser, which lives in the SDK (D-014).",
   VerificationResult:

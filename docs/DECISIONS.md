@@ -1324,6 +1324,112 @@ un-urgent.
 
 ---
 
+### D-053 — The invalidation engine is a **writer**, and "replacement evidence restores validity" means the decision's **support** is re-grounded
+
+**Status:** Accepted · **Date:** 2026-10-20 · **Evidence:** `packages/worker-runtime/src/graph/reopen.ts`; `packages/worker-runtime/src/log/decisions.ts`; `packages/worker-runtime/src/graph/reopen.test.ts`; `docs/WORKER-RUNTIME-KERNEL.md` §8; `ROADMAP.md` M6
+
+**Context:** M6's exit criterion is `ROADMAP.md`: *"E1→Claim→Decision→Work:
+Decision `STALE`, Work `REOPENED`, unrelated decisions untouched;
+replacement evidence restores validity"*. The cascade half shipped. The
+**transition** half and the **restore** half did not — and the second was
+never specified.
+
+The clause *"replacement evidence restores validity"* appears in exactly
+**four** places, all of them restatements of the same eleven words, with no
+definition of any of its terms: no acceptance criterion, no example chain,
+no event kind, no payload shape. The phrase *"the restore step"* appears
+**once** in the whole repository, and the step itself is never defined.
+
+**Decision:** Twelve questions the repository left open, answered against the
+**frozen contracts** — because the contracts are the only thing in the
+repository that *permits* an answer, and an answer the contracts forbid is
+not an answer.
+
+1. **A writer, not a fold.** The roadmap said the transitions are *"the
+   state fold's job"*. That is architecturally impossible:
+   `log/worker-state.ts` opens with *"State is derived, never
+   authoritative… this is a projection of it"* — and **a projection cannot
+   append**. A fold that emitted events would be the second source of truth
+   the kernel's own invariant forbids. So: the cascade computes the ids,
+   `planInvalidationEvents()` **proposes** the events, the log records them,
+   and the folds project them.
+2. **The event order is the causal order.** `EVIDENCE_INVALIDATED` (the
+   caller's) → `DECISION_STALED` → `STATE_TRANSITION`→`REOPENED`. A
+   decision is staled *because* its evidence changed; the work is reopened
+   *because* the decision is stale. Within each group the records are sorted
+   by id, so the stream is identical whatever order the cascade produced them
+   in.
+3. **`DECISION_STALED`:** subject = the decision id; payload = `{ reason,
+   trigger, evidenceIds, contractId }`. The subject convention follows the
+   one the kernel already has — `STATE_TRANSITION` → subject = the record
+   the event concerns — and the payload follows the contract's own
+   delegation of payload shapes to *"the engine that emits it"*.
+4. **`STATE_TRANSITION`→`REOPENED`:** subject = the work-contract id;
+   payload = `{ to: "REOPENED", from }` — the existing `payload.to`
+   convention the state fold reads.
+5. **An illegal transition is rejected, not coerced.**
+   `LEGAL_TRANSITIONS` permits `COMPLETED → REOPENED` and
+   `FAILED → REOPENED` and nothing else, because a work item is reopened
+   from a *terminal* phase: "it was finished" is what the reopen undoes. A
+   phase the caller does not know is **not** assumed to be reopenable — an
+   unverifiable transition is refused, and the refusal is reported.
+6. **The event id is a content hash**, so two identical events get identical
+   ids and re-appending one is idempotent.
+7. **"Replacement evidence"** is a new, `VALID` evidence record, with the
+   old record's validity flipped `INVALIDATED → SUPERSEDED` and
+   `supersededBy` pointing at it. The `EvidenceSchema` refinement forbids
+   a record from being both `INVALIDATED` and `SUPERSEDED`, so this
+   **flip** is the only admissible evidence-side change — and it is the one
+   D-011 already established for supersession: *"facts evolve by appending a
+   supersession pointer; history is never mutated"*.
+8. **What "restores validity" restores is the decision's SUPPORT, not its
+   `validity`.** A decision's `validity` was never touched by the
+   invalidation: what changed was its **derived staleness** — a separate
+   axis, a separate field, and documented as derived (*"STALE is not a
+   validity — it is a derived status"*). So the decision is re-grounded on
+   the replacement, and with no invalidated evidence left under it, its
+   derived staleness is false again.
+9. **The re-grounding is a `DECISION_RECORDED` event**, carrying the
+   updated decision. The event-kind enum is closed at ten; widening it is a
+   frozen-contract change, and `DECISION_RECORDED` already means *"here is
+   the decision"*. **No `DECISION_RESTORED` kind is added** — and that is
+   why M6 cost no contract migration.
+10. **A decision is not re-grounded when other invalidated evidence remains
+    under it.** The plan requires the caller to supply the currently
+    invalidated set — *an unknown set is not an empty set* — and reports the
+    decisions it leaves alone, and why.
+11. **A minimal decision projection** (`foldDecisions`) is part of M6,
+    because the acceptance criterion is stated over decisions and a
+    *derived* status needs a projection to be readable. It is **not** the
+    Decision Ledger: M4 owns the full record, its provenance, its
+    alternatives, its supersession, and the experience ledger beside it.
+    M3's Evidence Ledger is likewise still open.
+12. **`CLAIM` has no kernel record type**, so the claim's half of the
+    criterion is the graph node in `affectedNodes` and nothing more. And a
+    **repeated invalidation is idempotent** — the same invalidation produces
+    the same events with the same ids.
+
+**Consequences:** M6 is COMPLETE for its stated criterion, and it used only
+event kinds the frozen enum already had. The two things the decision
+corrects are worth naming:
+
+- **"The state fold's job" was never possible.** The kernel's own
+  architecture says a projection cannot append. The roadmap said otherwise
+  because nobody checked the fold against the invariant — the same class of
+  defect as a rule that is never wired up.
+- **The kernel doc's §5 diagram is superseded.** It showed the claim going
+  `STALE` and the decision going `REVERIFY`; `REVERIFY` is not a state
+  in any schema, and every other statement in the repository says the claim
+  is `INVALIDATED` and the decision is `STALE`.
+
+And the process lesson, which is the same one PM-001 ended on: **a clause
+that has never been specified is a decision waiting to be made, and making
+it late costs a correction to the document that stated it wrongly.** The
+clause was carried as a restatement in four places for the life of the
+project, and none of them said what it meant.
+
+---
+
 ## Related documents
 
 | Question | Owner |

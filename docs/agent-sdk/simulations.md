@@ -296,8 +296,8 @@ something published says it happens.
 | **S-03** | F | A 50-claim fixture set classifies correctly, including invented quotes, expired receipts, and ungrounded claims | Evidence-tier projection | `trust.md` §2 |
 | **S-04** | F | Replaying the recorded log reproduces the same decisions, byte-for-byte | Determinism | `optimization.md` §2.6 |
 | **S-05** | F | A killed orchestrator resumes from the last checkpoint without duplicating completed work | Durable resume | D-040 |
-| **S-06** | F | A graph with branching, multi-hop, cycles and disconnected components traverses deterministically | The undone M5 | `gaps.md` §2 |
-| **S-07** | F | An invalidation cascades: E1 → claim `INVALIDATED` → decision `STALE` → work `REOPENED`, unrelated decisions untouched | The invalidation engine's contract | `CORE-INVARIANTS-V2.md` |
+| **S-06** | F | A graph with branching, multi-hop, cycles and disconnected components traverses deterministically | The M5 contract | `packages/worker-runtime/src/graph/` |
+| **S-07** | F | An invalidation cascades: E1 → claim `INVALIDATED` → decision `STALE` → work `REOPENED`, unrelated decisions untouched | The invalidation engine's contract | `docs/WORKER-RUNTIME-KERNEL.md` §8, `ROADMAP.md` M6 |
 | **S-08** | D | A 4 GB PDF with a 30-second deadline produces `BudgetExceededError` and a receipt — never a hang | Bounded failure | AIIAI §4.2 |
 | **S-09** | D | Context grows to 100 k tokens; the focused projection still answers correctly | **Context rot** | Chroma |
 | **S-10** | D | A tool returns a malformed schema twice → `SchemaValidationError` → degrade to `UNCITED` and flag | Gate failure handling | AIIAI Table 6-1 |

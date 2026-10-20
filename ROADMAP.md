@@ -1,9 +1,23 @@
 # AnyPlugin Roadmap — the Worker Runtime
 
-**Status:** IN_PROGRESS — milestones M1–M12 are implemented and shipped. The
-remaining work is the SDK roadmap in `docs/agent-sdk/roadmap.md`; this
-document is retained as the **strategy and milestone record**, not as a live
-status board.
+**Status:** IN_PROGRESS — this document is the **strategy and milestone
+record**, not a live status board. The remaining work is the SDK roadmap in
+`docs/agent-sdk/roadmap.md`; the status of each milestone is the
+**Milestone status** table below, and the live status of each open item is
+`docs/BACKLOG.md`.
+
+> **Correction (2026-10-20, second).** This document previously said
+> *"milestones M1–M12 are implemented and shipped"*. **That was false, and a
+> falsehood in a status line is the worst place for one** — it is the one
+> sentence every reader trusts without checking.
+>
+> The honest picture: **M1, M2, M5 and M6 are implemented.** **M3 (Evidence
+> Ledger), M4 (Decision + Experience), M7 (Verification Engine), M7a, M8, M9,
+> M10, M11 and M12 are not.** Their contracts exist and are frozen; nothing
+> yet produces or consumes them. The kernel's own boundary guard makes the
+> same point mechanically: six of the ten frozen contracts have no consumer
+> outside the contracts file, and each one names the milestone that will
+> bind it (`packages/worker-runtime/src/contracts/orphan-contracts.test.ts`).
 
 > **Correction (2026-10-20).** This document previously said "implementation
 > not started. M0 is the next action", and stated that "`packages/` is not
@@ -318,14 +332,17 @@ Each milestone follows the same shape — **Goal / Non-goals / Truth constraint 
 | **M11** | Agent adapter | Runtime passes its full suite with **zero agents installed and the CLI alone**; every hook-reachable capability also reachable via CLI | M1, M9 | F1, F2, F4, F5, F6, F8 |
 | **M12** | Falsification experiment | A real bounded task driven end to end, then deliberately broken and recovered. Every transition backed by an artifact | M10, M11 | — |
 
-### Milestone status — the two this cycle moved
+### Milestone status — what this cycle moved
 
 | Milestone | Status | Evidence |
 |---|---|---|
 | **M5** Dependency Graph | **COMPLETE** | `packages/worker-runtime/src/graph/` — a deterministic traversal engine: reachability, topological order, cycle detection, disconnected components, with branching, multi-hop, cycles, self-loops, duplicate edges and dangling endpoints each covered. The corpus is **this repository's own dependency graph**. `packages/worker-runtime/src/graph/graph.test.ts` (24 tests) and `repo-graph.test.ts` (8 tests) |
-| **M6** Invalidation Engine | **PARTIAL** | The **cascade** is built — `computeInvalidation()` computes `affectedNodes`, `staleDecisions`, `reopenedWork` and `requiresReverification`, and the E1→Claim→Decision→Work chain leaves unrelated decisions untouched. **What is not built:** the `STALE` and `REOPENED` **transitions** are the state fold's job (`LEGAL_TRANSITIONS` already permits them), and the *replacement evidence restores validity* half of the exit condition has no producer. |
+| **M6** Invalidation Engine | **COMPLETE** | `packages/worker-runtime/src/graph/reopen.ts` — the event producer: `planInvalidationEvents()` proposes `DECISION_STALED` and `STATE_TRANSITION`→`REOPENED`, and `planRestoration()` is the restore step. `packages/worker-runtime/src/log/decisions.ts` — the decision projection. `packages/worker-runtime/src/graph/reopen.test.ts` (14 tests) drives the whole chain: the dependent decision goes `STALE`, the dependent work goes `REOPENED`, unrelated decisions and work are untouched, and replacement evidence restores validity. Decision **D-053** |
+| **M3**, **M4**, **M7**, **M7a**, **M8**, **M9**, **M10**, **M11**, **M12** | **NOT IMPLEMENTED** | Contracts exist and are frozen; nothing produces or consumes them. The boundary guard names the milestone that will bind each unbound contract — `packages/worker-runtime/src/contracts/orphan-contracts.test.ts` |
 
-**M5 needed no contract version bump.** Traversal is a pure function over the existing `GraphSnapshotSchema`, and `InvalidationResultSchema` was already frozen — it simply had no producer. That is the cheapest high-value item in the SDK plan, and it is the only one that lands in this repository.
+**M5 and M6 needed no contract version bump.** Traversal is a pure function over the existing `GraphSnapshotSchema`, and `InvalidationResultSchema` was already frozen — it simply had no producer. The invalidation engine then used **event kinds that were already in the closed enum** (`DECISION_STALED`, `STATE_TRANSITION`, `EVIDENCE_SUPERSEDED`, `DECISION_RECORDED`), so the whole of M6 cost no contract migration. That is the cheapest high-value pair in the plan, and they are the only ones that land in this repository.
+
+**The kernel doc's §5 diagram is superseded.** `docs/WORKER-RUNTIME-KERNEL.md` shows *`E1 → B3 = STALE → D17 = REVERIFY`* — the claim stale and the decision reverify. Every other statement in the repository says the opposite (**claim `INVALIDATED`, decision `STALE`**), and `REVERIFY` is not a state in any contract: `ValiditySchema` is `VALID | INVALIDATED | SUPERSEDED`. The frozen contract and the milestone row win; the diagram is a pre-contract sketch.
 
 **M11's exit condition was corrected.** It previously required the adapter to work "hooks-less (CLI + MCP only) against `opencode@v2`" — which is **impossible**, because that matrix row omits `mcp.*` entirely and `UNKNOWN` is a hard build error (F6). The bare CLI is the only floor that always holds. Making MCP work on `opencode@v2` is a **capability-matrix audit and extension** — a separate prerequisite task, not something the runtime can do.
 

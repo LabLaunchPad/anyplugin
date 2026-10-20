@@ -123,15 +123,27 @@ export {
 } from "./log/event-log.js";
 export { REPLAY_ANOMALIES, isClean, replay, replayDigest, type ReplayReport } from "./log/replay.js";
 export {
+  foldDecisions,
+  invalidatedEvidenceIds,
+  supersededEvidence,
+  type DecisionFoldResult,
+  type DecisionProjection,
+} from "./log/decisions.js";
+export {
   EDGE_SEMANTICS,
   NODE_REF_PREFIX,
   PROPAGATING_KINDS,
   components,
   computeInvalidation,
+  eventIdOf,
   findCycles,
   indexGraph,
+  planInvalidationEvents,
+  planRestoration,
   propagatingReachable,
   reachable,
+  reachableWithDistance,
+  serializeGraphIndex,
   topologicalOrder,
   type DecisionSummary,
   type EdgeDirection,
@@ -144,10 +156,15 @@ export {
   type GraphNode,
   type GraphNodeKind,
   type InvalidationComputation,
+  type InvalidationEventInput,
+  type InvalidationEventPlan,
   type InvalidationInput,
+  type RestorationInput,
+  type RestorationPlan,
   type TopologicalOrder,
   type TraverseOptions,
   type VerificationSummary,
+  type WorkerEventDraft,
 } from "./graph/index.js";
 export {
   foldFromReplay,

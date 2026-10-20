@@ -37,3 +37,14 @@ export {
   type InvalidationInput,
   type VerificationSummary,
 } from "./invalidation.js";
+
+export {
+  eventIdOf,
+  planInvalidationEvents,
+  planRestoration,
+  type InvalidationEventInput,
+  type InvalidationEventPlan,
+  type RestorationInput,
+  type RestorationPlan,
+  type WorkerEventDraft,
+} from "./reopen.js";

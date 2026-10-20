@@ -76,8 +76,20 @@ Fields: `decision_id` · `worker`/`task` · `selected_option` · `alternatives_c
 ```
 E1 ─┐
 E2 ─┼→ B3 → D17          then, when E1 becomes INVALID:
-C2 ─┘                    E1 → B3 = STALE → D17 = REVERIFY
+C2 ─┘                    E1 → B3 = INVALIDATED → D17 = STALE → W = REOPENED
 ```
+
+> **Corrected (2026-10-20).** This diagram previously read
+> *`E1 → B3 = STALE → D17 = REVERIFY`*. It was a pre-contract sketch, and
+> it disagreed with every other statement in the repository — and with the
+> contracts themselves: `REVERIFY` is not a state in any schema, and
+> `ValiditySchema` is `VALID | INVALIDATED | SUPERSEDED`.
+>
+> The frozen contract and the milestone row win: the **claim** is
+> `INVALIDATED`, the **decision** is `STALE`, and the **work** is
+> `REOPENED`. The re-verification is not a state — it is the
+> `requiresReverification` field of `InvalidationResultSchema`, which
+> names the verifications that must run again. See **D-053**.
 
 ## 6. Experience Ledger
 

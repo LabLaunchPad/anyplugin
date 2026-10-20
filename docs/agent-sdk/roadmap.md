@@ -492,8 +492,11 @@ kernel and the lexical fallback **agree** on the golden corpus.
 **Where the gate stands.** The first four clauses are **met** —
 `packages/worker-runtime/src/graph/graph.test.ts` (24 tests) and
 `repo-graph.test.ts` (8 tests). The last clause waits on modules 2.1, 2.4, 2.6
-and 2.7. **M5 is COMPLETE; M6 is PARTIAL** — the cascade computes the ids,
-and the `STALE` and `REOPENED` *transitions* are the state fold's job.
+and 2.7. **M5 is COMPLETE.** **M6 is COMPLETE** — the transitions and the
+restore step shipped as `packages/worker-runtime/src/graph/reopen.ts`
+(`planInvalidationEvents()`, `planRestoration()`) with the decision
+projection in `packages/worker-runtime/src/log/decisions.ts`; decision
+**D-053**.
 
 ### 5.3 MVP 3 — The Persistent Orchestrator
 

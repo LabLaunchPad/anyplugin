@@ -90,7 +90,7 @@ Eight workspace packages (`pnpm-workspace.yaml`).
 | `core` | Schemas, event map, detection, OKF v0.2, emit helpers, capability matrix, tiers, backend registry | *(nothing workspace-internal)* |
 | `adapters/claude` · `adapters/opencode` · `adapters/codex` · `adapters/antigravity` | Pure emitters: manifest → native bundle | `core` |
 | `cli` | The `anyplugin` binary: init, detect, build, install, uninstall, intensity, okf-validate, okf-reindex, doctor, backends, delegate, run | `core`, the four adapters, `worker-runtime` |
-| `packages/worker-runtime` | The deterministic kernel: contracts, canonical form, ownership, storage, event log, replay, state fold, delegation telemetry | `zod` only |
+| `packages/worker-runtime` | The deterministic kernel: contracts, canonical form, ownership, storage, event log, replay, state fold, decision projection, graph traversal, invalidation engine, delegation telemetry | `zod` only |
 | `plugins/knowledge` | The first-party plugin: OKF knowledge layer, hook runner, MCP server | `core` (dev only) |
 
 **The hook runtime is dependency-free by contract.** `plugins/knowledge/runtime/`
