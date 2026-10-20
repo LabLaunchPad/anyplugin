@@ -171,12 +171,12 @@ defects in the same file**, none of which the original analysis had seen:
 | **F4** | `FALLBACK_SELECTED` named the **wrong backend** — the one that had just failed, not the one chosen. Two events were emitted for one transition, one of them contradicting the event's own definition. | The duplicate emission is removed; the loop head already emits the correct one. |
 | **F6** | A dead placeholder sat on the hot path of every envelope classification: `const named = classifyHttpStatus(0); void named;`. | Removed. |
 
-And one the review found that is **not yet fixed**, because it needs a
-frozen-contract change:
+And one the review found that needed a frozen-contract change — and which has
+since had it:
 
 | ID | Defect | Status |
 |---|---|---|
-| **F3** | The delegation telemetry **never reaches the event log**. `toLogRecords`, `telemetryRelPath` and `resolveTelemetryRoot` (`cli/src/delegate.ts:841-853`) have **zero call sites**. A `DelegationEvent` is *structurally un-appendable*: the frozen `EventSchema`'s `kind` enum contains no delegation kinds. So the wrapper's own contract ("write a telemetry event into the worker-runtime event log") and the OKF bundle's *"the telemetry goes to the worker-runtime event log, not a log file"* are both false. | **P1-10d.** The fix needs the new event kinds of P1-11, which is a versioned migration. Recorded, not applied. |
+| **F3** | The delegation telemetry **never reached the event log**. `toLogRecords`, `telemetryRelPath` and `resolveTelemetryRoot` (`cli/src/delegate.ts:841-853`) had **zero call sites**. A `DelegationEvent` was *structurally un-appendable*: the frozen `EventSchema`'s `kind` enum contained no delegation kinds. So the wrapper's own contract ("write a telemetry event into the worker-runtime event log") and the OKF bundle's *"the telemetry goes to the worker-runtime event log, not a log file"* were both false. | **CLOSED.** The contract moved `1.0.0 → 1.1.0` with a `DELEGATION_RECORDED` kind, and `persistDelegationTelemetry()` appends the events into the kernel's log — so the delegation's own account of what it did is now **in the same log, and under the same hash chain**, as everything else the runtime records. `migrateRecord()` upgrades a `1.0.0` record on read and refuses an unknown future version. `cli/src/delegate-telemetry-audit.test.ts` reads the events **back**, because an event that is written and never read is barely better than one that is never written. |
 
 ### 1.7 The prevention — three guards, and the one that matters
 
@@ -191,16 +191,25 @@ So the guards to add are not document guards:
 
 | # | Guard | What it catches | Cost |
 |---|---|---|---|
-| **G1** | **Constant-argument guard.** For each exported kernel safety predicate, assert that no call site passes a *literal* for the decisive parameter. | `committed: false` at four sites would have been flagged instantly. The structural cure already landed: the effect state is a **required** argument, so it cannot be forgotten. | Small |
-| **G2** | **Consumer-aware check over `docs/FAILURE-MODES.md` §11.** The table already maps each rule to the test that enforces it. Require the named test to import the **live consumer** (`cli/src/delegate.ts`), not only the kernel unit. Row 256 pointed at `delegation.test.ts` — a unit test, while the defect lived in the CLI. | A rule whose enforcement is only tested at the unit level. | Small |
+| **G1** | **Constant-argument guard** *(BUILT)*. For each exported kernel safety predicate, assert that no call site passes a *literal* for the decisive parameter. | `committed: false` at four sites would have been flagged instantly. | **BUILT** — `packages/worker-runtime/src/telemetry/safety-predicate.test.ts` (6 tests). Two halves: a **compile-time** assertion that the decisive argument is *required* (so a forgotten effect state cannot compile), and a textual scan of every production call site, using an offset-preserving mask so a doc comment showing the call is not a false positive. |
+| **G2** | **Consumer-aware check over `docs/FAILURE-MODES.md` §11** *(BUILT)*. The table already maps each rule to the test that enforces it. Require the named test to touch the rule's **live consumer**, not only the kernel unit. Row 256 pointed at `delegation.test.ts` — a unit test, while the defect lived in the CLI. | A rule whose enforcement is only tested at the unit level. | **BUILT** — `core/src/boundaries/enforcement-table.test.ts` (6 tests). It required the §11 table to grow a **live consumer** column, which is how the row that pointed only at a unit test — while the rule's only production consumer passed it a constant — became visible. |
 | **G3** | **Orphan-contract guard** *(BUILT)* + **milestone→test binding** *(open)*. Each schema in `CONTRACTS` must have a consumer outside `contracts/index.ts`, or an explicit "bound to milestone X" annotation; each `ROADMAP.md` milestone must name the test file that closes it. | **P1-13** — "the graph has contracts and no engine" would have been *mechanically flagged* rather than sitting in the backlog for months. This is the cheapest guard in the list. | **BUILT** — `packages/worker-runtime/src/contracts/orphan-contracts.test.ts` (8 tests). It found **six** contracts with no consumer, two of which the graph engine bound this cycle. The milestone→test half is still open |
 
-**And the process change that is not a guard:** the backlog's definition of
-done for a BUG is *"a regression test exists that fails without the fix"*, so
-the process **expects** a red test for an open bug — with no mechanism to
-keep `pnpm test` green. The convention this repository needs is
-`it.fails` plus a required BACKLOG id in the test name, so an
-intentionally-red test and an accidentally-red test are distinguishable.
+**And the process change that is not a guard** — also now made:
+the backlog's definition of done for a BUG is *"a regression test exists
+that fails without the fix"*, so the process **expects** a red test for an
+open bug — with no mechanism to keep `pnpm test` green. The convention is
+now written (`docs/BACKLOG.md` §6.1) and **in use**: vitest's `it.fails`,
+with the backlog id in the test name, and a guard
+(`core/src/boundaries/expected-failure.test.ts`) that requires every
+expected-failure test to carry one.
+
+It is a **tripwire**, not a suppression: the suite stays green, and the
+moment the bug is fixed the tripwire fires and says so. That property was
+**proven**, not assumed — `core/src/detect/detection-matrix-drift.test.ts`
+tripwires P1-5, and with the drift temporarily corrected the suite goes red.
+An expected failure that is allowed to be red is a test that reports the
+truth; a green test that asserts a bug is a test that hides it.
 
 ### 1.8 What was NOT wrong
 
