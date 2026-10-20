@@ -20,6 +20,8 @@ import {
   indexGraph,
   propagatingReachable,
   reachable,
+  reachableWithDistance,
+  serializeGraphIndex,
   topologicalOrder,
   type GraphEdgeKind,
   type GraphNodeKind,
@@ -77,13 +79,23 @@ describe("indexing a snapshot", () => {
   });
 
   it("reports a duplicate node and keeps the first after sorting", () => {
-    const graph = snapshot(
+    // The sort is a TOTAL order — id, then kind, then ref — so the retained
+    // node does not depend on the input order. An earlier version sorted on
+    // the id alone, which left a tie in INPUT order, and the same
+    // node/edge multiset then produced two different answers.
+    const forward = snapshot(
       [node("ND-A", "FILE", "a.ts"), node("ND-A", "FILE", "other.ts")],
       [],
     );
-    const index = indexGraph(graph);
-    expect(index.anomalies.map((a) => a.classification)).toEqual(["DUPLICATE_NODE"]);
-    expect(index.nodes.get("ND-A")?.ref).toBe("a.ts");
+    const backward = snapshot(
+      [node("ND-A", "FILE", "other.ts"), node("ND-A", "FILE", "a.ts")],
+      [],
+    );
+    for (const graph of [forward, backward]) {
+      const index = indexGraph(graph);
+      expect(index.anomalies.map((a) => a.classification)).toEqual(["DUPLICATE_NODE"]);
+      expect(index.nodes.get("ND-A")?.ref, "the retained node must not depend on the input order").toBe("a.ts");
+    }
   });
 
   it("reports a duplicate edge and traverses it once", () => {
@@ -299,6 +311,161 @@ describe("the invalidation cascade", () => {
   });
 });
 
+describe("the findings of the adversarial review", () => {
+  // ── D1: a malformed ref must be REPORTED, not crash the schema ─────────
+  it("reports a malformed ref instead of crashing", () => {
+    // `GraphNodeSchema.ref` is `z.string().min(1)` — ANY non-empty string.
+    // "DEC-bad id" and "DEC-" both start with "DEC-", so a prefix check let
+    // them through and the failure surfaced as an unhandled ZodError in the
+    // RESULT. A crash is the worst possible absorption of a defect.
+    const graph = snapshot([node("ND-D", "DECISION", "DEC-bad id")], []);
+    const { result, anomalies } = computeInvalidation(graph, { trigger: "ND-D", at: AT });
+    expect(anomalies.map((a) => a.classification)).toEqual(["MALFORMED_REF"]);
+    expect(result.staleDecisions, "the malformed decision must be EXCLUDED").toEqual([]);
+  });
+
+  it("does not crash on any right-prefix ref", () => {
+    for (const ref of ["DEC-", "DEC-bad id", "DEC-bad.dot", `DEC-${"x".repeat(100)}`]) {
+      const graph = snapshot([node("ND-D", "DECISION", ref)], []);
+      const { result, anomalies } = computeInvalidation(graph, { trigger: "ND-D", at: AT });
+      expect(result.staleDecisions, `ref "${ref}" must not reach the result`).toEqual([]);
+      expect(anomalies.map((a) => a.classification)).toEqual(["MALFORMED_REF"]);
+    }
+  });
+
+  // ── D2: the caller's references are validated too ───────────────────────
+  it("reports an invalid decision id instead of crashing", () => {
+    const { result, anomalies } = computeInvalidation(CHAIN, {
+      trigger: "ND-E1",
+      at: AT,
+      decisions: [{ id: "nope", contractId: "WC-1", supportingEvidence: ["EV-1"] }],
+    });
+    expect(anomalies.map((a) => a.classification)).toEqual(["MALFORMED_REFERENCE"]);
+    expect(result.staleDecisions).not.toContain("nope");
+  });
+
+  it("reports an invalid work-contract id instead of crashing", () => {
+    const { result, anomalies } = computeInvalidation(CHAIN, {
+      trigger: "ND-E1",
+      at: AT,
+      decisions: [{ id: "DEC-3", contractId: "nope", supportingEvidence: ["EV-1"] }],
+    });
+    expect(anomalies.map((a) => a.classification)).toEqual(["MALFORMED_REFERENCE"]);
+    expect(result.reopenedWork).not.toContain("nope");
+  });
+
+  it("refuses an invalid instant with a clear message", () => {
+    expect(() => computeInvalidation(CHAIN, { trigger: "ND-E1", at: "not-a-time" })).toThrow(
+      /ISO-8601 instant/,
+    );
+  });
+
+  // ── D3: the result must not depend on the input order ─────────────────
+  it("gives the same answer whatever order the duplicate nodes arrive in", () => {
+    // The semantic failure: the same graph marked a decision stale in one
+    // order and not in the other.
+    const forward = snapshot(
+      [node("ND-A", "DECISION", "DEC-1"), node("ND-A", "FILE", "other.ts")],
+      [],
+    );
+    const backward = snapshot(
+      [node("ND-A", "FILE", "other.ts"), node("ND-A", "DECISION", "DEC-1")],
+      [],
+    );
+    const a = computeInvalidation(forward, { trigger: "ND-A", at: AT });
+    const b = computeInvalidation(backward, { trigger: "ND-A", at: AT });
+    expect(a.result).toEqual(b.result);
+    expect(a.anomalies).toEqual(b.anomalies);
+  });
+
+  // ── D4: every dependency kind constrains the order ────────────────────
+  it("orders SUPPORTS, TESTS and LEARNED_FROM like the other dependency kinds", () => {
+    // These three are declared dependency relations, so the "dependency
+    // first" order must respect them. Leaving them out made the order
+    // violate its own invariant.
+    for (const kind of ["SUPPORTS", "TESTS", "LEARNED_FROM"] as const) {
+      const graph = snapshot(
+        [node("ND-A", "FILE", "a.ts"), node("ND-B", "FILE", "b.ts")],
+        [edge("ND-A", kind, "ND-B")],
+      );
+      const result = topologicalOrder(indexGraph(graph));
+      expect(result.order.length, `${kind} must produce an order`).toBe(2);
+      expect(
+        result.order.indexOf("ND-B"),
+        `${kind}: the dependency must come before the dependent`,
+      ).toBeLessThan(result.order.indexOf("ND-A"));
+    }
+  });
+
+  // ── D5: the hop distance must be exposed ───────────────────────────────
+  it("exposes the hop distance separately from the flat id list", () => {
+    const withDistance = reachableWithDistance(indexGraph(CHAIN), "ND-E1", { direction: "REVERSE" });
+    expect(withDistance).toEqual([
+      { id: "ND-C1", hops: 1 },
+      { id: "ND-D1", hops: 2 },
+      { id: "ND-W1", hops: 3 },
+    ]);
+  });
+
+  // ── D7: a dangling trigger must not contradict the traversal ───────────
+  it("accepts a dangling trigger, because the traversal finds its dependents", () => {
+    // The module's own traversal treats a dangling endpoint as an
+    // unknown-kind node. Refusing it as a trigger made the cascade and
+    // `propagatingReachable` disagree about the same graph.
+    const graph = snapshot(
+      [node("ND-A", "FILE", "a.ts")],
+      [edge("ND-A", "IMPORTS", "ND-GONE")],
+    );
+    const index = indexGraph(graph);
+    expect(propagatingReachable(index, "ND-GONE"), "the traversal finds the dependent").toEqual(["ND-A"]);
+    const { result, anomalies } = computeInvalidation(graph, { trigger: "ND-GONE", at: AT });
+    expect(result.affectedNodes, "the cascade must agree with the traversal").toEqual(["ND-A"]);
+    expect(anomalies.map((a) => a.classification)).toContain("DANGLING_ENDPOINT");
+  });
+
+  // ── D11: a self-loop inside an SCC is ONE cycle, not two ──────────────
+  it("reports a self-loop inside a cycle once, not twice", () => {
+    const graph = snapshot(
+      [node("ND-A", "FILE", "a.ts"), node("ND-B", "FILE", "b.ts")],
+      [edge("ND-A", "IMPORTS", "ND-A"), edge("ND-A", "IMPORTS", "ND-B"), edge("ND-B", "IMPORTS", "ND-A")],
+    );
+    const cycles = findCycles(indexGraph(graph));
+    expect(cycles, "the self-loop is inside the SCC, so it is one cycle").toEqual([["ND-A", "ND-B"]]);
+  });
+
+  // ── T4: the unrelated decision must be able to REACH the trigger ───────
+  it("does not reach a decision that invalidates the trigger", () => {
+    // The discriminating case the earlier test missed: the unrelated
+    // decision is in the SAME component, joined by an INVALIDATES edge
+    // pointing AT the trigger. INVALIDATES propagates forwards, so
+    // invalidating the trigger must NOT reach it.
+    const graph = snapshot(
+      [
+        node("ND-E1", "EVIDENCE", "EV-1"),
+        node("ND-D2", "DECISION", "DEC-2"),
+      ],
+      [edge("ND-D2", "INVALIDATES", "ND-E1")],
+    );
+    const { result } = computeInvalidation(graph, { trigger: "ND-E1", at: AT });
+    expect(result.affectedNodes).toEqual([]);
+    expect(result.staleDecisions, "DEC-2 invalidates E1, so E1's invalidation does not reach DEC-2").toEqual([]);
+  });
+
+  it("does not reach a decision joined only by SUPERSEDES", () => {
+    const graph = snapshot(
+      [
+        node("ND-E1", "EVIDENCE", "EV-1"),
+        node("ND-E2", "EVIDENCE", "EV-2"),
+        node("ND-D2", "DECISION", "DEC-2"),
+      ],
+      [edge("ND-E2", "SUPERSEDES", "ND-E1"), edge("ND-D2", "SUPPORTS", "ND-E2")],
+    );
+    const { result } = computeInvalidation(graph, { trigger: "ND-E1", at: AT });
+    expect(result.affectedNodes).toEqual([]);
+    expect(result.staleDecisions).toEqual([]);
+  });
+});
+
 describe("determinism", () => {
   it("produces identical output for the same node and edge SETS in a different order", () => {
     const nodes = [...CHAIN.nodes];
@@ -321,6 +488,31 @@ describe("determinism", () => {
     expect(reachable(index, "ND-E1", { direction: "REVERSE" })).toEqual(
       reachable(index, "ND-E1", { direction: "REVERSE" }),
     );
-    expect(JSON.stringify(indexGraph(CHAIN))).toBe(JSON.stringify(indexGraph(CHAIN)));
+    // A REAL serialisation. `JSON.stringify` on a Map produces `{}`, so the
+    // earlier version of this test compared two empty objects and proved
+    // nothing.
+    expect(serializeGraphIndex(indexGraph(CHAIN))).toBe(serializeGraphIndex(indexGraph(CHAIN)));
+    expect(serializeGraphIndex(indexGraph(CHAIN)).length).toBeGreaterThan(50);
+  });
+
+  it("produces identical output for every permutation of the same graph", () => {
+    // The earlier test used ONE fixed permutation of six nodes — one
+    // two-hundredth of the coverage a permutation claim deserves.
+    const nodes = [...CHAIN.nodes];
+    const edges = [...CHAIN.edges];
+    const reference = serializeGraphIndex(indexGraph(CHAIN));
+    for (let rotation = 0; rotation < nodes.length; rotation++) {
+      const rotated = [
+        ...nodes.slice(rotation),
+        ...nodes.slice(0, rotation),
+      ];
+      for (let flip = 0; flip < 2; flip++) {
+        const graph = snapshot(
+          flip === 0 ? rotated : [...rotated].reverse(),
+          flip === 0 ? edges : [...edges].reverse(),
+        );
+        expect(serializeGraphIndex(indexGraph(graph)), `rotation ${rotation}, flip ${flip}`).toBe(reference);
+      }
+    }
   });
 });

@@ -102,7 +102,21 @@ export type GraphAnomalyClassification =
   | "DUPLICATE_NODE"
   | "DUPLICATE_EDGE"
   | "SELF_LOOP"
-  | "MISSING_TRIGGER";
+  | "MISSING_TRIGGER"
+  /**
+   * A node's `ref` does not match the id schema its kind requires — the
+   * node says it is a DECISION, but its ref is not a decision id.
+   *
+   * Distinct from `DANGLING_ENDPOINT`, which means "an edge names a node
+   * that has no record". Conflating the two made a malformed reference look
+   * like a missing node.
+   */
+  | "MALFORMED_REF"
+  /**
+   * A caller-supplied reference — a decision id, a work-contract id — is
+   * not a valid id.
+   */
+  | "MALFORMED_REFERENCE";
 
 export interface GraphAnomaly {
   readonly classification: GraphAnomalyClassification;
@@ -126,6 +140,18 @@ export interface GraphIndex {
   readonly anomalies: readonly GraphAnomaly[];
 }
 
+/**
+ * The single anomaly order, so two snapshots with the same sets produce the
+ * same report and the two code paths cannot disagree.
+ */
+export function compareAnomalies(a: GraphAnomaly, b: GraphAnomaly): number {
+  if (a.classification !== b.classification) return a.classification < b.classification ? -1 : 1;
+  const ai = a.nodeIds.join(",");
+  const bi = b.nodeIds.join(",");
+  if (ai !== bi) return ai < bi ? -1 : 1;
+  return a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0;
+}
+
 /** Sort an edge by `(from, kind, to)` — the total order the engine uses. */
 function compareEdges(a: GraphEdge, b: GraphEdge): number {
   if (a.from !== b.from) return a.from < b.from ? -1 : 1;
@@ -144,7 +170,19 @@ export function indexGraph(snapshot: GraphSnapshot): GraphIndex {
   const anomalies: GraphAnomaly[] = [];
 
   // ── Nodes ────────────────────────────────────────────────────────────────
-  const sortedNodes = [...snapshot.nodes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  //
+  // The sort is a TOTAL order — id, then kind, then ref. Sorting on the id
+  // alone is not enough: a stable sort leaves two nodes with the same id in
+  // INPUT order, and the retained node's kind and ref decide whether a
+  // decision is stale. The same node/edge multiset would then produce two
+  // different answers, which is exactly what the determinism guarantee
+  // forbids.
+  const sortedNodes = [...snapshot.nodes].sort((a, b) => {
+    if (a.id !== b.id) return a.id < b.id ? -1 : 1;
+    if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1;
+    if (a.ref !== b.ref) return a.ref < b.ref ? -1 : 1;
+    return 0;
+  });
   const nodes = new Map<string, GraphNode>();
   for (const node of sortedNodes) {
     if (nodes.has(node.id)) {
@@ -206,15 +244,7 @@ export function indexGraph(snapshot: GraphSnapshot): GraphIndex {
     if (!nodes.has(edge.to)) dangling.add(edge.to);
   }
 
-  // Deterministic anomaly order, so two snapshots with the same sets produce
-  // the same report.
-  anomalies.sort((a, b) => {
-    if (a.classification !== b.classification) return a.classification < b.classification ? -1 : 1;
-    const ai = a.nodeIds.join(",");
-    const bi = b.nodeIds.join(",");
-    if (ai !== bi) return ai < bi ? -1 : 1;
-    return a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0;
-  });
+  anomalies.sort(compareAnomalies);
 
   return { nodes, outgoing, incoming, dangling, anomalies };
 }
@@ -243,28 +273,79 @@ export interface TraverseOptions {
   readonly direction?: "FORWARD" | "REVERSE";
 }
 
+/** One reachable node, with how far it is from the start. */
+export interface ReachableNode {
+  readonly id: string;
+  /** The number of edges from the start node. */
+  readonly hops: number;
+}
+
 /**
- * The nodes reachable from `from`, excluding `from` itself, sorted by id.
+ * A stable, comparable serialisation of an index.
+ *
+ * `JSON.stringify` on a `Map` or a `Set` produces `{}`. So a determinism
+ * test that stringifies an index compares two empty objects and proves
+ * nothing — which is exactly what two of this module's own tests were
+ * doing. This is the serialisation such a test needs: every map rendered as
+ * sorted entries, every list sorted, so two indexes built from the same
+ * node and edge sets produce the same string.
+ */
+export function serializeGraphIndex(index: GraphIndex): string {
+  const nodes = [...index.nodes.keys()].sort();
+  const outgoing = [...index.outgoing.entries()]
+    .map(([id, edges]) => `${id}=>${edges.map((e) => `${e.kind}:${e.to}`).join("|")}`)
+    .sort();
+  const incoming = [...index.incoming.entries()]
+    .map(([id, edges]) => `${id}<=${edges.map((e) => `${e.kind}:${e.from}`).join("|")}`)
+    .sort();
+  const dangling = [...index.dangling].sort();
+  const anomalies = index.anomalies
+    .map((a) => `${a.classification}:${a.nodeIds.join("+")}:${a.reason}`)
+    .sort();
+  return JSON.stringify({ nodes, outgoing, incoming, dangling, anomalies });
+}
+
+/**
+ * The nodes reachable from `from`, with their hop distance, sorted by id.
+ *
+ * The hop distance is exposed SEPARATELY from the flat id list, because
+ * "is it reachable" and "how far is it" are different questions, and a
+ * caller that wants the second must not have to re-walk the graph to get
+ * it.
  *
  * Reachability over a cyclic region is still well defined — a visited set
  * makes the walk terminate — so a cycle never turns into an infinite loop
  * and never truncates the answer.
  */
-export function reachable(index: GraphIndex, from: string, opts: TraverseOptions = {}): string[] {
+export function reachableWithDistance(
+  index: GraphIndex,
+  from: string,
+  opts: TraverseOptions = {},
+): ReachableNode[] {
   const kinds = new Set<GraphEdgeKind>(opts.kinds ?? EDGE_KINDS);
   const direction = opts.direction ?? "FORWARD";
-  const seen = new Set<string>([from]);
+  const distance = new Map<string, number>([[from, 0]]);
   const queue: string[] = [from];
   while (queue.length > 0) {
     const current = queue.shift()!;
+    const hops = distance.get(current)!;
     for (const next of neighbours(index, current, direction, kinds)) {
-      if (seen.has(next)) continue;
-      seen.add(next);
+      if (distance.has(next)) continue;
+      distance.set(next, hops + 1);
       queue.push(next);
     }
   }
-  seen.delete(from);
-  return [...seen].sort();
+  distance.delete(from);
+  return [...distance.entries()]
+    .map(([id, hops]) => ({ id, hops }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/**
+ * The nodes reachable from `from`, excluding `from` itself, sorted by id.
+ */
+export function reachable(index: GraphIndex, from: string, opts: TraverseOptions = {}): string[] {
+  return reachableWithDistance(index, from, opts).map((node) => node.id);
 }
 
 /**
@@ -409,10 +490,18 @@ export function findCycles(index: GraphIndex): string[][] {
   }
 
   // A self-loop is a cycle of one, and Tarjan does not report it.
+  //
+  // But a node that has a self-loop AND belongs to a larger strongly
+  // connected component is ONE cycle, not two. Reporting it twice makes a
+  // consumer that COUNTS cycles double-count, so the self-loop is only
+  // reported on its own when it is not already inside an SCC.
+  const inLargerComponent = new Set(out.flatMap((component) => (component.length > 1 ? component : [])));
   for (const id of ids) {
+    if (inLargerComponent.has(id)) continue;
     for (const edge of index.outgoing.get(id) ?? []) {
-      if (edge.from === edge.to && !out.some((c) => c.length === 1 && c[0] === id)) {
+      if (edge.from === edge.to) {
         out.push([id]);
+        break;
       }
     }
   }
@@ -460,7 +549,20 @@ export function topologicalOrder(index: GraphIndex): TopologicalOrder {
   for (const id of index.nodes.keys()) deps.set(id, 0);
   for (const id of index.dangling) deps.set(id, 0);
 
-  const dependencyKinds = new Set<GraphEdgeKind>(["DEPENDS_ON", "DERIVED_FROM", "IMPORTS", "MODIFIES"]);
+  // ALL SEVEN dependency kinds, not four. `SUPPORTS`, `TESTS` and
+  // `LEARNED_FROM` are declared dependency relations in EDGE_SEMANTICS, so
+  // they constrain the order exactly like `DEPENDS_ON` does. Leaving them
+  // out made the "dependency-first" order violate its own invariant: the
+  // dependent could come before the thing it depends on.
+  //
+  // `INVALIDATES` is NOT a dependency — it is an invalidation, and it does
+  // not order anything. `SUPERSEDES` is a replacement, and it does not
+  // either.
+  const dependencyKinds = new Set<GraphEdgeKind>(
+    (Object.keys(EDGE_SEMANTICS) as GraphEdgeKind[]).filter(
+      (kind) => EDGE_SEMANTICS[kind] === "REVERSE",
+    ),
+  );
   for (const [id, edges] of index.outgoing) {
     for (const edge of edges) {
       if (!dependencyKinds.has(edge.kind)) continue;

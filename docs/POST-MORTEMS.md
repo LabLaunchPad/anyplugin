@@ -264,10 +264,21 @@ resolution convention**, and that convention exists nowhere. It is the one
 piece of design that must be written down before the engine can be built, and
 writing it down is part of the specification:
 
-> For node kinds `EVIDENCE`, `CLAIM`, `DECISION`, `EXPERIENCE` and
-> `WORK_ITEM`, the node's `ref` **is** the record id. For `FILE`, `SYMBOL`,
-> `TEST` and `CONFIG`, `ref` is a path or a symbol. An unmatched `ref` is
-> reported as an **anomaly**, never silently skipped.
+> For node kinds `EVIDENCE`, `DECISION`, `EXPERIENCE` and `WORK_ITEM`, the
+> node's `ref` **is** the record id. For `FILE`, `SYMBOL`, `TEST`, `CONFIG`
+> and `CLAIM`, `ref` is a path, a symbol or a claim key. A `ref` that does
+> not match the id schema its kind requires is reported as an
+> **anomaly**, never silently skipped.
+>
+> **`CLAIM` is in the second list, not the first**, and the reason is worth
+> recording: the kernel has **no CLAIM record type** — `ID_PREFIXES` has no
+> entry for it — so a claim node's `ref` is a claim key, not a typed id.
+>
+> And the `ref` is validated with the **same id schema the result is
+> validated with**, never with a prefix check. `"DEC-bad id"` starts with
+> `"DEC-"` and is not a decision id; a prefix check let it through, and the
+> failure surfaced as an unhandled schema error in the *result* — which is
+> the worst possible place for it.
 
 ### 2.4 Which edges propagate, and in which direction
 
@@ -360,11 +371,13 @@ SDK roadmap that lands in **this** repository (D-047), and it is what makes
 |---|---|
 | `indexGraph(snapshot)` | The indexed form: nodes, outgoing and incoming adjacency, and an **anomaly report** for duplicate nodes, duplicate edges, self-loops and dangling endpoints. The input is never mutated, and the output depends only on the node and edge **sets** — not their order. |
 | `reachable(index, from, opts)` | Multi-hop reachability with a visited set, so a cycle terminates the walk instead of truncating the answer. |
+| `reachableWithDistance(index, from, opts)` | The same walk, with the **hop distance** exposed separately from the flat id list — "is it reachable" and "how far is it" are different questions. |
 | `propagatingReachable(index, from)` | The cascade's walk: `INVALIDATES` forwards, the seven dependency kinds backwards, `SUPERSEDES` never. |
 | `components(index)` | Every connected component, deterministically ordered. No single-root assumption. |
 | `findCycles(index)` | Tarjan's algorithm, iterative, plus every self-loop. |
 | `topologicalOrder(index)` | A dependency-first order — and a **refusal** when a cycle makes the order undefined. A partial order would be a wrong answer presented as right. |
 | `computeInvalidation(snapshot, input)` | The producer `InvalidationResultSchema` never had. It carries the **node→record resolution convention** of §2.3, so the two id spaces finally meet. |
+| `serializeGraphIndex(index)` | A stable, comparable serialisation of an index. `JSON.stringify` on a `Map` produces `{}`, so a determinism test that stringifies an index compares two empty objects and proves nothing — which is exactly what two of this module's own tests were doing. |
 
 **The corpus is the repository's own dependency graph**, built from the
 workspace's real `package.json` files — so a change to a dependency would
@@ -380,6 +393,63 @@ and `REOPENED` **transitions** are the state fold's job — `LEGAL_TRANSITIONS`
 already permits them, and the kernel's rule is that it records and verifies
 and never infers. The *replacement evidence restores validity* half of M6's
 exit condition has no producer yet.
+
+### 2.8 The review of the engine, and what it found
+
+The engine got its own independent adversarial review — the same discipline
+D-038 requires of every change. It ran **experiments**, not readings: a
+brute-force SCC oracle over 5 000 random graphs, 6 000 random graphs through
+the topological order, 200 permutations of the determinism claim, and a fuzz
+that generated schema-valid graphs to see whether the engine crashed.
+
+**What it confirmed.** Tarjan's implementation is **exactly right** — 0
+mismatches against the oracle. The edge-direction table is **exactly** as
+specified, all nine kinds, in both directions. The refusal semantics are
+sound — 0 partial orders in 6 000 graphs. The trigger semantics are
+correct. The anomaly list is deterministic.
+
+**What it found — three P1 merge-blockers:**
+
+| # | The defect | The fix |
+|---|---|---|
+| **D1** | A **schema-valid** graph could crash the cascade. `GraphNodeSchema.ref` is `z.string().min(1)` — any non-empty string — and the engine's check was `startsWith(prefix)`. So `"DEC-bad id"` passed the check and then failed the *result*'s schema with an unhandled `ZodError`. **117 of 4 000** randomly generated schema-valid graphs threw. | The ref is validated with the **same id schema the result is validated with**. A malformed ref is a **`MALFORMED_REF` anomaly** and the record is excluded — reported, never crashed on. |
+| **D2** | The caller's `decisions` and `at` were unvalidated, so a caller could break the schema the engine produces. | The decision and work-contract ids are validated and reported as **`MALFORMED_REFERENCE`**; the instant is validated with a **clear message**, because a result cannot exist without one and there is nothing to exclude. |
+| **D3** | The determinism guarantee was **false** when two nodes shared an id: the sort tie-broke on the id alone, so a stable sort left the tie in *input* order — and the retained node's kind decided whether a decision was stale. The same graph marked a decision stale in one order and not the other. | The node sort is now a **total order** — id, then kind, then ref. |
+
+**And nine more, all fixed:** the topological order ignored three of the
+seven dependency kinds (so its "dependency-first" invariant was inverted for
+them); the hop distance the specification required was **not exposed**; a
+malformed ref was filed under `DANGLING_ENDPOINT`, which means something
+else; a dangling trigger was refused although the module's own traversal
+finds its dependents from it; the corpus covered **4 of the workspace's 8**
+packages and dropped the adapters' edges **silently**, while claiming the
+corpus would move with any dependency change; the engine's most important
+file contained **literal NUL bytes**, so **git treated it as binary** and
+the change was not reviewable; `findCycles` could report a self-loop twice;
+and two of the determinism tests compared `{}` to `{}`, because
+`JSON.stringify` on a `Map` produces `{}`.
+
+**And eight weaknesses in the tests themselves** — the most instructive,
+because the engine's behaviour was *correct* in several of the places the
+tests were weak:
+
+- The duplicate-node test asserted **input-order** behaviour and so
+  **masked D3**.
+- The "unrelated decision stays untouched" test put the unrelated decision
+  in a **disconnected component**, so a "flood the whole component" bug
+  would also have passed. The discriminating cases — same component, joined
+  by an `INVALIDATES` edge pointing *at* the trigger, or by a `SUPERSEDES`
+  edge — are now tested, and the implementation was correct in both.
+- The determinism test used **one fixed permutation** of six nodes, which
+  is one two-hundredth of the coverage a permutation claim deserves. It now
+  runs every rotation, both flips.
+
+**The lesson, and it is the same one as §1.3:** *the class of defect a
+document guard cannot catch is truth.* It applies just as well to a
+**test** guard. A test that asserts the implementation's own output proves
+that the implementation is self-consistent, which is not the same as
+proving it is correct — and a test that compares two empty objects is
+**theatre**.
 
 ---
 

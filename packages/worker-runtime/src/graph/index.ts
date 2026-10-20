@@ -12,6 +12,8 @@ export {
   indexGraph,
   propagatingReachable,
   reachable,
+  reachableWithDistance,
+  serializeGraphIndex,
   topologicalOrder,
   type EdgeDirection,
   type GraphAnomaly,
@@ -21,6 +23,7 @@ export {
   type GraphIndex,
   type GraphNode,
   type GraphNodeKind,
+  type ReachableNode,
   type TopologicalOrder,
   type TraverseOptions,
 } from "./traverse.js";

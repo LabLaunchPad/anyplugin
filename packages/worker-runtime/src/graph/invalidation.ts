@@ -35,9 +35,12 @@
 import {
   CONTRACT_VERSION,
   InvalidationResultSchema,
+  TimestampSchema,
+  idSchema,
   type InvalidationResult,
 } from "../contracts/index.js";
 import {
+  compareAnomalies,
   indexGraph,
   propagatingReachable,
   type GraphAnomaly,
@@ -55,6 +58,23 @@ export const NODE_REF_PREFIX: Partial<Record<GraphNodeKind, string>> = {
   DECISION: "DEC-",
   EXPERIENCE: "EXP-",
   WORK_ITEM: "WC-",
+};
+
+/**
+ * The id schema each record-bearing node kind's `ref` must satisfy.
+ *
+ * A **prefix check is not enough**. `"DEC-bad id"` and `"DEC-` both start
+ * with "DEC-" and both fail the id schema, so a prefix check let them
+ * through and the failure surfaced later as a crash in the result schema —
+ * 3% of randomly generated schema-valid graphs hit it. The ref is
+ * validated with the SAME schema the result is validated with, so a
+ * malformed ref is REPORTED and excluded instead of exploding.
+ */
+export const NODE_REF_SCHEMA: Partial<Record<GraphNodeKind, { safeParse: (v: unknown) => { success: boolean } }>> = {
+  EVIDENCE: idSchema("evidence"),
+  DECISION: idSchema("decision"),
+  EXPERIENCE: idSchema("experience"),
+  WORK_ITEM: idSchema("workContract"),
 };
 
 /** One decision, as far as the cascade needs to know. */
@@ -110,8 +130,23 @@ export function computeInvalidation(
   const index = indexGraph(snapshot);
   const anomalies: GraphAnomaly[] = [...index.anomalies];
 
+  // The instant is a CALLER error, not a graph defect: the result cannot
+  // exist without one, so there is nothing to exclude and nothing to report
+  // an anomaly about. It is validated with a clear message rather than
+  // surfacing later as an opaque schema error.
+  if (!TimestampSchema.safeParse(input.at).success) {
+    throw new Error(
+      `computeInvalidation: the "at" field must be an ISO-8601 instant with an explicit UTC offset (got "${input.at}")`,
+    );
+  }
+
   const trigger = input.trigger;
-  if (!index.nodes.has(trigger)) {
+  // A trigger with no node record is refused — UNLESS it is a DANGLING
+  // ENDPOINT, which the module's own traversal treats as an unknown-kind
+  // node and reports. Refusing it made the cascade and `propagatingReachable`
+  // disagree about the same graph, which is the kind of internal
+  // contradiction that makes a result untrustworthy.
+  if (!index.nodes.has(trigger) && !index.dangling.has(trigger)) {
     anomalies.push({
       classification: "MISSING_TRIGGER",
       reason: `the trigger node "${trigger}" has no node record, so nothing can be affected`,
@@ -126,7 +161,7 @@ export function computeInvalidation(
       reopenedWork: [],
       requiresReverification: [],
     });
-    anomalies.sort((a, b) => (a.classification < b.classification ? -1 : a.classification > b.classification ? 1 : 0));
+    anomalies.sort(compareAnomalies);
     return { result: empty, anomalies };
   }
 
@@ -142,12 +177,12 @@ export function computeInvalidation(
   const collectRef = (id: string): void => {
     const node = index.nodes.get(id);
     if (!node) return;
-    const prefix = NODE_REF_PREFIX[node.kind];
-    if (prefix === undefined) return;
-    if (!node.ref.startsWith(prefix)) {
+    const schema = NODE_REF_SCHEMA[node.kind];
+    if (schema === undefined) return;
+    if (!schema.safeParse(node.ref).success) {
       anomalies.push({
-        classification: "DANGLING_ENDPOINT",
-        reason: `node "${node.id}" is a ${node.kind} but its ref "${node.ref}" does not carry the required "${prefix}" prefix`,
+        classification: "MALFORMED_REF",
+        reason: `node "${node.id}" is a ${node.kind} but its ref "${node.ref}" is not a valid ${NODE_REF_PREFIX[node.kind]} id`,
         nodeIds: [node.id],
       });
       return;
@@ -167,6 +202,25 @@ export function computeInvalidation(
   //       not model as an edge.
   const staleDecisions = new Set<string>(affectedRefs.get("DECISION") ?? []);
   for (const decision of input.decisions ?? []) {
+    // The caller supplies these, and the engine is the PRODUCER of a
+    // schema-conformant result — it must not be the thing that breaks the
+    // schema. An invalid id is reported and the decision excluded.
+    if (!idSchema("decision").safeParse(decision.id).success) {
+      anomalies.push({
+        classification: "MALFORMED_REFERENCE",
+        reason: `decision id "${decision.id}" is not a valid DEC-<slug> id; the decision is excluded`,
+        nodeIds: [],
+      });
+      continue;
+    }
+    if (!idSchema("workContract").safeParse(decision.contractId).success) {
+      anomalies.push({
+        classification: "MALFORMED_REFERENCE",
+        reason: `decision "${decision.id}" names work contract "${decision.contractId}", which is not a valid WC-<slug> id; the decision is excluded`,
+        nodeIds: [],
+      });
+      continue;
+    }
     if (decision.supportingEvidence.some((e) => affectedEvidenceRefs.has(e))) {
       staleDecisions.add(decision.id);
     }
@@ -205,13 +259,7 @@ export function computeInvalidation(
     requiresReverification: [...requiresReverification].sort(),
   });
 
-  anomalies.sort((a, b) => {
-    if (a.classification !== b.classification) return a.classification < b.classification ? -1 : 1;
-    const ai = a.nodeIds.join(",");
-    const bi = b.nodeIds.join(",");
-    if (ai !== bi) return ai < bi ? -1 : 1;
-    return a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0;
-  });
+  anomalies.sort(compareAnomalies);
 
   return { result, anomalies };
 }
