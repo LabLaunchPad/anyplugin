@@ -787,6 +787,19 @@ export interface DelegateOptions extends ExecuteOptions {
   readonly breakers?: Map<string, CircuitBreaker>;
   /** The catalog to route against. */
   readonly catalog: BackendCatalog;
+  /**
+   * The chain-wide deadline, in milliseconds.
+   *
+   * Not the per-attempt timeout: this bounds the WHOLE chain. Without it,
+   * N candidates times a per-attempt timeout is unbounded, and a caller who
+   * asked for a five-second answer could wait for five times that.
+   *
+   * It also bounds each attempt, so a single slow backend cannot overrun the
+   * deadline the whole chain is racing.
+   */
+  readonly budgetMs?: number;
+  /** The chain-wide attempt budget. */
+  readonly maxAttempts?: number;
 }
 
 /**
@@ -821,7 +834,39 @@ export async function delegate(opts: DelegateOptions): Promise<DelegationResult>
   /** Why the chain stopped early, when it did. */
   let chainStopped: string | undefined;
 
+  // The chain-wide budget. `FAIL_POLICY.onBudgetExhausted` is `fail_closed`,
+  // and until now it had no consumer: the constant said "an exhausted deadline
+  // ends the chain", and the chain had no deadline. Without one, N candidates
+  // times a per-attempt timeout is unbounded - a caller who asked for a
+  // five-second answer could wait for five times that.
+  //
+  // The budget is CHAIN-wide, not per attempt, and it bounds the per-attempt
+  // timeout too: an attempt may not overrun the deadline the whole chain is
+  // racing.
+  const deadline = opts.budgetMs === undefined ? undefined : Date.now() + opts.budgetMs;
+
   for (const candidate of decision.candidates) {
+    // The budget gate, before anything is spent.
+    const remaining = deadline === undefined ? undefined : deadline - Date.now();
+    if (
+      (opts.maxAttempts !== undefined && attemptNumber > opts.maxAttempts) ||
+      (remaining !== undefined && remaining <= 0)
+    ) {
+      chainStopped =
+        opts.maxAttempts !== undefined && attemptNumber > opts.maxAttempts
+          ? `the chain-wide attempt budget of ${opts.maxAttempts} was exhausted`
+          : `the chain-wide budget of ${opts.budgetMs}ms was exhausted`;
+      events.push(
+        delegationEvent({
+          type: "BUDGET_EXHAUSTED",
+          backendId: candidate.id,
+          attempt: attemptNumber,
+          at: Date.now(),
+        }),
+      );
+      break;
+    }
+
     // `selectBackend` already recorded the selection of the FIRST candidate.
     // Recording it again here would double-count it in the telemetry, so only
     // a genuine move to another backend emits an event.
@@ -861,7 +906,17 @@ export async function delegate(opts: DelegateOptions): Promise<DelegationResult>
       }
     }
 
-    const outcome = await executeBackend(candidate, opts.args ?? [], { ...opts, attempt: attemptNumber });
+    // The attempt may not outlive the chain's own budget: an attempt that
+    // overruns the deadline the whole chain is racing defeats the deadline.
+    const attemptTimeout =
+      remaining === undefined
+        ? opts.timeoutMs
+        : Math.min(opts.timeoutMs ?? Number.MAX_SAFE_INTEGER, remaining);
+    const outcome = await executeBackend(candidate, opts.args ?? [], {
+      ...opts,
+      attempt: attemptNumber,
+      timeoutMs: attemptTimeout,
+    });
     attempts.push(outcome);
     events.push(...outcome.events);
 

@@ -53,10 +53,11 @@ commands:
                                       list the declared delegation backends, or probe them for
                                       availability (a probe never runs the real work)
   anyplugin delegate [--backend ID] [--capability CAP] [--domain DOM] [--registry FILE]
-                                      [--timeout MS] [--re-runnable] [--json] -- [ARGS...]
+                                      [--timeout MS] [--budget MS] [--re-runnable] [--json] -- [ARGS...]
                                       run a request through the wrapper: capability-matched
                                       routing, safe spawn (never a shell), deadline, output cap,
                                       and a classified failure for every attempt
+                                      --budget MS bounds the WHOLE chain, not one attempt
                                       --re-runnable asserts the task is safe to repeat, which
                                       permits a fallback after a failed attempt; without it a
                                       failed attempt is never retried on another backend,
@@ -96,6 +97,7 @@ interface ParsedFlags {
   fix?: boolean;
   "include-root"?: boolean;
   "re-runnable"?: boolean;
+  budget?: string;
   registry?: string;
   backend?: string;
   capability?: string;
@@ -612,6 +614,22 @@ async function runDelegate(values: ParsedFlags, positionals: string[]): Promise<
     timeoutMs = parsed;
   }
 
+  // The chain-wide budget. Same discipline as the timeout: `Number("abc")`
+  // is NaN, and a NaN deadline compares false against everything, so an
+  // unvalidated budget would be a budget that never fires.
+  let budgetMs: number | undefined;
+  if (values.budget !== undefined) {
+    const parsed = Number(values.budget);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      const message = `anyplugin delegate: --budget must be a positive number of milliseconds (got ${JSON.stringify(values.budget)})`;
+      if (values.json) console.log(JSON.stringify({ command: "delegate", error: message }, null, 2));
+      else console.error(message);
+      process.exitCode = 4; // invalid input
+      return;
+    }
+    budgetMs = parsed;
+  }
+
   const result = await delegate({
     catalog: loaded.catalog,
     args: backendArgs,
@@ -621,6 +639,7 @@ async function runDelegate(values: ParsedFlags, positionals: string[]): Promise<
       ...(values.domain ? { domain: values.domain } : {}),
     },
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(budgetMs !== undefined ? { budgetMs } : {}),
     ...(values["re-runnable"] === true ? { reRunnable: true } : {}),
   });
 

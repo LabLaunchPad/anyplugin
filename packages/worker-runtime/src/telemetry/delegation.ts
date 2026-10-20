@@ -53,6 +53,15 @@ export const DELEGATION_EVENT_TYPES = [
   "CIRCUIT_CLOSED",
   /** A backend's circuit entered half-open: one trial attempt is allowed. */
   "CIRCUIT_HALF_OPEN",
+  /**
+   * The chain's own budget — a deadline or an attempt count — ran out.
+   *
+   * Not a backend failure: no backend did anything wrong. The chain stopped
+   * because continuing would have exceeded the caller's budget, and
+   * `FAIL_POLICY.onBudgetExhausted` is `fail_closed` for exactly that
+   * reason: continuing guarantees lateness.
+   */
+  "BUDGET_EXHAUSTED",
 ] as const;
 
 export type DelegationEventType = (typeof DELEGATION_EVENT_TYPES)[number];

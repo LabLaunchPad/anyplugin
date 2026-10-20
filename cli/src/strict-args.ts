@@ -82,6 +82,7 @@ export const CommandArgs = {
       capability: z.string().optional(),
       domain: z.string().optional(),
       timeout: z.string().optional(),
+      budget: z.string().optional(),
       "re-runnable": flag.optional(),
       json: flag.optional(),
     })
@@ -131,6 +132,7 @@ const ALL_OPTIONS = [
   "capability",
   "domain",
   "timeout",
+  "budget",
   "include-root",
   "re-runnable",
   "hookId",
