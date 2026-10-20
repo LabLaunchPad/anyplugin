@@ -270,17 +270,34 @@ is wrong and more damage is likely.
 
 ## 11. Where each rule is enforced
 
-| Rule | Enforced by | Test |
-|---|---|---|
-| The failure taxonomy and its behaviours | `packages/worker-runtime/src/telemetry/delegation.ts` | `delegation.test.ts` |
-| Classification ignores a bare exit code | `classifyAttempt()` | `delegation.test.ts`, `cli/src/delegate.test.ts` |
-| Fallback is illegal after a commit | `fallbackLegal()` / `canFallback()` | `delegation.test.ts` |
-| Half-open admits exactly one trial | `CircuitBreaker.canAttempt()` | `delegation.test.ts` |
-| The two fail-policy axes | `FAIL_POLICY` | `delegation.test.ts` |
-| Never a shell | `cli/src/delegate.ts` (`spawn`, `shell: false`) | `cli/src/delegate.test.ts` |
-| A deadline and an output cap | `cli/src/delegate.ts` | `cli/src/delegate.test.ts` |
-| The environment is an allowlist | `childEnv()` | `cli/src/delegate.test.ts` |
-| Install rollback | `cli/src/transaction.ts` | `cli/src/install-transactional-audit.test.ts` |
-| The journal is never guessed at | `cli/src/journal.ts` | `cli/src/journal-validation-audit.test.ts`, `cli/src/journal-migration-audit.test.ts` |
-| The runtime policy file | `core/src/events/index.ts` | `plugins/knowledge/runtime/runner-*-audit.test.ts` |
-| Replay accounts for every byte | `packages/worker-runtime/src/log/replay.ts` | `packages/worker-runtime/src/log/*.test.ts` |
+**A rule is only enforced where it is *exercised*.** A unit test on the
+module that *defines* a rule proves the rule is self-consistent; it does not
+prove anything is *using* it. So every row names three things: the module
+that defines the rule, the **live consumer** that uses it in production, and
+the tests that touch both.
+
+The "Live consumer" column exists because of a real finding. The row for
+*"Fallback is illegal after a commit"* pointed only at
+`packages/worker-runtime/src/telemetry/delegation.test.ts` — a unit test on the kernel's rule — while the rule's
+only production consumer, `cli/src/delegate.ts`, passed the rule a
+**constant**. The rule was correct, tested, and **inert**: the chain could
+never close. A table that names only the definition cannot see that.
+
+`core/src/boundaries/enforcement-table.test.ts` checks this table
+mechanically: every named test must exist, and every row's live consumer must
+be touched by at least one of its named tests.
+
+| Rule | Enforced by | Live consumer | Test |
+|---|---|---|---|
+| The failure taxonomy and its behaviours | `packages/worker-runtime/src/telemetry/delegation.ts` | `cli/src/delegate.ts` | `packages/worker-runtime/src/telemetry/delegation.test.ts`, `cli/src/delegate.test.ts` |
+| Classification ignores a bare exit code | `classifyAttempt()` | `cli/src/delegate.ts` | `packages/worker-runtime/src/telemetry/delegation.test.ts`, `cli/src/delegate.test.ts` |
+| Fallback is illegal after a commit | `fallbackLegal()` / `canFallback()` | `cli/src/delegate.ts` | `packages/worker-runtime/src/telemetry/delegation.test.ts`, `cli/src/delegate-fallback-audit.test.ts` |
+| Half-open admits exactly one trial | `CircuitBreaker.canAttempt()` | `cli/src/delegate.ts` | `packages/worker-runtime/src/telemetry/delegation.test.ts`, `cli/src/delegate.test.ts` |
+| The two fail-policy axes | `FAIL_POLICY` | `cli/src/delegate.ts` | `packages/worker-runtime/src/telemetry/delegation.test.ts`, `cli/src/delegate.test.ts` |
+| Never a shell | `cli/src/delegate.ts` (`spawn`, `shell: false`) | `cli/src/delegate.ts` | `cli/src/delegate.test.ts` |
+| A deadline and an output cap | `cli/src/delegate.ts` | `cli/src/delegate.ts` | `cli/src/delegate.test.ts` |
+| The environment is an allowlist | `childEnv()` | `cli/src/delegate.ts` | `cli/src/delegate.test.ts` |
+| Install rollback | `cli/src/transaction.ts` | `cli/src/index.ts` | `cli/src/install-transactional-audit.test.ts` |
+| The journal is never guessed at | `cli/src/journal.ts` | `cli/src/index.ts` | `cli/src/journal-validation-audit.test.ts`, `cli/src/journal-migration-audit.test.ts`, `cli/src/install-transactional-audit.test.ts` |
+| The runtime policy file | `core/src/events/index.ts` | `plugins/knowledge/runtime/runner.js` | `plugins/knowledge/runtime/runner-*-audit.test.ts` |
+| Replay accounts for every byte | `packages/worker-runtime/src/log/replay.ts` | `packages/worker-runtime/src/log/event-log.ts` | `packages/worker-runtime/src/log/*.test.ts` |

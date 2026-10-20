@@ -152,3 +152,36 @@ _None known._
 **A row may not be added without a classification and a "correct behaviour
 today" column.** A backlog entry that does not say what the system does now
 is a wish list, not a backlog.
+
+### 6.1 The expected-failure convention
+
+A BUG's definition of done is *"a regression test exists that fails without
+the fix"*. So a red test is **expected** for an open bug — which needs a
+convention, because without one a deliberately-red test and an
+accidentally-red test are indistinguishable, and the obvious response to a
+red test (merge it) breaks CI.
+
+**The convention.** A test for an open bug is written with vitest's
+`it.fails`, and its name carries the backlog id in square brackets:
+
+```ts
+it.fails("the delegation telemetry is persisted [P1-14]", () => {
+  // ...the behaviour the bug says is missing
+});
+```
+
+`it.fails` is a **tripwire**, not a suppression. The test still runs and the
+suite stays green — but the moment the bug is fixed, the tripwire fires and
+says so. The red test becomes the thing that tells you to delete it.
+
+**It is mechanically checked.** `core/src/boundaries/expected-failure.test.ts`
+requires every expected-failure test's name to carry a backlog id, and it
+distinguishes **ARMED** (the convention is declared, nothing uses it) from
+**PASSED** — because a guard whose target is absent has not been exercised,
+and calling that "passed" would manufacture confidence.
+
+**Why this matters, in one line:** `cli/src/delegate.test.ts` once asserted
+`outcome.fallbackLegal === true` after a timeout, with a comment explaining
+why the *defect* was correct behaviour. A red test that is allowed to be
+red is a test that reports the truth; a green test that asserts a bug is a
+test that hides it.
