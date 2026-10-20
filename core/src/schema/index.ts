@@ -35,16 +35,42 @@ export const HookSchema = z.object({
 }).strict();
 export type Hook = z.infer<typeof HookSchema>;
 
-export const McpServerSchema = z.object({
-  transport: z.enum(["stdio", "http"]).default("stdio"),
-  command: z.string().optional(),
-  args: z.array(z.string()).default([]),
-  env: z.record(z.string(), z.string()).default({}),
-  cwd: z.string().optional(),
-  url: z.string().optional(),
-  headers: z.record(z.string(), z.string()).default({}),
-  timeoutMs: z.number().int().positive().optional(),
-}).strict();
+export const McpServerSchema = z
+  .object({
+    transport: z.enum(["stdio", "http"]).default("stdio"),
+    command: z.string().optional(),
+    args: z.array(z.string()).default([]),
+    env: z.record(z.string(), z.string()).default({}),
+    cwd: z.string().optional(),
+    url: z.string().optional(),
+    headers: z.record(z.string(), z.string()).default({}),
+    timeoutMs: z.number().int().positive().optional(),
+  })
+  .strict()
+  .superRefine((server, ctx) => {
+    // The transport decides WHICH fields are meaningful, so a server that
+    // does not carry them is not a server — it is a config that would emit a
+    // broken native artifact. The adapters branch on `transport` exactly
+    // here, so an http server with no url emits a `.mcp.json` that points at
+    // nothing.
+    if (server.transport === "http") {
+      if (!server.url) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["url"],
+          message: "an http MCP server must name a url",
+        });
+      }
+      return;
+    }
+    if (!server.command) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["command"],
+        message: "a stdio MCP server must name a command",
+      });
+    }
+  });
 export type McpServer = z.infer<typeof McpServerSchema>;
 
 /**
