@@ -113,54 +113,25 @@ export function normalizePayload(
   };
 }
 
-/** Translate a canonical HookResult into platform-native stdout JSON + exit code. */
-export function toPlatformOutput(
-  platform: AgentId | "unknown",
-  result: HookResult,
-): { stdout: string | undefined; exitCode: number } {
-  if (result.raw !== undefined) {
-    return { stdout: JSON.stringify(result.raw), exitCode: result.block ? 2 : 0 };
-  }
-  const out: Record<string, unknown> = {};
-  if (result.systemMessage) out["systemMessage"] = result.systemMessage;
-  if (result.additionalContext) {
-    if (platform === "antigravity") {
-      // PostInvocation injectSteps (camelCase protocol)
-      out["injectSteps"] = [{ type: "userMessage", content: result.additionalContext }];
-    } else {
-      out["hookSpecificOutput"] = { additionalContext: result.additionalContext };
-    }
-  }
-  if (result.permissionDecision) {
-    if (platform === "antigravity") {
-      out["decision"] = result.permissionDecision;
-    } else if (platform === "codex") {
-      out["hookSpecificOutput"] = {
-        ...(out["hookSpecificOutput"] as object | undefined),
-        permissionDecision: result.permissionDecision,
-        ...(result.reason ? { permissionDecisionReason: result.reason } : {}),
-      };
-    } else {
-      out["hookSpecificOutput"] = {
-        ...(out["hookSpecificOutput"] as object | undefined),
-        permissionDecision: result.permissionDecision,
-        ...(result.reason ? { permissionDecisionReason: result.reason } : {}),
-      };
-    }
-  }
-  if (result.block) {
-    if (platform === "antigravity") {
-      out["decision"] = "deny";
-      if (result.reason) out["reason"] = result.reason;
-    } else {
-      out["decision"] = "block";
-      if (result.reason) out["reason"] = result.reason;
-    }
-    return { stdout: Object.keys(out).length ? JSON.stringify(out) : undefined, exitCode: 2 };
-  }
-  return { stdout: Object.keys(out).length ? JSON.stringify(out) : undefined, exitCode: 0 };
-}
-
+/**
+ * There is deliberately NO `toPlatformOutput()` here.
+ *
+ * The `HookResult` -> platform-native stdout + exit code translation is
+ * implemented ONCE, in `plugins/knowledge/runtime/runner.js` - and the
+ * runner is the correct one: `raw` is a FALLBACK (never a short-circuit that
+ * discards `additionalContext` or `permissionDecision`), and Antigravity
+ * denies via `decision: "deny"` with exit 0, because that is its protocol.
+ *
+ * This file used to carry a second implementation with the OPPOSITE rules.
+ * It had zero callers, and it was a trap: a function whose only job is to
+ * produce platform output, one import away from being used, and wrong when
+ * used.
+ *
+ * The duplication was structural, not accidental. The runner is
+ * dependency-free JavaScript that ships standalone - it cannot import the
+ * TypeScript core - so the runner is the single implementation and the
+ * second copy has to go. See `docs/BACKLOG.md` P1-1.
+ */
 /** Build the cross-platform hook command line every adapter emits. */
 export function hookCommand(runtimeJs: string, hook: Hook): { command: string; args: string[] } {
   return {
