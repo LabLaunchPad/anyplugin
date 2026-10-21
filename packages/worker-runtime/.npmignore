@@ -1,0 +1,10 @@
+# The compiled tests. They must be TYPE-CHECKED - "pnpm build" is the
+# typecheck and there is no separate linter - but they must not be INSTALLED.
+dist/**/*.test.js
+dist/**/*.test.js.map
+dist/**/*.test.d.ts
+dist/**/*.test.d.ts.map
+
+# Build bookkeeping.
+tsconfig.tsbuildinfo
+*.tsbuildinfo

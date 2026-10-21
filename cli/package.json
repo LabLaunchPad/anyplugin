@@ -1,15 +1,46 @@
 {
   "name": "@lablaunchpad/cli",
   "version": "0.1.1",
-  "description": "anyplugin — agent-agnostic plugin development by Lab LaunchPad: detect agents, build one plugin, install it natively into every coding agent",
+  "description": "anyplugin — agent-agnostic plugin development by Lab LaunchPad: detect agents, build one plugin, install it natively into every coding agent.",
+  "license": "MIT",
+  "author": {
+    "name": "Rahul Paul",
+    "url": "https://github.com/LabLaunchPad"
+  },
+  "homepage": "https://github.com/LabLaunchPad/anyplugin/tree/main/cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LabLaunchPad/anyplugin.git",
+    "directory": "cli"
+  },
+  "bugs": {
+    "url": "https://github.com/LabLaunchPad/anyplugin/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
     "anyplugin": "./dist/bin.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.js.map",
+    "!dist/**/*.test.d.ts",
+    "!dist/**/*.test.d.ts.map"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepack": "pnpm build"
   },
   "dependencies": {
     "@lablaunchpad/core": "workspace:*",

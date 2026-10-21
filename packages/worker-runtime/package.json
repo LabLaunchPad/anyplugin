@@ -1,15 +1,47 @@
 {
   "name": "@lablaunchpad/worker-runtime",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Deterministic worker runtime kernel: contracts, state, evidence, decisions, experience, verification. Agent-agnostic — depends on no agent, no adapter, and no AnyPlugin package.",
+  "license": "MIT",
+  "author": {
+    "name": "Rahul Paul",
+    "url": "https://github.com/LabLaunchPad"
+  },
+  "homepage": "https://github.com/LabLaunchPad/anyplugin/tree/main/packages/worker-runtime#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LabLaunchPad/anyplugin.git",
+    "directory": "packages/worker-runtime"
+  },
+  "bugs": {
+    "url": "https://github.com/LabLaunchPad/anyplugin/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "schemas",
+    "README.md",
+    "LICENSE",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.js.map",
+    "!dist/**/*.test.d.ts",
+    "!dist/**/*.test.d.ts.map"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepack": "pnpm build"
   },
   "engines": {
     "node": ">=20"
