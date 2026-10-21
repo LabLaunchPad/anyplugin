@@ -89,7 +89,13 @@ export const CommandArgs = {
     .strict(),
   run: z
     .object({
-      hookId: z.string({ error: "run requires hook-id argument" }),
+      // The hook id is a POSITIONAL — `anyplugin run <hook-id>` — and it may
+      // also be given as a flag. Node's parseArgs puts a bare word in
+      // `positionals` and NEVER in `values`, so a required string option
+      // could never be satisfied by the documented form: `run` always failed
+      // with "run requires hook-id argument". The value is filled in from
+      // the positional below, and the requirement is re-checked there.
+      hookId: z.string().optional(),
       plugin: dir.optional(),
       event: z.string().optional(),
       payload: z.string().optional(),
@@ -168,6 +174,9 @@ const POSITIONAL_POLICY: Record<string, PositionalPolicy> = {
   "okf-reindex": "at-most-one",
   // `backends list` / `backends probe` — the subcommand is the positional.
   backends: "at-most-one",
+  // `run <hook-id>` — the hook id is the positional, exactly as it is for
+  // `node runner.js <hook-id>`.
+  run: "at-most-one",
   // `delegate -- <args>` — everything after `--` is the BACKEND's argv, and
   // it is the payload rather than a silent no-op.
   delegate: "any",
@@ -191,11 +200,6 @@ export function parseCliArgv<T extends CommandName>(argv: string[]): ParsedComma
   } catch (err) {
     throw new Error(`invalid arguments for ${String(command)}: ${(err as Error).message}`);
   }
-  const checked = schema.safeParse(parsed.values);
-  if (!checked.success) {
-    const issues = checked.error.issues.map((i: z.ZodIssue) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
-    throw new Error(`invalid arguments for ${String(command)}: ${issues}`);
-  }
   // Positionals are part of the contract too: silently ignoring them (e.g.
   // `build my-plugin` instead of `build --plugin my-plugin`) is a silent no-op.
   const policy = POSITIONAL_POLICY[command] ?? "none";
@@ -205,5 +209,23 @@ export function parseCliArgv<T extends CommandName>(argv: string[]): ParsedComma
   if (policy === "none" && parsed.positionals.length > 0) {
     throw new Error(`invalid arguments for ${String(command)}: this command takes no positional arguments (got: ${parsed.positionals.join(" ")}) — use flags, see anyplugin help`);
   }
+
+  // `run <hook-id>` — the hook id is the POSITIONAL, and it is filled in
+  // BEFORE the schema is checked, because a schema cannot require a value
+  // that arrives as a positional.
+  const values: Record<string, unknown> = { ...(parsed.values as Record<string, unknown>) };
+  if (command === "run") {
+    if (parsed.positionals.length > 0) values["hookId"] = parsed.positionals[0];
+    if (typeof values["hookId"] !== "string" || values["hookId"] === "") {
+      throw new Error("invalid arguments for run: run requires hook-id argument");
+    }
+  }
+
+  const checked = schema.safeParse(values);
+  if (!checked.success) {
+    const issues = checked.error.issues.map((i: z.ZodIssue) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
+    throw new Error(`invalid arguments for ${String(command)}: ${issues}`);
+  }
+
   return { command, values: checked.data as z.infer<(typeof CommandArgs)[T]>, positionals: parsed.positionals };
 }

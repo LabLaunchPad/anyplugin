@@ -55,6 +55,7 @@ import {
 } from "./transaction.js";
 import { join, dirname, resolve, parse } from "node:path";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 import { lstat, realpath, readdir } from "node:fs/promises";
 
 /**
@@ -436,9 +437,44 @@ export interface ScaffoldResult {
   files: string[];
 }
 
-/** Location of the bundled starter template (repo layout: templates/starter). */
+/**
+ * The CLI package's own root — `cli/` in the repository, and
+ * `node_modules/@lablaunchpad/cli/` in an installed package.
+ */
+const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+/** The repository root — two levels up from the package root. */
+const REPOSITORY_ROOT = resolve(PACKAGE_ROOT, "..", "..");
+
+/** The first of these paths that exists. */
+function firstExisting(...candidates: readonly string[]): string | undefined {
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/**
+ * Location of the bundled starter template.
+ *
+ * TWO candidates, and the order matters. In an installed package the
+ * template is staged INSIDE the package, so the package-local path wins.
+ * In the repository it is at the repository root, so that is the fallback.
+ *
+ * The old code walked two directories up unconditionally, which works in
+ * the repository and fails in the tarball — and a package that installs and
+ * then cannot scaffold is worse than one that does not install.
+ */
 function starterTemplateDir(): string {
-  return resolve(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "templates", "starter"));
+  const found = firstExisting(
+    resolve(PACKAGE_ROOT, "templates", "starter"),
+    resolve(REPOSITORY_ROOT, "templates", "starter"),
+  );
+  if (!found) {
+    throw new Error(
+      `starter template not found: looked in ${resolve(PACKAGE_ROOT, "templates", "starter")} and ${resolve(REPOSITORY_ROOT, "templates", "starter")}`,
+    );
+  }
+  return found;
 }
 
 async function listFilesRecursive(dir: string, base = dir, out: string[] = []): Promise<string[]> {

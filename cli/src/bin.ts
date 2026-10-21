@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { homedir, tmpdir, hostname } from "node:os";
 import { join, resolve, dirname } from "node:path";
-import { statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
@@ -970,9 +970,44 @@ function requireDir(absPath: string, what: string): string {
   return absPath;
 }
 
+/**
+ * The CLI package's own root — `cli/` in the repository, and
+ * `node_modules/@lablaunchpad/cli/` in an installed package.
+ */
+const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+/** The repository root — two levels up from the package root. */
+const REPOSITORY_ROOT = resolve(PACKAGE_ROOT, "..", "..");
+
+/** The first of these paths that exists. */
+function firstExisting(...candidates: readonly string[]): string | undefined {
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/**
+ * Default: the anyplugin-knowledge plugin's self-contained runner.
+ *
+ * TWO candidates, and the order matters. In an installed package the
+ * dependency-free runtime is staged INSIDE the package, so the package-local
+ * path wins. In the repository it lives with the plugin that owns it.
+ *
+ * The old code walked two directories up unconditionally, which works in the
+ * repository and fails in the tarball — where `build` then dies with a
+ * missing runner, and `install` with it.
+ */
 function defaultRunnerPath(): string {
-  // Default: the anyplugin-knowledge plugin's self-contained runner.
-  return resolve(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "plugins", "knowledge", "runtime", "runner.js"));
+  const found = firstExisting(
+    resolve(PACKAGE_ROOT, "runtime", "runner.js"),
+    resolve(REPOSITORY_ROOT, "plugins", "knowledge", "runtime", "runner.js"),
+  );
+  if (!found) {
+    throw new Error(
+      `hook runtime not found: looked in ${resolve(PACKAGE_ROOT, "runtime", "runner.js")} and ${resolve(REPOSITORY_ROOT, "plugins", "knowledge", "runtime", "runner.js")}`,
+    );
+  }
+  return found;
 }
 
 async function detectInstalledAgentsSafe(home: string): Promise<string[]> {

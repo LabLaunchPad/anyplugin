@@ -326,6 +326,22 @@ describe("publish readiness", () => {
     expect(unhandled, `unhandled publishable packages: ${unhandled.join(", ")}`).toEqual([]);
   });
 
+  it("every tarball rule can fail", () => {
+    // A rule that has never rejected anything is a rule nobody has seen
+    // work — and one of them WAS dead: the source-leak rule checked for a
+    // `package/` prefix that the code had already stripped, so it could
+    // never fire, and nothing said so.
+    //
+    // The release tool fires each rule against a tarball that breaks
+    // exactly that rule, and the expected problem must appear.
+    const out = execFileSync(process.execPath, [RELEASE_TOOL, "--self-test"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    expect(out).toMatch(/all \d+ tarball rules fire/);
+    expect(out).not.toMatch(/SILENT/);
+  });
+
   it("the guard CAN fail", () => {
     // A guard nobody has seen reject anything is a guard nobody has seen
     // work. A deliberately broken manifest must be rejected by the same

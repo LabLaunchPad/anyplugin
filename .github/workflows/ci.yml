@@ -44,6 +44,33 @@ jobs:
             plugins/knowledge/plugin
             knowledge
 
+  # The PUBLISHED artifact, executed.
+  #
+  # Every other check in this repository inspects BYTES: the manifest's
+  # shape, the tarball's file list, whether an entry point is present. And
+  # every one of them passed for a release whose `init`, `build` and
+  # `install` all failed — because the CLI reached two assets by walking
+  # two directories up, which is the repository root and not the installed
+  # package.
+  #
+  # So this job installs the packed tarballs into a directory OUTSIDE the
+  # repository, with no workspace and no local links, and runs the commands
+  # a consumer runs. It is the only check here that can fail for a reason
+  # a consumer would recognise.
+  published-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install the published tarballs outside the repository and run them
+        run: node scripts/verify-published.mjs
+
   # engines: node >=20 applies to what users RUN inside agents: the emitted
   # hook runner and MCP server are dependency-free, so verify them on Node 20
   # with plain node (no package manager involved).

@@ -51,3 +51,9 @@ research/reports/raw/
 # Anchored to the repository root only: a nested .worker-runtime/ inside a test
 # fixture would be a deliberate fixture and must not be silently ignored.
 /.worker-runtime/
+
+# The CLI's staged publish assets. They are copied out of the repository by
+# scripts/stage-cli-assets.mjs at pack time, and they are BUILD ARTEFACTS:
+# the source of truth is templates/starter and plugins/knowledge/runtime.
+cli/templates/
+cli/runtime/

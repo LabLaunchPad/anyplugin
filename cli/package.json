@@ -25,6 +25,8 @@
   "files": [
     "dist",
     "README.md",
+    "runtime",
+    "templates",
     "LICENSE",
     "!dist/**/*.test.js",
     "!dist/**/*.test.js.map",
@@ -40,7 +42,7 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "prepack": "pnpm build"
+    "prepack": "node ../scripts/stage-cli-assets.mjs && pnpm build"
   },
   "dependencies": {
     "@lablaunchpad/core": "workspace:*",

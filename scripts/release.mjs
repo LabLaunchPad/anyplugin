@@ -144,11 +144,43 @@ function readFromTarball(tgz, path) {
   }
 }
 
+/**
+ * What each package's tarball MUST contain.
+ *
+ * The CLI's list is longer because the CLI needs two assets that live
+ * outside it in the repository: the starter template, and the
+ * dependency-free hook runtime. A published CLI without them installs
+ * cleanly and then cannot `init`, `build` or `install` — which is the
+ * exact failure the end-to-end check exists to catch.
+ */
+const REQUIRED_IN_TARBALL = {
+  cli: [
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/bin.js",
+    "README.md",
+    "LICENSE",
+    "templates/starter/anyplugin.plugin.yaml",
+    "runtime/runner.js",
+    "runtime/mcp-server.js",
+    "runtime/yaml-lite.js",
+  ],
+};
+
 /* ── inspecting what a package would ship ────────────────────────────────── */
 
-/** What a tarball must never contain. */
+/**
+ * What a tarball must never contain.
+ *
+ * The names are RELATIVE to the package root — the `package/` prefix has
+ * already been stripped. The first version of the `source` rule checked
+ * for the prefix as well, so it could never fire: the rule was looking for
+ * a name that the code had just removed. It was dead, and nothing said so.
+ *
+ * The self-test below is what found it.
+ */
 const LEAKS = {
-  source: (f) => f.startsWith("package/src/"),
+  source: (f) => f.startsWith("src/"),
   compiledTest: (f) => f.includes(".test."),
   buildBookkeeping: (f) => f.includes("tsbuildinfo"),
   typescriptSource: (f) => f.endsWith(".ts") && !f.endsWith(".d.ts"),
@@ -179,7 +211,7 @@ function tarballProblems(packed) {
     }
   }
 
-  for (const required of ["dist/index.js", "dist/index.d.ts", "README.md", "LICENSE"]) {
+  for (const required of REQUIRED_IN_TARBALL[packed.dir] ?? ["dist/index.js", "dist/index.d.ts", "README.md", "LICENSE"]) {
     if (!files.includes(required)) problems.push(`${packed.dir}: the tarball is missing ${required}`);
   }
 
@@ -363,6 +395,11 @@ function checkRelease() {
 
     const packed = inspect(pkg.dir);
     problems.push(...tarballProblems(packed));
+    // What was inspected, not just that it was clean. A check that reports
+    // only "no problems" leaves the reader with nothing to weigh.
+    notes.push(
+      `${pkg.name}@${manifest.version} — ${packed.files.length} files, ${packed.filename}`,
+    );
 
     // The dependency ORDER, enforced by index.
     for (const [dep, spec] of Object.entries(manifest.dependencies ?? {})) {
@@ -465,6 +502,85 @@ function publishAll({ tag, allowUnprovenanced }) {
   return { landed, skipped, failed };
 }
 
+/**
+ * The tarball rules, proved to be able to fail.
+ *
+ * Every rule here protects a consumer, and every one of them passed for a
+ * release whose `init`, `build` and `install` all failed. A rule that has
+ * never rejected anything is a rule nobody has seen work — so each one is
+ * fired against a tarball that breaks exactly that rule, and the expected
+ * problem must appear.
+ *
+ * It is cheap because it never packs anything: the rules take the tarball's
+ * file list and its manifest, and both can be constructed.
+ */
+function selfTest() {
+  const cases = [];
+  const good = {
+    dir: "example",
+    files: [
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/README.md",
+      "package/LICENSE",
+    ],
+    manifest: {
+      main: "./dist/index.js",
+      types: "./dist/index.d.ts",
+      exports: { ".": { types: "./dist/index.d.ts", default: "./dist/index.js" } },
+      dependencies: {},
+    },
+  };
+
+  const expectProblem = (name, packed, pattern) => {
+    const problems = tarballProblems(packed);
+    const fired = problems.some((p) => pattern.test(p));
+    cases.push({ name, fired, problems });
+  };
+
+  // A clean tarball has no problems.
+  cases.push({ name: "a clean tarball has no problems", fired: tarballProblems(good).length === 0, problems: tarballProblems(good) });
+
+  // The rule that protects the consumer's first import.
+  expectProblem(
+    "an entry point that is not in the tarball",
+    { ...good, manifest: { ...good.manifest, main: "./dist/DOES_NOT_EXIST.js" } },
+    /not in the tarball/,
+  );
+
+  // The rule that protects a consumer from a workspace spec.
+  expectProblem(
+    "a workspace spec in the published manifest",
+    { ...good, manifest: { ...good.manifest, dependencies: { "@lablaunchpad/core": "workspace:*" } } },
+    /workspace spec/,
+  );
+
+  // The rules that keep source out of the tarball.
+  expectProblem("source in the tarball", { ...good, files: [...good.files, "package/src/index.ts"] }, /source/);
+  expectProblem("a compiled test in the tarball", { ...good, files: [...good.files, "package/dist/index.test.js"] }, /compiledTest/);
+  expectProblem("build bookkeeping in the tarball", { ...good, files: [...good.files, "package/tsconfig.tsbuildinfo"] }, /buildBookkeeping/);
+
+  // A missing required file.
+  expectProblem("a required file missing", { ...good, files: good.files.slice(0, 2) }, /missing/);
+
+  // An empty tarball.
+  expectProblem("an empty tarball", { ...good, files: [] }, /EMPTY/);
+
+  // A manifest that cannot be read — the silent-pass case.
+  expectProblem("a manifest that cannot be read", { ...good, manifest: undefined }, /could not be READ/);
+
+  const failed = cases.filter((c) => !c.fired);
+  for (const c of cases) {
+    console.log(`  ${c.fired ? "fires  " : "SILENT"}  ${c.name}`);
+  }
+  if (failed.length > 0) {
+    console.log(`\n${failed.length} rule(s) did not fire. A rule that cannot fail is worse than no rule.`);
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`\nall ${cases.length} tarball rules fire.`);
+}
+
 function main(argv) {
   const args = argv.slice(2);
   const json = args.includes("--json");
@@ -474,6 +590,12 @@ function main(argv) {
   // the test that checks the publishing.
   if (args.includes("--release-set")) {
     console.log(JSON.stringify(RELEASE_SET, null, 2));
+    return;
+  }
+
+  // The tarball rules, proved to be able to fail.
+  if (args.includes("--self-test")) {
+    selfTest();
     return;
   }
 

@@ -19,18 +19,20 @@ OpenCode, Codex CLI, and Antigravity.
 ```bash
 # 1. Edit the manifest (anyplugin.plugin.yaml) — set name, version, description, and desired hooks/skills/commands
 # 2. Write your hook handler in `hooks/` (model the returned HookResult shape)
+
 # 3. Build for all agents
-node ../../../anyplugin build --plugin .
+npx @lablaunchpad/cli build --plugin .
 
-# 3. Install into a target agent
-node ../../../anyplugin install --plugin . --project ./my-repo
-
-# 4. Try it locally (new!)
-node ../../../anyplugin run okf-session-start
+# 4. Install into a target agent
+npx @lablaunchpad/cli install --plugin . --project ./my-repo
 
 # 5. Validate your OKF bundle
-node ../../../anyplugin okf-validate knowledge
+npx @lablaunchpad/cli okf-validate knowledge
 ```
+
+If you have the CLI installed (`npm install @lablaunchpad/cli`), the
+shorter `anyplugin ...` form works too — the package installs a binary
+with that name.
 
 ## Hook Handler Shape
 
@@ -77,24 +79,24 @@ Consult `docs/PATTERNS.md` for the full adoption record of intensity and ladder.
 
 ```bash
 # Scaffold
-anyplugin init --name my-plugin
+npx @lablaunchpad/cli init --name my-plugin
 
 # Build + install
-anyplugin build --plugin . --out ./dist
-anyplugin install --plugin . --project ./my-repo
+npx @lablaunchpad/cli build --plugin . --out ./dist
+npx @lablaunchpad/cli install --plugin . --project ./my-repo
 
 # Intensity mode (writes to .anyplugin-mode in the installed root)
-anyplugin intensity --mode aggressive
+npx @lablaunchpad/cli intensity --mode aggressive
 
 # OKF validation
-anyplugin okf-validate knowledge
-anyplugin okf-reindex knowledge
+npx @lablaunchpad/cli okf-validate knowledge
+npx @lablaunchpad/cli okf-reindex knowledge
 ```
 
 ## Need Help?
 
 - `anyplugin detect` — show what agent you're running on
-- `anyplugin run <hook-id>` — execute a hook locally (see `anyplugin run` help)
-- `anyplugin capabilities --plugin <dir>` — show per-agent capability verdicts for your manifest
-- `docs/WORKER-RUNTIME-KERNEL.md` — the kernel domain model
-- `knowledge/` — this repo's own OKF bundle (audited platform intelligence)
+- `anyplugin doctor` — diagnose the runtime
+- the capability verdicts are reported by `anyplugin build`, which FAILS the
+  build when a target cannot honour a declared capability
+- `knowledge/` — this plugin's own OKF bundle

@@ -2,14 +2,29 @@
 
 **One plugin, four native agents.** Write a plugin once; install it natively into Claude Code, OpenCode, Codex CLI, and Antigravity — reversibly, with a journal that proves what was changed and restores it byte-for-byte on uninstall.
 
-## Install
+## Install and run
+
+This package's name is `@lablaunchpad/cli`. It is not published as
+`anyplugin` — that name is not on the registry, so `npx anyplugin` is a
+404.
 
 ```bash
-npx anyplugin init
-npx anyplugin detect
-npx anyplugin build --plugin ./my-plugin
-npx anyplugin install --plugin ./my-plugin
+npx @lablaunchpad/cli init
+npx @lablaunchpad/cli detect
+npx @lablaunchpad/cli build --plugin ./my-plugin
+npx @lablaunchpad/cli install --plugin ./my-plugin
 ```
+
+Or install it and use the `anyplugin` command it provides:
+
+```bash
+npm install @lablaunchpad/cli
+npx anyplugin detect
+```
+
+The second form works because the package installs a binary named
+`anyplugin`. The first form works because `npx` runs the package's binary
+directly.
 
 ## The commands
 
