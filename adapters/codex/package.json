@@ -2,11 +2,42 @@
   "name": "@lablaunchpad/adapter-codex",
   "version": "0.1.1",
   "description": "AnyPlugin adapter: emit/install Codex CLI plugin bundles and config.toml merges",
+  "license": "MIT",
+  "author": {
+    "name": "Rahul Paul",
+    "url": "https://github.com/LabLaunchPad"
+  },
+  "homepage": "https://github.com/LabLaunchPad/anyplugin/tree/main/adapters/codex#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LabLaunchPad/anyplugin.git",
+    "directory": "adapters/codex"
+  },
+  "bugs": {
+    "url": "https://github.com/LabLaunchPad/anyplugin/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.js.map",
+    "!dist/**/*.test.d.ts",
+    "!dist/**/*.test.d.ts.map"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepack": "pnpm build"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "@lablaunchpad/core": "workspace:*",

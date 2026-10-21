@@ -1,0 +1,88 @@
+name: Release
+
+# The first release of @lablaunchpad/*.
+#
+# ── What this workflow does ────────────────────────────────────────────────
+#
+# It publishes the seven packages in DEPENDENCY ORDER — core, the four
+# adapters, the kernel, then the CLI — because a package published before
+# its dependencies ships a package whose dependencies 404 on install.
+#
+# The publishing is done by `scripts/release.mjs`, which refuses to publish
+# anything that is not ready: a version that already exists, a version with
+# no changelog entry, a tarball that leaks source or compiled tests, or a
+# published manifest that still carries a `workspace:` spec.
+#
+# ── Provenance ──────────────────────────────────────────────────────────────
+#
+# npm's provenance is the attestation that says which workflow published
+# which bytes. It requires an OIDC token — `id-token: write` below — and
+# NO long-lived secret, when the npm account has TRUSTED PUBLISHING
+# configured for this repository.
+#
+# That configuration is on the npm side and is a one-time human action:
+#
+#   npmjs.com → your account → Settings → Trusted Publisher
+#     → package: @lablaunchpad/core   (and each of the other six)
+#     → organization or user: LabLaunchPad
+#     → repository: anyplugin
+#     → workflow filename: release.yml
+#
+# Until it is configured for a package, that package's publish fails with
+# an E403 that says so. The first release therefore needs either the npm
+# side configured, or a temporary NPM_TOKEN secret — and the script uses
+# `NODE_AUTH_TOKEN` if one is present.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      # npm provenance: the attestation that says which workflow published
+      # which bytes. This is the whole reason the release runs in CI rather
+      # than on a laptop.
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # npm's provenance attests to the COMMIT, so it must be the
+          # published commit, not a merge.
+          fetch-depth: 0
+
+      # pnpm version comes from the packageManager field in package.json
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: The full suite
+        run: pnpm test
+
+      - name: OKF bundle conformance
+        run: node cli/dist/bin.js okf-validate knowledge
+
+      - name: Check the release
+        # The check runs BEFORE the publish, and it is the same check the
+        # publishing guard runs in the test suite. If it fails here, nothing
+        # is published.
+        run: node scripts/release.mjs --check
+
+      - name: Publish
+        # The script packs with pnpm (which rewrites the workspace specs)
+        # and publishes the tarball with npm (which attests with
+        # provenance). Both halves matter; neither alone is enough.
+        run: node scripts/release.mjs --publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

@@ -6,11 +6,27 @@
  * The SDK is a SEPARATE repository, and it consumes
  * `@lablaunchpad/worker-runtime` **from npm**. Nothing under
  * `@lablaunchpad/*` has ever been published — the registry returns 404 for
- * all three packages. So until they are publishable, the entire SDK half of
+ * every one of them. So until they are publishable, the entire SDK half of
  * the product has no substrate to build on, and the starter template's own
- * instruction to run `npx anyplugin` is a promise the registry cannot keep.
+ * instruction to run the tool with npx is a promise the registry cannot keep.
  *
- * One root cause. Three unlocks. This guard is the root cause's closure.
+ * One root cause. Several unlocks. This guard is the root cause's closure.
+ *
+ * ── The publisher is pnpm, and the proof is in the tarball ─────────────────
+ *
+ * The single most important thing this guard checks is that the PUBLISHED
+ * MANIFEST carries no `workspace:` spec.
+ *
+ * `pnpm` rewrites `workspace:*` to the concrete version a consumer will
+ * install. `npm` does not — it leaves the spec, and npm cannot resolve one
+ * for a consumer, so the package installs and then fails on its first
+ * `require`, in the CONSUMER's project. Publishing the CLI with `npm pack`
+ * would have shipped exactly that, and the guard that checked `npm`'s
+ * tarball would have said everything was fine.
+ *
+ * So the guard checks **pnpm's** tarball, because that is the artifact that
+ * ships. And it reads the tarball's own `package.json`, not the manifest in
+ * the working tree, because the working tree is not what is published.
  *
  * ── What it does and does not claim ───────────────────────────────────────
  *
@@ -19,20 +35,6 @@
  * registry is reachable, that the npm account is authenticated, or that a
  * release happened. Those are a human's actions, and a guard that claimed
  * them would be claiming to verify something it cannot see.
- *
- * The decisive check is the **tarball**: `npm pack --dry-run --json` is the
- * registry's own packing logic, so what it lists is what npm would publish.
- * A manifest can look perfect and still ship the wrong bytes; the tarball
- * cannot lie about them.
- *
- * ── The rule this repository holds ─────────────────────────────────────────
- *
- * > A guard that can pass vacuously is worse than no guard, because it
- * > manufactures confidence.
- *
- * So the last test here proves the guard **can fail**: a deliberately broken
- * manifest must be rejected by the same predicate. A guard nobody has seen
- * reject anything is a guard nobody has seen work.
  */
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
@@ -40,13 +42,54 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 const REPO_ROOT = resolve(import.meta.dirname, "..", "..", "..");
+const RELEASE_TOOL = join(REPO_ROOT, "scripts", "release.mjs");
 
-/** The packages that will ever be installed from npm, in dependency order. */
-const PUBLISHABLE = [
-  { dir: "packages/worker-runtime", name: "@lablaunchpad/worker-runtime" },
-  { dir: "core", name: "@lablaunchpad/core" },
-  { dir: "cli", name: "@lablaunchpad/cli" },
-] as const;
+interface ReleasePackage {
+  readonly dir: string;
+  readonly name: string;
+}
+
+/** The release set, read from the tool that publishes it. One owner. */
+function releaseSet(): ReleasePackage[] {
+  const out = execFileSync(process.execPath, [RELEASE_TOOL, "--release-set"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return JSON.parse(out) as ReleasePackage[];
+}
+
+interface InspectResult {
+  readonly dir: string;
+  readonly files: readonly string[];
+  readonly manifest?: {
+    readonly dependencies?: Record<string, string>;
+  };
+  readonly problems: readonly string[];
+}
+
+/**
+ * What the release tool says a package would ship.
+ *
+ * MEMOIZED, because packing is not free: `pnpm pack` runs the package's
+ * `prepack` hook, which is the build, and seven packages packed twice is
+ * seventy seconds of the suite's time. The pack is a pure function of the
+ * working tree, so one pack per package is enough — and the assertions
+ * that use it are still independent.
+ */
+const packed = new Map<string, InspectResult>();
+
+function inspect(dir: string): InspectResult {
+  const cached = packed.get(dir);
+  if (cached) return cached;
+  const out = execFileSync(process.execPath, [RELEASE_TOOL, "--inspect", dir, "--json"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const result = JSON.parse(out) as InspectResult;
+  packed.set(dir, result);
+  return result;
+}
 
 interface Manifest {
   name?: string;
@@ -113,7 +156,7 @@ function problemsIn(dir: string, manifest: Manifest): string[] {
     problems.push(at("files must allow README.md and LICENSE"));
   }
   if (!manifest.scripts?.["prepack"]) {
-    problems.push(at("a prepack script is required — the tarball must never be built from a stale dist"));
+    problems.push(at("a prepack script is required — the tarball must never be built from a stale build"));
   }
   if (!manifest.engines?.node) {
     problems.push(at("engines.node is required — the runtime surface has a floor"));
@@ -148,39 +191,19 @@ function problemsIn(dir: string, manifest: Manifest): string[] {
   return problems;
 }
 
-/** The tarball npm would publish, straight from npm's own packing logic. */
-/**
- * npm's own CLI, run with the SAME node binary that is running this test.
- *
- * A bare "npm" does not resolve through `execFileSync` on Windows — it is
- * `npm.cmd` — and the obvious workaround, `shell: true`, would hand an
- * argv to a shell. Running npm's CLI script with `process.execPath` avoids
- * both: no shell, no PATH lookup, and the npm that packs the tarball is the
- * npm that ships with the node under test.
- */
-const NPM_CLI = join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
-
-function packedFiles(dir: string): string[] {
-  const args = ["pack", "--dry-run", "--json", "--ignore-scripts"];
-  const raw = existsSync(NPM_CLI)
-    ? execFileSync(process.execPath, [NPM_CLI, ...args], {
-        cwd: join(REPO_ROOT, dir),
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      })
-    : execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", args, {
-        cwd: join(REPO_ROOT, dir),
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-  const parsed = JSON.parse(raw) as { files?: { path: string }[] }[];
-  return (parsed[0]?.files ?? []).map((f) => f.path);
-}
-
 describe("publish readiness", () => {
-  it("every publishable package declares its identity, licence and allowlist", () => {
+  const packages = releaseSet();
+
+  it("the release set is not empty, and every package exists", () => {
+    expect(packages.length, "the release set must not be empty").toBeGreaterThan(0);
+    for (const pkg of packages) {
+      expect(existsSync(join(REPO_ROOT, pkg.dir, "package.json")), `${pkg.dir} has no manifest`).toBe(true);
+    }
+  });
+
+  it("every package in the release set declares its identity, licence and allowlist", () => {
     const problems: string[] = [];
-    for (const pkg of PUBLISHABLE) {
+    for (const pkg of packages) {
       problems.push(...problemsIn(pkg.dir, readManifest(pkg.dir)));
     }
     expect(problems, problems.join("\n")).toEqual([]);
@@ -188,16 +211,14 @@ describe("publish readiness", () => {
 
   it(
     "the tarball ships the built package and nothing else",
-    // P2-28 again: `npm pack` runs the registry's packing logic three
-    // times here, and three subprocesses exceed vitest's default five
-    // seconds on a loaded machine. A timeout there is a FALSE ALARM about
-    // the guard, which is worse than no guard.
-    { timeout: 120000 },
+    // `pnpm pack` is the packer that produces the published artifact, and
+    // it is the one that rewrites the workspace specs. Checking npm's
+    // tarball instead would validate the wrong bytes.
+    { timeout: 120_000 },
     () => {
-      // `npm pack --dry-run` IS the registry's packing logic, so this is what
-      // npm would publish — not an approximation of it.
-      for (const pkg of PUBLISHABLE) {
-        const files = packedFiles(pkg.dir);
+      for (const pkg of packages) {
+        const result = inspect(pkg.dir);
+        const files = result.files.map((f) => f.replace(/^package\//, ""));
 
         expect(files, `${pkg.name}: the tarball is empty`).not.toEqual([]);
         expect(files, `${pkg.name}: dist/index.js must ship`).toContain("dist/index.js");
@@ -216,9 +237,83 @@ describe("publish readiness", () => {
           leaks,
           `${pkg.name}: the tarball ships source or compiled tests:\n  ${leaks.join("\n  ")}`,
         ).toEqual([]);
+
+        expect(
+          result.problems,
+          `${pkg.name}: the release tool found problems:\n  ${result.problems.join("\n  ")}`,
+        ).toEqual([]);
       }
     },
   );
+
+  it(
+    "the published manifest carries NO workspace spec",
+    // P2-28 again: this packs seven packages, and packing runs the build.
+    // A timeout here is a FALSE ALARM about the guard, which is worse than
+    // no guard.
+    { timeout: 120_000 },
+    () => {
+    // THE decisive check. `npm pack` leaves `"@lablaunchpad/core":
+    // "workspace:*"` in the manifest, and npm cannot resolve a `workspace:`
+    // spec for a consumer — the package installs and then fails on its
+    // first `require`, in the CONSUMER's project. pnpm rewrites it; this
+    // proves the rewrite happened in the artifact that ships.
+    for (const pkg of packages) {
+      const result = inspect(pkg.dir);
+      const deps = result.manifest?.dependencies ?? {};
+      const workspace = Object.entries(deps).filter(([, spec]) => String(spec).startsWith("workspace:"));
+      expect(
+        workspace,
+        `${pkg.name}: the published manifest still carries ${JSON.stringify(workspace)}`,
+      ).toEqual([]);
+    }
+  });
+
+  it("every workspace dependency is itself in the release set", () => {
+    // A package published before its dependencies would ship a package
+    // whose dependencies 404 on install.
+    const known = new Set<string>(packages.map((p) => p.name));
+    for (const pkg of packages) {
+      const manifest = readManifest(pkg.dir);
+      for (const [dep, spec] of Object.entries(manifest.dependencies ?? {})) {
+        if (!String(spec).startsWith("workspace:")) continue;
+        expect(
+          known.has(dep),
+          `${pkg.name} depends on ${dep}, which is not in the release set — it would 404 for a consumer`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("no package is left half-published", () => {
+    // Every package in the workspace that is NOT private must be one of the
+    // ones we know how to publish. A new package cannot appear without a
+    // decision about how it ships.
+    const known = new Set<string>(packages.map((p) => p.name));
+    const found: string[] = [];
+    const walk = (dir: string): void => {
+      if (!existsSync(dir)) return;
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name === "node_modules" || entry.name === "dist") continue;
+        const manifestPath = join(dir, entry.name, "package.json");
+        if (!existsSync(manifestPath)) {
+          walk(join(dir, entry.name));
+          continue;
+        }
+        const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Manifest & { private?: boolean };
+        if (manifest.private) continue;
+        found.push(manifest.name ?? manifestPath);
+        walk(join(dir, entry.name));
+      }
+    };
+    walk(join(REPO_ROOT, "packages"));
+    walk(join(REPO_ROOT, "adapters"));
+    walk(join(REPO_ROOT, "core"));
+    walk(join(REPO_ROOT, "cli"));
+    const unhandled = found.filter((n) => !known.has(n));
+    expect(unhandled, `unhandled publishable packages: ${unhandled.join(", ")}`).toEqual([]);
+  });
 
   it("the guard CAN fail", () => {
     // A guard nobody has seen reject anything is a guard nobody has seen
@@ -236,27 +331,5 @@ describe("publish readiness", () => {
     expect(problems.join("\n")).toMatch(/publishConfig/);
     expect(problems.join("\n")).toMatch(/prepack/);
     expect(problems.join("\n")).toMatch(/0\.0\.1/);
-  });
-
-  it("no package is left half-published", () => {
-    // Every package in the workspace that is NOT private must be one of the
-    // three we know how to publish. A new package cannot appear without a
-    // decision about how it ships.
-    const workspaceRoot = join(REPO_ROOT, "packages");
-    const known = new Set<string>(PUBLISHABLE.map((p) => p.name));
-    const found: string[] = [];
-    const walk = (dir: string): void => {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const manifestPath = join(dir, entry.name, "package.json");
-        if (!existsSync(manifestPath)) continue;
-        const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Manifest & { private?: boolean };
-        if (manifest.private) continue;
-        found.push(manifest.name ?? manifestPath);
-        walk(join(dir, entry.name));
-      }
-    };
-    walk(workspaceRoot);
-    expect(found.every((name) => known.has(name)), `unhandled publishable packages: ${found.filter((n) => !known.has(n)).join(", ")}`).toBe(true);
   });
 });

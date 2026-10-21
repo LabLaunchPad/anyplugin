@@ -1,6 +1,6 @@
 {
   "name": "@lablaunchpad/worker-runtime",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Deterministic worker runtime kernel: contracts, state, evidence, decisions, experience, verification. Agent-agnostic — depends on no agent, no adapter, and no AnyPlugin package.",
   "license": "MIT",
   "author": {
