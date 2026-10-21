@@ -478,6 +478,106 @@ with it.
 
 ---
 
+## 3. PM-003 — A release path that only worked on the machine that built it
+
+**Class:** BUG · **Severity:** P0 · **Status:** **FIXED** — the resolver now
+knows both layouts, and the failure was caught before any package reached
+the registry · **Backlog:** closed in this cycle
+
+### 3.1 Summary
+
+The publishing guard resolved npm's command-line entry point by looking in
+exactly one place: beside the node binary, at
+`bin/node_modules/npm/bin/npm-cli.js`. That is the **Windows** layout.
+
+On POSIX, npm sits one level up: `bin/../lib/node_modules/npm/bin/npm-cli.js`.
+The GitHub runners use the POSIX layout. So the guard failed on every CI
+leg, with a stack trace naming a module that does not exist there:
+
+```
+Cannot find module '/opt/hostedtoolcache/node/22.23.3/x64/bin/node_modules/npm/bin/npm-cli.js'
+    at globalRoot (scripts/release.mjs:77:10)
+    at pnpmCli (scripts/release.mjs:85:10)
+    at inspect (scripts/release.mjs:137:30)
+```
+
+### 3.2 Impact — what it would have meant
+
+Nothing reached the registry, and nothing reached a consumer. The failure
+mode was a **red build**, not a broken package — which is the good outcome,
+and it is worth saying why it was good: the first release was guarded by a
+check that runs in CI, and the check failed on the first machine that was
+not the one the code was written on.
+
+Had the guard been weaker — had it verified the manifests statically and
+skipped the tarball — the release would have gone out with a tool that
+cannot run on Linux, and the failure would have surfaced in the CI job
+that publishes, with a partially published release behind it.
+
+### 3.3 Root cause — the causal chain, not the proximate one
+
+The proximate cause is one hard-coded path. The causal chain is longer, and
+it is the same chain that produced every other portability defect this
+repository has had:
+
+1. The resolver was written by reading the **local** machine's layout, and
+   verified only against the **local** machine.
+2. The local machine is Windows. The CI matrix is three Linux runners and
+   one Windows runner — so the platform was already covered, and the defect
+   was a gap in **one leg**, not in all of them.
+3. The guard was **fast to fail but slow to be run**: it packs seven
+   packages, so it was the slowest test in the suite, and the instinct was
+   to make it cheaper rather than to run it more widely.
+
+The chain that matters: **a check that is only ever run on the platform it
+was written on is a check about that platform.** The mitigation is not
+"be careful"; it is to run the check somewhere else.
+
+### 3.4 What went wrong that was not the defect
+
+**The failure was found by CI, not by a reviewer.** The adversarial review
+of this work was running at the same moment and had not reported. That is
+the honest order of events: the machine that was not the author's found the
+defect that the author's own eyes could not.
+
+**And the first fix was not the fix.** The first repair made the resolver
+look in a second hard-coded place — `../lib/node_modules/npm` — which
+would have fixed CI and left the same class of defect for the next
+platform. The repair that stuck asks a different question: *can this tool be
+run as a plain executable?* and answers it per platform, with the JavaScript
+entry point as the fallback rather than the primary route.
+
+That distinction matters for a second reason. A pnpm installed as a
+standalone binary — which is what the CI action does — has **no JavaScript
+entry point at all**. The original design assumed there always is one. The
+fixed design runs the binary directly when there is one to run, and only
+reaches for the JavaScript route when it must.
+
+### 3.5 The prevention
+
+| Prevention | What it stops |
+| --- | --- |
+| The resolver asks *can this be run directly?* rather than *where does this tool live?* | A hard-coded layout assumption |
+| A non-`ENOENT` error is re-thrown, not retried | A tool that FAILED being mistaken for a tool that was mislocated — the failure would be swallowed and the fallback would publish with the wrong tool |
+| Every tool call carries a timeout | A registry call that hangs the release instead of failing it |
+| The check runs on all four CI legs, including three Linux runners | The defect recurring on the next platform |
+
+And the general lesson, which this repository has now paid for twice: **a
+check that only ever runs on the platform it was written on is a check about
+that platform.** The matrix is the mechanism. It caught this one.
+
+### 3.6 What was NOT wrong
+
+- **The design.** Splitting pack and publish — pnpm packs, npm publishes
+  the tarball — is correct, and the reasoning for it (the workspace spec
+  rewrite, and npm's provenance) is independent of where the tools live.
+- **The guard's existence.** It failed loudly, with a stack trace that
+  named the exact missing module. A guard that cannot fail is worse than no
+  guard; this one could.
+- **The first release's timing.** Nothing was published while the path was
+  broken, so no version number was burned and no consumer saw a broken
+  package.
+
 ## 3. The checklist, filled in
 
 Every step of §0.1, against the two post-mortems above.
