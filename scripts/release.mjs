@@ -168,6 +168,35 @@ function tarballProblems(packed) {
     );
   }
 
+  // Every entry point must actually BE in the tarball.
+  //
+  // The manifest can point anywhere inside the allowlist and still be
+  // wrong: `"./detect": "./dist/detect/index.js"` passes every other check
+  // and installs a package whose first import fails — in the CONSUMER's
+  // project, which is the worst place for it to fail, and the hardest to
+  // diagnose from here.
+  const entryPoints = new Set();
+  const exportsMap = packed.manifest?.exports ?? {};
+  for (const value of Object.values(exportsMap)) {
+    if (typeof value === "string") entryPoints.add(value);
+    else if (value) {
+      if (value.types) entryPoints.add(value.types);
+      if (value.default) entryPoints.add(value.default);
+    }
+  }
+  if (packed.manifest?.main) entryPoints.add(packed.manifest.main);
+  if (packed.manifest?.types) entryPoints.add(packed.manifest.types);
+  for (const bin of Object.values(packed.manifest?.bin ?? {})) entryPoints.add(bin);
+
+  for (const target of entryPoints) {
+    const bare = target.replace(/^\.\//, "");
+    if (!files.includes(bare)) {
+      problems.push(
+        `${packed.dir}: the published manifest points at "${target}", which is not in the tarball — a consumer's install would fail on its first import`,
+      );
+    }
+  }
+
   return problems;
 }
 
