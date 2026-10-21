@@ -37,6 +37,7 @@ export {
 } from "./execution/local-process.js";
 export type { ExecutionBackend } from "./execution/backend.js";
 export { issueCertificate, type CertificateInputs } from "./certificate/issue.js";
+export { recordCertificate } from "./certificate/record.js";
 export {
   verifyCertificate,
   type CertificateArtifacts,
