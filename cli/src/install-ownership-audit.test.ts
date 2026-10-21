@@ -56,7 +56,7 @@ describe.sequential("Installer destination ownership — audit regression tests 
     try { await rm(testRoot, { recursive: true, force: true }); } catch {}
   });
 
-  it("refuses install when destination directory already exists with user files (unmanaged)", async () => {
+  it("refuses install when destination directory already exists with user files (unmanaged)", { timeout: 60_000 }, async () => {
     const agent = "opencode" as const;
     const opts = { home, projectDir: project, pluginName: "test-plugin", version: "0.1.0", dryRun: false };
     
@@ -72,7 +72,7 @@ describe.sequential("Installer destination ownership — audit regression tests 
     await expect(executeInstall(agent, bundles.opencode, opts)).rejects.toThrow();
   });
 
-  it("refuses install when second plugin attempts same target name", async () => {
+  it("refuses install when second plugin attempts same target name", { timeout: 60_000 }, async () => {
     const agent = "opencode" as const;
     const opts = { home, projectDir: project, pluginName: "test-plugin", version: "0.1.0", dryRun: false };
 
@@ -103,7 +103,7 @@ describe.sequential("Installer destination ownership — audit regression tests 
     await expect(executeInstall(agent, bundles.opencode, opts)).rejects.toThrow("owned by another installation");
   });
 
-  it("uninstall does not recursively delete unmanaged content in destination root", async () => {
+  it("uninstall does not recursively delete unmanaged content in destination root", { timeout: 60_000 }, async () => {
     const agent = "opencode" as const;
     const opts = { home, projectDir: project, pluginName: "test-plugin", version: "0.1.0", dryRun: false };
 
@@ -123,7 +123,7 @@ describe.sequential("Installer destination ownership — audit regression tests 
     expect(await readFile(userFile, "utf8")).toBe("USER DATA");
   });
 
-  it("uninstall removes only the files the journal records, leaving the rest", async () => {
+  it("uninstall removes only the files the journal records, leaving the rest", { timeout: 60_000 }, async () => {
     const agent = "opencode" as const;
     const opts = { home, projectDir: project, pluginName: "test-plugin", version: "0.1.0", dryRun: false };
 

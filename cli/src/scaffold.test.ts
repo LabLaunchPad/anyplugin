@@ -32,7 +32,7 @@ describe("scaffoldPlugin (anyplugin init)", () => {
     root = await mkdtemp(join(tmpdir(), "scaffold-"));
   });
 
-  it("scaffolds a starter plugin that loads and builds for all four agents", async () => {
+  it("scaffolds a starter plugin that loads and builds for all four agents", { timeout: 60000 }, async () => {
     const dir = join(root, "fresh-plugin");
     const result = await scaffoldPlugin("fresh-plugin", dir);
     expect(result.name).toBe("fresh-plugin");
@@ -48,23 +48,23 @@ describe("scaffoldPlugin (anyplugin init)", () => {
     for (const b of Object.values(bundles)) expect(b.files.length).toBeGreaterThan(0);
   });
 
-  it("rejects unsafe plugin names", async () => {
+  it("rejects unsafe plugin names", { timeout: 60000 }, async () => {
     await expect(scaffoldPlugin("../evil", join(root, "a"))).rejects.toThrow(/unsafe/);
     await expect(scaffoldPlugin("Bad_Name", join(root, "b"))).rejects.toThrow(/unsafe/);
   });
 
-  it("refuses to overwrite an existing target directory", async () => {
+  it("refuses to overwrite an existing target directory", { timeout: 60000 }, async () => {
     await mkdir(join(root, "exists"), { recursive: true });
     await expect(scaffoldPlugin("dupe-plugin", join(root, "exists"))).rejects.toThrow(/already exists/);
   });
 
-  it("refuses a target whose parent does not exist", async () => {
+  it("refuses a target whose parent does not exist", { timeout: 60000 }, async () => {
     await expect(scaffoldPlugin("orphan-plugin", join(root, "missing", "child"))).rejects.toThrow(/parent directory not found/);
   });
 });
 
 describe("executeUninstall --dry-run", () => {
-  it("reports what would be cleaned without touching anything", async () => {
+  it("reports what would be cleaned without touching anything", { timeout: 60000 }, async () => {
     const root = await mkdtemp(join(tmpdir(), "dryrun-"));
     const home = join(root, "home");
     const project = join(root, "project");

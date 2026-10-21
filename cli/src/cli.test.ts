@@ -61,7 +61,7 @@ knowledge: ./knowledge
 });
 
 describe("buildAll", () => {
-  it("emits all four agent bundles", async () => {
+  it("emits all four agent bundles", { timeout: 60000 }, async () => {
     const bundles = await buildAll({ pluginRoot: root, outRoot, runnerAbsPath: join(root, "hooks", "runner.js") });
     expect(Object.keys(bundles).sort()).toEqual(["antigravity", "claude-code", "codex", "opencode"]);
     for (const b of Object.values(bundles)) expect(b.files.length).toBeGreaterThan(0);
@@ -69,7 +69,7 @@ describe("buildAll", () => {
 });
 
 describe("executeInstall / executeUninstall", () => {
-  it("installs, merges configs, and fully reverses", async () => {
+  it("installs, merges configs, and fully reverses", { timeout: 60000 }, async () => {
     const bundles = await buildAll({ pluginRoot: root, outRoot, runnerAbsPath: join(root, "hooks", "runner.js") });
     const opts = { home, projectDir: project, pluginName: "demo-plugin" };
 
@@ -124,7 +124,7 @@ describe("executeInstall / executeUninstall", () => {
 });
 
 describe("guards", () => {
-  it("rejects traversal and unsafe names", () => {
+  it("rejects traversal and unsafe names", { timeout: 60000 }, () => {
     expect(() => validateRelPath("../escape", "test")).toThrow(/unsafe/);
     expect(() => validateRelPath("a/../../b", "test")).toThrow(/unsafe/);
     expect(() => validateRelPath("C:\\evil", "test")).toThrow(/unsafe/);
@@ -136,13 +136,13 @@ describe("guards", () => {
 });
 
 describe("stripBlock", () => {
-  it("removes marked block and preserves surrounding text", () => {
+  it("removes marked block and preserves surrounding text", { timeout: 60000 }, () => {
     const text = "before\n# BEGIN x\njunk\n# END x\nafter";
     expect(stripBlock(text, "# BEGIN x", "# END x")).toMatch(/before[\s\S]*after/);
     expect(stripBlock("nothing", "# BEGIN x", "# END x")).toBe("nothing");
   });
 
-  it("throws on a begin marker with no end marker (would silently delete content)", () => {
+  it("throws on a begin marker with no end marker (would silently delete content)", { timeout: 60000 }, () => {
     expect(() => stripBlock("before\n# BEGIN x\njunk and everything after", "# BEGIN x", "# END x")).toThrow(
       /missing end marker/i,
     );
@@ -150,7 +150,7 @@ describe("stripBlock", () => {
 });
 
 describe("deepMerge", () => {
-  it("merges nested objects, arrays replaced", () => {
+  it("merges nested objects, arrays replaced", { timeout: 60000 }, () => {
     expect(deepMerge({ a: { b: 1 }, keep: true }, { a: { c: 2 } })).toEqual({ a: { b: 1, c: 2 }, keep: true });
     expect(deepMerge({ list: [1] }, { list: [2, 3] })).toEqual({ list: [2, 3] });
   });

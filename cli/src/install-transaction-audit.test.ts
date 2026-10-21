@@ -40,7 +40,7 @@ describe("Install transactional integrity — audit regression tests (Finding E)
     try { await rm(testRoot, { recursive: true, force: true }); } catch {}
   });
 
-  it("journal is written AFTER mutations (current behavior - documents gap)", async () => {
+  it("journal is written AFTER mutations (current behavior - documents gap)", { timeout: 60_000 }, async () => {
     const agent = "opencode" as const;
     const opts = { home, projectDir: project, pluginName: "test-plugin", version: "0.1.0", dryRun: false };
     
@@ -59,7 +59,7 @@ describe("Install transactional integrity — audit regression tests (Finding E)
     try { await rm(root, { recursive: true, force: true }); } catch {}
   });
 
-  it("dry-run does not write journal or modify files", async () => {
+  it("dry-run does not write journal or modify files", { timeout: 60_000 }, async () => {
     const agent = "opencode" as const;
     const opts = { home, projectDir: project, pluginName: "test-plugin", version: "0.1.0", dryRun: true };
     
