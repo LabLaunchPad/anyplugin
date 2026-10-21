@@ -61,6 +61,8 @@ pnpm clean                       # remove all dist/ output
 | Document-ownership guard (a document with no owner fails the build) | `core/src/boundaries/doc-ownership.test.ts` |
 | Founder-facing report format (skeleton, status vocabulary, diagram templates) | `docs/REPORT-FORMAT.md` |
 | Report-format linter (fails a report that breaks the format) | `scripts/report-lint.mjs` |
+| The release path (packs with pnpm, publishes with npm, refuses what is not ready) | `scripts/release.mjs` |
+| The specialist agent definitions the orchestration loops dispatch to | `.opencode/agents/` |
 | Layer stack, dependency direction, "which doc owns what" | `ARCHITECTURE.md` |
 
 ## How to report (read this before writing a report)
