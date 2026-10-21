@@ -61,12 +61,7 @@ const SRC_DIR = resolve(import.meta.dirname, "..");
  * experience ledger beside it — is still not built, and M3's Evidence Ledger
  * is still not built either.
  */
-const UNBOUND_CONTRACTS: Readonly<Record<string, string>> = {
-  WorkContract:
-    "M2 (Worker State + Contract) binds it: the work contract is written BEFORE work begins, and the executor must read it.",
-  Certificate:
-    "M10 (Certificate) binds it: a certificate is issued over completed work, and the verification engine that would complete it is not built.",
-};
+const UNBOUND_CONTRACTS: Readonly<Record<string, string>> = {};
 
 /** Every source file under `src/`, absolute. */
 function sourceFiles(dir: string, acc: string[] = []): string[] {
@@ -193,15 +188,35 @@ describe("the orphan-contract guard", () => {
 
 describe("the guard itself", () => {
   it("is not vacuous — an unbound contract the registry gained would fail", () => {
-    // The guard's own mutation test: it must be able to fail. The registry
-    // really does contain unbound contracts today, so the detection is not
-    // a tautology.
+    // The guard's own mutation test: it must be able to fail.
+    //
+    // It used to assert that the registry really did contain an unbound
+    // contract, so that the detection was not a tautology. **Every contract
+    // is BOUND now** — the seal bound the last two — so that precondition
+    // is gone, and the proof has to be direct: take a contract that IS
+    // bound, take its consumer away, and the rule must reject it.
+    //
+    // A guard whose own proof depended on the repository being in a
+    // particular state was a guard that would have started failing for the
+    // wrong reason the moment that state changed.
     const bound = boundContracts(consumerFiles());
-    const unbound = Object.keys(CONTRACTS).filter((name) => (bound.get(name) ?? []).length === 0);
-    expect(unbound.length, "the registry must contain at least one unbound contract").toBeGreaterThan(0);
-    for (const name of unbound) {
-      expect(name in UNBOUND_CONTRACTS, `${name} must be named`).toBe(true);
-    }
+    const names = Object.keys(CONTRACTS);
+    const candidate = names.find((name) => (bound.get(name) ?? []).length > 0);
+    expect(candidate, "the registry must contain a bound contract to remove").toBeDefined();
+
+    // With its consumer, the contract is explained.
+    const withConsumer = names.filter(
+      (name) => (bound.get(name) ?? []).length === 0 && !(name in UNBOUND_CONTRACTS),
+    );
+    expect(withConsumer).not.toContain(candidate!);
+
+    // Without one, it is not — and that is the rule the guard enforces.
+    const withoutConsumer = new Map(bound);
+    withoutConsumer.set(candidate!, []);
+    const unexplained = names.filter(
+      (name) => (withoutConsumer.get(name) ?? []).length === 0 && !(name in UNBOUND_CONTRACTS),
+    );
+    expect(unexplained).toContain(candidate!);
   });
 
   it("would flag a contract the registry gained without a consumer", () => {

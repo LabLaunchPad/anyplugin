@@ -449,6 +449,17 @@ export const CertificateSchema = z
     evidenceHashes: z.array(ContentHashSchema).default([]),
     decisionHashes: z.array(ContentHashSchema).default([]),
     verificationHashes: z.array(ContentHashSchema).default([]),
+    /**
+     * The executions the outcome rests on.
+     *
+     * An execution is bound DIRECTLY, not indirectly through the evidence
+     * ledger. The certificate's job is to name what it binds, and "the
+     * evidence list happens to contain it" is indirect: a certificate that
+     * bound an execution only by way of an evidence record would not fail
+     * verification when the execution changed, which is the property that
+     * makes a certificate worth anything.
+     */
+    executionHashes: z.array(ContentHashSchema).default([]),
     issuedAt: TimestampSchema,
     provenance: ProvenanceSchema,
   })
