@@ -4,6 +4,36 @@ All notable changes to AnyPlugin are documented here. Format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-10-21
+
+### Added
+
+- Rebrand to AnyPlugin (Rahul Paul · Lab LaunchPad): `@lablaunchpad/*` packages, `anyplugin` binary/manifests/env vars, full purge of the previous project name.
+- Four adapters (Claude Code, OpenCode, Codex CLI, Antigravity) emitting native bundles from one `anyplugin.plugin.yaml`.
+- Universal hook runtime (`node runner.js <hook-id>` stdio JSON) with platform output translation and non-blocking failure semantics.
+- Runtime agent/environment detection (`ANYPLUGIN_HOST` + fingerprints) and installed-agent discovery.
+- Reversible, whitelisted installer with marker-based config merges (`install`/`uninstall`/`install --dry-run`).
+- OKF v0.2 knowledge layer: validator (`okf-validate`), index regenerator (`okf-reindex`), first-party `anyplugin-knowledge` plugin (okf-reader skill, curator subagent, session hooks, dependency-free MCP server with `okf_index`/`okf_read`/`okf_search`).
+- Claude Code marketplace descriptor (`.claude-plugin/marketplace.json`); CI on Ubuntu (Node 20/24) and Windows (Node 24).
+
+> **This is the first release.** The `0.1.1` entry was first written on
+> 2026-08-22 for work that was never published — the registry held no
+> `@lablaunchpad/*` package at all, so no version number was ever spent.
+> This release carries the August work **and** everything since. The seven
+> packages ship together, as one version:
+>
+> | Package | What it is |
+> | --- | --- |
+> | `@lablaunchpad/core` | detection, the canonical manifest, the event map, the capability matrix, the safe-path boundary |
+> | `@lablaunchpad/adapter-claude` | Claude Code's native artifacts |
+> | `@lablaunchpad/adapter-opencode` | OpenCode's native artifacts |
+> | `@lablaunchpad/adapter-codex` | Codex CLI's native artifacts |
+> | `@lablaunchpad/adapter-antigravity` | Antigravity's native artifacts |
+> | `@lablaunchpad/worker-runtime` | the kernel: contracts, state, evidence, decisions, experience, verification |
+> | `@lablaunchpad/cli` | the `anyplugin` command |
+
+### Added since the August draft
+
 ### Added
 
 - **Ponytail patterns (evidence-based adoption, `docs/PATTERNS.md`)**: manifest `ladder[]` + `intensity{}` (schema + JSON Schema, sync-tested); instruction-tier fallback — `install --tier instruction` injects the plugin contract as a marked, journaled `AGENTS.md` section (byte-exact uninstall, conflict-abort); runtime mode flag `.anyplugin-mode` + `anyplugin intensity --mode conservative|balanced|aggressive`, read by the runner as `payload.intensityMode`. The transactional journal is unchanged and remains the install/uninstall authority.
@@ -31,15 +61,3 @@ All notable changes to AnyPlugin are documented here. Format follows [Keep a Cha
 - **Fixed**: CI had never run green — `pnpm/action-setup` errored on duplicate pnpm versions (input + `packageManager` field), and pnpm 11.14 cannot run on the advertised Node 20 cell (requires ≥ 22.13). Matrix is now Ubuntu (Node 22 & 24) + Windows (Node 24), plus a dedicated Node 20 job that verifies the dependency-free hook runner and MCP server with plain `node`. Also: esbuild build-script allowance uses the real pnpm key (`onlyBuiltDependencies`), replacing a leftover placeholder.
 - Removed the last "prism" naming traces from source: schema error messages now say `anyplugin.plugin.{yaml,yml,json}`; exported schema types renamed `PrismPluginSchema`/`PrismPlugin`/`PrismPluginInput` → `AnyPluginManifestSchema`/`AnyPluginManifest`/`AnyPluginManifestInput`; stale comments updated in `core/src/adapters/index.ts` and `plugins/knowledge/runtime/mcp-server.js`.
 - README quickstart previously showed `npx anyplugin` (unpublished) — now uses the real `node cli/dist/bin.js` path and marks npm distribution as planned.
-
-## [0.1.1] — 2026-08-22
-
-### Added
-
-- Rebrand to AnyPlugin (Rahul Paul · Lab LaunchPad): `@lablaunchpad/*` packages, `anyplugin` binary/manifests/env vars, full purge of the previous project name.
-- Four adapters (Claude Code, OpenCode, Codex CLI, Antigravity) emitting native bundles from one `anyplugin.plugin.yaml`.
-- Universal hook runtime (`node runner.js <hook-id>` stdio JSON) with platform output translation and non-blocking failure semantics.
-- Runtime agent/environment detection (`ANYPLUGIN_HOST` + fingerprints) and installed-agent discovery.
-- Reversible, whitelisted installer with marker-based config merges (`install`/`uninstall`/`install --dry-run`).
-- OKF v0.2 knowledge layer: validator (`okf-validate`), index regenerator (`okf-reindex`), first-party `anyplugin-knowledge` plugin (okf-reader skill, curator subagent, session hooks, dependency-free MCP server with `okf_index`/`okf_read`/`okf_search`).
-- Claude Code marketplace descriptor (`.claude-plugin/marketplace.json`); CI on Ubuntu (Node 20/24) and Windows (Node 24).
