@@ -11,6 +11,15 @@ import { dirname } from "node:path";
  * controlled error handling: it reports, it never crashes, and it never
  * auto-repairs a corrupt journal (the journal is the only record of which
  * bytes the plugin owns — guessing would risk deleting user data).
+ *
+ * Every test here spawns the CLI as a real subprocess, so every test here
+ * pays for a Node start-up plus the CLI's own load time. At vitest's default
+ * five-second budget that is a coin flip on a busy machine, and a suite whose
+ * verdict depends on the machine rather than on the code cannot be trusted to
+ * say anything — the same class the repository recorded for the dependency-free
+ * runtime suite and the transactional-install suite, which now declare an
+ * explicit sixty-second budget. The assertions are unchanged; only the
+ * budget is stated, and the reason is in this comment.
  */
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_BIN = join(HERE, "..", "dist", "bin.js");
@@ -83,7 +92,7 @@ describe.skipIf(!HAS_DIST)("doctor — negative scenario handling", () => {
     } catch {}
   });
 
-  it("exits 0 and reports no problems on a clean machine", async () => {
+  it("exits 0 and reports no problems on a clean machine", { timeout: 60_000 }, async () => {
     const result = await runDoctor([], home, project);
     expect(result.code).toBe(0);
     const parsed = JSON.parse(result.stdout) as {
@@ -97,7 +106,7 @@ describe.skipIf(!HAS_DIST)("doctor — negative scenario handling", () => {
     expect(parsed.unfixable).toEqual([]);
   });
 
-  it("reports a corrupt journal as an error and exits non-zero", async () => {
+  it("reports a corrupt journal as an error and exits non-zero", { timeout: 60_000 }, async () => {
     const pluginDir = join(project, ".opencode", "plugins", "broken-plugin");
     await mkdir(pluginDir, { recursive: true });
     await writeFile(join(pluginDir, ".anyplugin-state.json"), "{ not json");
@@ -110,7 +119,7 @@ describe.skipIf(!HAS_DIST)("doctor — negative scenario handling", () => {
     expect(corrupt!.severity).toBe("error");
   });
 
-  it("never auto-repairs a corrupt journal, even with --fix", async () => {
+  it("never auto-repairs a corrupt journal, even with --fix", { timeout: 60_000 }, async () => {
     const pluginDir = join(project, ".opencode", "plugins", "broken-plugin");
     await mkdir(pluginDir, { recursive: true });
     const journalPath = join(pluginDir, ".anyplugin-state.json");
@@ -126,7 +135,7 @@ describe.skipIf(!HAS_DIST)("doctor — negative scenario handling", () => {
     expect(await require("node:fs/promises").readFile(journalPath, "utf8")).toBe(corruptContent);
   });
 
-  it("detects an orphaned install transaction scratch space", async () => {
+  it("detects an orphaned install transaction scratch space", { timeout: 60_000 }, async () => {
     const txRoot = join(project, ".opencode", "plugins", ".anyplugin-tx-orphan-plugin");
     await mkdir(join(txRoot, ".anyplugin-staging", "01ABC", "payloads"), { recursive: true });
 
@@ -137,7 +146,7 @@ describe.skipIf(!HAS_DIST)("doctor — negative scenario handling", () => {
     expect(orphan!.severity).toBe("warning");
   });
 
-  it("--fix removes an orphaned transaction scratch space", async () => {
+  it("--fix removes an orphaned transaction scratch space", { timeout: 60_000 }, async () => {
     const txRoot = join(project, ".opencode", "plugins", ".anyplugin-tx-orphan-plugin");
     await mkdir(join(txRoot, ".anyplugin-staging", "01ABC", "payloads"), { recursive: true });
 
@@ -148,7 +157,7 @@ describe.skipIf(!HAS_DIST)("doctor — negative scenario handling", () => {
     expect(await pathExists(txRoot)).toBe(false);
   });
 
-  it("does not crash when the agent plugin root is a file instead of a directory", async () => {
+  it("does not crash when the agent plugin root is a file instead of a directory", { timeout: 60_000 }, async () => {
     const pluginsDir = join(project, ".opencode", "plugins");
     await mkdir(join(project, ".opencode"), { recursive: true });
     await writeFile(pluginsDir, "not a directory");
@@ -159,7 +168,7 @@ describe.skipIf(!HAS_DIST)("doctor — negative scenario handling", () => {
     expect(() => JSON.parse(result.stdout)).not.toThrow();
   });
 
-  it("reports a plugin directory with no journal as a warning", async () => {
+  it("reports a plugin directory with no journal as a warning", { timeout: 60_000 }, async () => {
     const pluginDir = join(project, ".opencode", "plugins", "orphan-dir");
     await mkdir(pluginDir, { recursive: true });
 
@@ -170,7 +179,7 @@ describe.skipIf(!HAS_DIST)("doctor — negative scenario handling", () => {
     expect(missing!.severity).toBe("warning");
   });
 
-  it("ignores the transaction scratch space when listing plugin directories", async () => {
+  it("ignores the transaction scratch space when listing plugin directories", { timeout: 60_000 }, async () => {
     const pluginsDir = join(project, ".opencode", "plugins");
     await mkdir(join(pluginsDir, ".anyplugin-tx-something"), { recursive: true });
     await mkdir(join(pluginsDir, "real-plugin"), { recursive: true });
@@ -182,7 +191,7 @@ describe.skipIf(!HAS_DIST)("doctor — negative scenario handling", () => {
     expect(messages).not.toMatch(/no journal found for opencode\/\.anyplugin-tx-something/);
   });
 
-  it("detects a stale worker-runtime lock whose holder is gone", async () => {
+  it("detects a stale worker-runtime lock whose holder is gone", { timeout: 60_000 }, async () => {
     const eventsDir = join(project, ".worker-runtime", "events");
     await mkdir(eventsDir, { recursive: true });
     await writeFile(
@@ -201,7 +210,7 @@ describe.skipIf(!HAS_DIST)("doctor — negative scenario handling", () => {
     expect(result.code).toBe(1);
   });
 
-  it("--fix releases a stale lock but never an active one", async () => {
+  it("--fix releases a stale lock but never an active one", { timeout: 60_000 }, async () => {
     const eventsDir = join(project, ".worker-runtime", "events");
     await mkdir(eventsDir, { recursive: true });
     const lockPath = join(eventsDir, "writer.lock");
@@ -232,7 +241,7 @@ describe.skipIf(!HAS_DIST)("doctor — negative scenario handling", () => {
     expect(await pathExists(lockPath)).toBe(false);
   });
 
-  it("does not touch a lock held on another host", async () => {
+  it("does not touch a lock held on another host", { timeout: 60_000 }, async () => {
     const eventsDir = join(project, ".worker-runtime", "events");
     await mkdir(eventsDir, { recursive: true });
     const lockPath = join(eventsDir, "writer.lock");
@@ -253,7 +262,7 @@ describe.skipIf(!HAS_DIST)("doctor — negative scenario handling", () => {
     expect(await pathExists(lockPath)).toBe(true);
   });
 
-  it("--json output is always valid JSON even with many issues", async () => {
+  it("--json output is always valid JSON even with many issues", { timeout: 60_000 }, async () => {
     for (let i = 0; i < 3; i++) {
       const pluginDir = join(project, ".opencode", "plugins", `broken-${i}`);
       await mkdir(pluginDir, { recursive: true });
