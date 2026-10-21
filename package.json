@@ -25,7 +25,8 @@
     "build": "tsc -b",
     "clean": "node scripts/clean.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "report:lint": "node scripts/report-lint.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

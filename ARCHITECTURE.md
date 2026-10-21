@@ -248,6 +248,7 @@ is worse than no guarantee.
 | What is still open? | **`docs/BACKLOG.md`** | `ROADMAP.md` (strategy) |
 | Why was it done that way? | **`docs/DECISIONS.md`** | — |
 | Who is this for, and who is accountable? | **`docs/PERSONAS.md`** | `README.md` (onboarding) |
+| How is a report for the founder written, and what must a report never contain? | **`docs/REPORT-FORMAT.md`** | `AGENTS.md` (the summary of it) |
 | Where does every external claim come from? | **`docs/EVIDENCE.md`** | prose |
 | What did the last sessions establish? | **`docs/SESSION-LEARNINGS.md`** | — |
 | Which agents are supported? | `core/src/detect/index.ts` (`ALL_AGENTS`) | `README.md` (a table that may lag) |
@@ -274,6 +275,7 @@ is worse than no guarantee.
 | What was the original remediation, and is it done? | **`REMEDIATION_PLAN.md`** | — |
 | What was the audit remediation, and is it done? | **`IMPLEMENTATION_PLAN.md`** | — |
 | What is the security policy? | **`SECURITY.md`** | `docs/FAILURE-MODES.md` (the catalogue) |
+| How do we report to the person who reads this? | **`docs/REPORT-FORMAT.md`** | prose (it is a format, not a fact) |
 
 **The ownership map is machine-checked.**
 `core/src/boundaries/doc-ownership.test.ts` asserts that every markdown file

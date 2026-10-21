@@ -11,12 +11,14 @@ record**, not a live status board. The remaining work is the SDK roadmap in
 > falsehood in a status line is the worst place for one** — it is the one
 > sentence every reader trusts without checking.
 >
-> The honest picture: **M1, M2, M5 and M6 are implemented.** **M3 (Evidence
-> Ledger), M4 (Decision + Experience), M7 (Verification Engine), M7a, M8, M9,
-> M10, M11 and M12 are not.** Their contracts exist and are frozen; nothing
-> yet produces or consumes them. The kernel's own boundary guard makes the
-> same point mechanically: six of the ten frozen contracts have no consumer
-> outside the contracts file, and each one names the milestone that will
+> The honest picture, as of this cycle: **M1, M2, M3, M4, M5, M6 and M7
+> are implemented.** M3 (the Evidence Ledger), M4 (the Decision + Experience
+> Ledger) and M7 (the Verification Engine) were built after this paragraph
+> was first written, and this paragraph was corrected rather than left to
+> drift. **M7a, M8, M9, M10, M11 and M12 are not.** Their contracts exist and
+> are frozen; nothing yet produces or consumes them. The kernel's own
+> boundary guard makes the same point mechanically: the remaining unbound
+> contracts are the Work Contract and the Certificate, and each onee names the milestone that will
 > bind it (`packages/worker-runtime/src/contracts/orphan-contracts.test.ts`).
 
 > **Correction (2026-10-20).** This document previously said "implementation

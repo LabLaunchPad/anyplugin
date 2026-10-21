@@ -59,7 +59,48 @@ pnpm clean                       # remove all dist/ output
 | The extraction ledger: what was learned, refused, and deferred | `docs/agent-sdk/learnings.md` |
 | The platform patterns stolen from Linux, Debian, Android, macOS and the clouds | `docs/agent-sdk/platform-engineering.md` |
 | Document-ownership guard (a document with no owner fails the build) | `core/src/boundaries/doc-ownership.test.ts` |
+| Founder-facing report format (skeleton, status vocabulary, diagram templates) | `docs/REPORT-FORMAT.md` |
+| Report-format linter (fails a report that breaks the format) | `scripts/report-lint.mjs` |
 | Layer stack, dependency direction, "which doc owns what" | `ARCHITECTURE.md` |
+
+## How to report (read this before writing a report)
+
+**The person this repository is built for reads the OUTPUT, not the code.**
+The report format is `docs/REPORT-FORMAT.md` and it is not optional — it
+is the contract for anything written for the founder or for anyone outside
+the codebase.
+
+A report has seven sections in this order: **The headline**, **Where things
+stand**, **What changed**, **What it means for the product**, **Decisions I
+need from you**, **What I checked, and what's next**, and optionally **Words
+I had to use**. The first two sentences must say what happened and what the
+reader needs to do.
+
+Four rules that override the rest of this file when they conflict:
+
+1. **Never make an internal ID the spine of a report.** `M7`, `P1-5`,
+   `D-053` may appear in parentheses after a plain-language statement. They
+   may never be a heading, a sentence subject, or the only content of a cell.
+2. **Status must be one of the six plain words, and must be exact.**
+   `DONE` (built and verified) / `BUILT — NOT YET VERIFIED` (built but
+   unproven) / `IN PROGRESS` / `NOT STARTED` (designed or absent) /
+   `BLOCKED — waiting on you` / `BLOCKED — waiting on something else`.
+   A schema, a type, or a document is never a stand-in for an engine.
+3. **A table of file paths is not evidence for a non-technical reader.** Say
+   what it MEANS, then where to look if the reader wants to check.
+4. **A diagram is required, and it is rendered.** Mermaid, a caption that
+   begins "Read this as:", and a plain-text fallback that is arrows and
+   indentation — never boxes, which misalign in any proportional font.
+
+**Lint before you send.** `pnpm report:lint <file>` — the guard is
+`scripts/report-lint.mjs`, and it fails a report that breaks any rule above.
+
+The person-level half of the contract (who the reader is, the 90-second
+rule, the glossary discipline) lives in the user's global configuration and
+applies to every project. This document owns only the parts that are
+specific to this one.
+
+---
 
 ## Repo layout
 
