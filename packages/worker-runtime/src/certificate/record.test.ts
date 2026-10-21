@@ -106,12 +106,15 @@ describe("recording a certificate", () => {
     // This asserts a DEFECT, deliberately. The write contract's G5 says a
     // re-appended committed event id must not produce two committed events,
     // and the production append path does not enforce it — so a retried
-    // recording commits the same id twice, and replay reports a duplicate id
-    // as the contract's "broken writer" signal.
+    // recording commits the same id twice.
     //
-    // The fix is recorded in `docs/BACKLOG.md`. If the log starts
-    // enforcing G5, this test goes RED, and that is the welcome surprise
-    // that says the gap closed.
+    // What replay does with that is NOT "report a broken writer": replay
+    // de-duplicates on the SEQUENCE, and there is no id-based check
+    // anywhere in the runtime. So the duplicate is committed and nothing
+    // complains. That is what makes the gap worth closing, and it is
+    // recorded in `docs/BACKLOG.md`. If the log starts enforcing G5,
+    // this test goes RED, and that is the welcome surprise that says the
+    // gap closed.
     const sealed = certificate();
     const first = recordCertificate(log, sealed);
     const second = recordCertificate(log, sealed);

@@ -15,15 +15,16 @@ record**, not a live status board. The remaining work is the SDK roadmap in
 > are implemented.** M3 (the Evidence Ledger), M4 (the Decision + Experience
 > Ledger) and M7 (the Verification Engine) were built after this paragraph
 > was first written, and this paragraph was corrected rather than left to
-> drift. **M7a, M8, M10, M11 and M12 are not.** Their contracts exist and
+> drift. **M7a, M8, M11 and M12 are not.** Their contracts exist and
 > are frozen; nothing yet produces or consumes them. **M9 and M10 are IN
-> PROGRESS:** the execution half and the seal. **M9 is IN PROGRESS:**
-> its contracts and its one backend are built, and the workspace half — the
-> part that makes it a sandbox rather than a process runner — is not. The
-> kernel's own
-> boundary guard makes the same point mechanically: the remaining unbound
-> contracts are the Work Contract and the Certificate, and each onee names the milestone that will
-> bind it (`packages/worker-runtime/src/contracts/orphan-contracts.test.ts`).
+> PROGRESS:** the execution half and the seal. M9's contracts and its one
+> backend are built, and the workspace half — the part that makes it a
+> sandbox rather than a process runner — is not; M10's certificate is
+> issued, verified and recorded, and is not yet bound into a work
+> contract's lifecycle. The kernel's own
+> boundary guard makes the same point mechanically: it names the contracts
+> that nothing produces or consumes, and names the milestone that will bind
+> each one (`packages/worker-runtime/src/contracts/orphan-contracts.test.ts`).
 
 > **Correction (2026-10-20).** This document previously said "implementation
 > not started. M0 is the next action", and stated that "`packages/` is not
