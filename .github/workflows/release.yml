@@ -59,6 +59,12 @@ jobs:
       # than on a laptop.
       id-token: write
       contents: read
+    env:
+      # Whether an npm token exists. Secrets cannot be used directly in an
+      # `if:` condition, so the answer is exported once and the steps read
+      # it. An absent secret evaluates to the empty string, which is not
+      # "true", which is exactly the answer we want.
+      NPM_TOKEN_PRESENT: ${{ secrets.NPM_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -90,14 +96,26 @@ jobs:
         # is published.
         run: node scripts/release.mjs --check
 
-      - name: Publish
-        # The script packs with pnpm (which rewrites the workspace specs)
-        # and publishes the tarball with npm (which attests with
-        # provenance). Both halves matter; neither alone is enough.
+      - name: Publish (with an npm token)
+        # Only runs when a token exists. The presence of the secret is
+        # exported as a job variable because secrets cannot be referenced
+        # directly in an `if:` condition.
+        #
+        # The token is NOT set when it is absent: an empty bearer token is
+        # an invalid credential, npm reports it as E401, and it makes npm
+        # prefer the token over the attestation exchange — so an empty
+        # variable would BREAK trusted publishing rather than fall back
+        # from it.
+        if: env.NPM_TOKEN_PRESENT == 'true'
         run: node scripts/release.mjs --publish
         env:
-          # Only set when the secret exists. An empty bearer token is an
-          # invalid credential, and npm reports that as E401 — which reads
-          # like a bad token rather than like a missing configuration.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN != '' && secrets.NPM_TOKEN || '' }}
-          NPM_CONFIG_PROVENANCE: "true"
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish (with npm's trusted publishing)
+        # No token at all: npm exchanges the runner's OIDC identity for a
+        # short-lived credential, and the registry records which workflow
+        # published which bytes. This is the path the first release should
+        # take, because the attestation is the point of publishing from CI
+        # rather than from a laptop.
+        if: env.NPM_TOKEN_PRESENT != 'true'
+        run: node scripts/release.mjs --publish
