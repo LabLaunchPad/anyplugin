@@ -9,10 +9,8 @@ and execute** one of these instead of re-investigating the original problem.
 **This file owns nothing else.** Finding ids, defect taxonomy, statuses, and the
 VERIFY → FIX → ERADICATE THE CLASS protocol belong to
 [`ENGINEERING_LEDGER.md`](../../ENGINEERING_LEDGER.md); milestones and constraints belong to
-[`ROADMAP.md`](../../ROADMAP.md). Entries here reference those; they never restate them.
-**Current subsystem state has no single owning document.** `CURRENT_STATE.md` is a pinned snapshot of
-`77729f8` and says so in its own header, so current state is established from the ledger, the source,
-and CI at the exact HEAD — never from a document that claims to be current.
+[`ROADMAP.md`](../../ROADMAP.md); current subsystem state belongs to
+[`CURRENT_STATE.md`](../../CURRENT_STATE.md). Entries here reference those; they never restate them.
 
 A procedure earns a place here only when it is **executable** — a checklist a future session can run and
 get a pass/fail from. Advice belongs in prose; this file is for steps.
@@ -94,13 +92,19 @@ what makes this class recur silently.
    two properties and only one is being tested.
 2. **FALSE IMPLEMENTATION.** Construct the *smallest* change that makes that property false while
    leaving the code plausible. Not a broken build — a working implementation that lacks the property.
-3. **DISCRIMINATION.** Run the test against it. **It must fail.** If it passes, the test is
-   non-discriminating and may not be promoted to evidence for that property, whatever else it proves.
+3. **DISCRIMINATION.** Run the test against it. **It must fail, and it must fail for the RIGHT
+   REASON** — the failure must name the offending thing, not merely report a mismatch. A test that
+   only checks "it threw" still passes when the check it targets is deleted and a neighbouring check
+   catches the input by accident. If it passes, the test is non-discriminating and may not be
+   promoted to evidence for that property, whatever else it proves.
 4. **OBSERVATION BOUNDARY.** Record what the test can actually observe: same process · fresh process
    · concurrent processes · filesystem · machine/OS · crash boundary · network · clock · external
    state.
 5. **PROMOTION RULE.** Promote it as evidence *only* for the property it discriminates, *only* within
    the boundary it observes. Never infer a stronger guarantee from a weaker boundary.
+6. **STATUS.** A guard is `PASSED` only when it has been seen to fail for the right reason. A guard
+   that was never made to fail is **`ARMED`**, not `PASSED` — it might be armed and pointed at
+   nothing. Absent the failure cycle, the claim is `UNKNOWN`.
 
 **Inferences that are not valid**, each of which has a real counterexample in this repository:
 
@@ -115,8 +119,8 @@ what makes this class recur silently.
 | a green run on an earlier SHA | the current head (F17) |
 | test coverage | proof of the covered property |
 
-**Acceptance.** A recorded false-implementation cycle showing the test failing, plus a stated
-observation boundary. Absent either, the claim is `UNKNOWN` — not `PASS`.
+**Acceptance.** A recorded false-implementation cycle showing the test failing **for the right
+reason**, plus a stated observation boundary. Absent either, the claim is `UNKNOWN` — not `PASS`.
 
 **Relationship to the procedure below.** `PROVE_A_GUARD_CAN_FAIL` is this procedure's narrowest
 special case: it covers step 3 for a single guard. This one additionally forces steps 1, 4 and 5 —
@@ -252,6 +256,8 @@ repetition would agree with itself forever and never reveal a per-process input.
 cell. Damage classified identically everywhere.
 
 **Explicitly not established.** Durability. These steps prove state rebuilds from a log that
-*survived*; they say nothing about whether it survives a crash or power loss.
+*survived*; they say nothing about whether it survives a crash or power loss. Nor tamper-resistance
+against a deliberate rewriter: the log has no hash chain, so a rewrite that produces a
+self-consistent log is indistinguishable from an honest one (backlog P2-37).
 
-**Evidence.** `log/replay-determinism.test.ts` · F16 · F17.
+**Evidence.** `log/replay-determinism.test.ts` · F16.
