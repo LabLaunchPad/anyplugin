@@ -121,7 +121,7 @@ export const TELEMETRY_INVENTORY: readonly TelemetryCapability[] = [
     field: "model",
     knownBy: "ATTESTED",
     source: "caller",
-    note: "recorded HERE and never in a semantic contract: the ten frozen contracts stay model-agnostic, while a measurement of an execution legitimately records what ran",
+    note: "recorded HERE and never in a semantic contract: the frozen contracts stay model-agnostic, while a measurement of an execution legitimately records what ran",
   },
   {
     field: "toolCalls",

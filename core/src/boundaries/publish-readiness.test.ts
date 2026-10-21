@@ -214,7 +214,7 @@ describe("publish readiness", () => {
     // `pnpm pack` is the packer that produces the published artifact, and
     // it is the one that rewrites the workspace specs. Checking npm's
     // tarball instead would validate the wrong bytes.
-    { timeout: 120_000 },
+    { timeout: 300_000 },
     () => {
       for (const pkg of packages) {
         const result = inspect(pkg.dir);
@@ -251,7 +251,7 @@ describe("publish readiness", () => {
     // P2-28 again: this packs seven packages, and packing runs the build.
     // A timeout here is a FALSE ALARM about the guard, which is worse than
     // no guard.
-    { timeout: 120_000 },
+    { timeout: 300_000 },
     () => {
     // THE decisive check. `npm pack` leaves `"@lablaunchpad/core":
     // "workspace:*"` in the manifest, and npm cannot resolve a `workspace:`

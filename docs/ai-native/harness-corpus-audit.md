@@ -220,7 +220,7 @@ and directly serves an already-open ledger item (AP-004).
 - `ExecutionStrategy` in any form — no execution traces exist to derive one from (§3, M7).
 - A context-ladder / progressive-disclosure router — presupposes stored procedures and traces.
 - Any MCP server, vector store, graph store, memory layer, or corpus mirror.
-- Any change to the ten frozen contracts.
+- Any change to the frozen contracts.
 - Any promotion of an `EXTERNAL_CLAIM` into evidence.
 
 **The governing question this audit was run to answer** — *which harness mechanisms can be compiled from

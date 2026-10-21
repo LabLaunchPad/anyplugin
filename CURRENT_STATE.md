@@ -71,7 +71,7 @@ All six workspace boundary guards report **`PASSED`**, never `ARMED`, on Windows
 | Unicode NFC normalization (F14) | `VERIFIED_TESTED` | `canonical.test.ts`; NFC/NFD converge |
 | Unsafe-integer rejection (F15) | `VERIFIED_TESTED` | `canonical.test.ts`; collision refused |
 | Cross-platform artifact determinism (F13) | `VERIFIED_TESTED` | `.gitattributes`; 164/164 `i/lf`; Windows CI green |
-| 10 frozen contracts @ `1.0.0` | `VERIFIED_TESTED` | `contracts/index.ts` (405 L); 35 tests |
+| 12 frozen contracts @ `1.3.0` | `VERIFIED_TESTED` | `contracts/` — the domain model and the execution contracts |
 | JSON Schema mirror | `VERIFIED_TESTED` | 10 files in `schemas/`; 9 sync tests, byte-for-byte |
 | ID path safety | `VERIFIED_TESTED` | `id-path-safety.test.ts`; hostile corpus |
 | Runtime-state git boundary | `VERIFIED_TESTED` | `git-boundary.test.ts` via real `git check-ignore` |

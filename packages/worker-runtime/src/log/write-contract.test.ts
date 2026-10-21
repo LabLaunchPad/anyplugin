@@ -168,7 +168,17 @@ it("the concurrency harness is not silently skipped in CI", () => {
   else expect(true).toBe(true);
 });
 
-describe.skipIf(!distBuilt)("concurrent writers (4 processes, records > PIPE_BUF)", () => {
+describe.skipIf(!distBuilt)(
+  "concurrent writers (4 processes, records > PIPE_BUF)",
+  // The timeout is explicit because these tests spawn FOUR real OS
+  // processes and write more than a pipe buffer, and vitest's 5 s default
+  // is genuinely marginal for it: on an idle machine the file passes in
+  // under ten seconds, and under any real load it crosses 5 s and fails —
+  // a verdict that depends on the machine rather than on the code. The
+  // assertions are unchanged; only the budget is stated. See
+  // `docs/BACKLOG.md` P2-28.
+  { timeout: 120_000 },
+  () => {
   const WRITERS = 4;
   const PER_WRITER = 25;
 
@@ -238,4 +248,5 @@ for (let i = 0; i < Number(count); i += 1) w.append(dir, { id: \`W\${idx}-E\${i}
       expect(r.anomalies).toEqual([]);
     },
   );
-});
+  },
+);

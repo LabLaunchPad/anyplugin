@@ -1,8 +1,8 @@
 {
-  "$id": "https://lablaunchpad.dev/worker-runtime/1.2.0/worker-state.schema.json",
+  "$id": "https://lablaunchpad.dev/worker-runtime/1.3.0/worker-state.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Worker Runtime frozen contract: WorkerState (contract version 1.2.0).",
+  "description": "Worker Runtime frozen contract: WorkerState (contract version 1.3.0).",
   "properties": {
     "assumptions": {
       "default": [],
@@ -17,7 +17,7 @@
       "type": "string"
     },
     "contractVersion": {
-      "const": "1.2.0",
+      "const": "1.3.0",
       "type": "string"
     },
     "id": {

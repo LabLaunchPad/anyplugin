@@ -19,6 +19,7 @@ import {
   type WorkerPhase,
   type WorkerState,
 } from "../contracts/index.js";
+import { migrateRecord } from "../contracts/migration.js";
 import type { ReplayReport } from "./replay.js";
 
 /** A transition the log asked for that the phase machine forbids. */
@@ -58,7 +59,27 @@ export function foldWorkerState(events: readonly WorkerEvent[]): FoldResult {
       ignored += 1;
       continue;
     }
-    const contractId = event.subject;
+
+    // Upgrade the event on read.
+    //
+    // A log written under an EARLIER contract version must still fold — that
+    // is the whole point of the migration machinery, and the replay path
+    // already does it. Without this line, a widening of the contract
+    // version would silently make every existing log unreadable, which is
+    // the one thing a widening is forbidden to do.
+    const migrated = migrateRecord(event);
+    if (!migrated.ok) {
+      rejected.push({
+        sequence: event.sequence,
+        from: INITIAL_PHASE,
+        to: String(event.payload["to"] ?? "?"),
+        reason: `the event could not be upgraded: ${migrated.reason}`,
+      });
+      continue;
+    }
+    const upgraded = migrated.value as WorkerEvent;
+
+    const contractId = upgraded.subject;
     const to = event.payload["to"];
     const current = states.get(contractId);
     const from = current?.phase ?? INITIAL_PHASE;
@@ -76,7 +97,7 @@ export function foldWorkerState(events: readonly WorkerEvent[]): FoldResult {
       contractId,
       WorkerStateSchema.parse({
         id: current?.id ?? deriveStateId(contractId),
-        contractVersion: event.contractVersion,
+        contractVersion: upgraded.contractVersion,
         contractId,
         phase: to,
         assumptions: current?.assumptions ?? [],

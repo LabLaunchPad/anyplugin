@@ -30,6 +30,12 @@ export {
 } from "./contracts/migration.js";
 export { canonicalJson, contentHash, isContentHash, CanonicalizationError } from "./canonical.js";
 export { exportSchemas, schemaFileName, type ExportedSchema } from "./schema-export.js";
+export {
+  LocalProcessBackend,
+  executionRootSize,
+  type LocalProcessBackendOptions,
+} from "./execution/local-process.js";
+export type { ExecutionBackend } from "./execution/backend.js";
 
 export {
   STORAGE_ROOT_DIRNAME,

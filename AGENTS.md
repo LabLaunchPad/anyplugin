@@ -62,6 +62,7 @@ pnpm clean                       # remove all dist/ output
 | Founder-facing report format (skeleton, status vocabulary, diagram templates) | `docs/REPORT-FORMAT.md` |
 | Report-format linter (fails a report that breaks the format) | `scripts/report-lint.mjs` |
 | The release path (packs with pnpm, publishes with npm, refuses what is not ready) | `scripts/release.mjs` |
+| The JSON Schema mirror generator (the zod schemas are the source of truth) | `scripts/export-schemas.mjs` |
 | The specialist agent definitions the orchestration loops dispatch to | `.opencode/agents/` |
 | Layer stack, dependency direction, "which doc owns what" | `ARCHITECTURE.md` |
 

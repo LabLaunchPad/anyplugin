@@ -39,8 +39,11 @@ graph TD
     end
 
     subgraph KERNEL["Worker Runtime — deterministic kernel"]
-        CON["contracts/<br/>10 frozen contracts @ 1.0.0"]
-        LOG["log/<br/>event-log · replay · worker-state"]
+        CON["contracts/<br/>12 frozen contracts @ 1.3.0"]
+        LOG["log/<br/>event-log · replay · worker-state<br/>evidence · decisions · experience"]
+        GRA["graph/<br/>derive · traverse · invalidation · reopen"]
+        VER["verify/<br/>the verification engine"]
+        EXE["execution/<br/>the backend abstraction + local-process"]
         TEL["telemetry/<br/>delegation contract · resource inventory"]
         OWN["ownership · storage · canonical"]
     end

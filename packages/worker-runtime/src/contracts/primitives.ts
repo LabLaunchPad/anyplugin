@@ -46,6 +46,41 @@ export const ContentHashSchema = z
  * glance and makes it impossible to pass an evidence id where a decision id is
  * required without the schema noticing.
  */
+/**
+ * The contract version.
+ *
+ * ── The history, because a version field is a promise ──────────────────────
+ *
+ * **`1.1.0`** widened the event-kind vocabulary with `DELEGATION_RECORDED`,
+ * so the delegation telemetry can live in the SAME log as the work events
+ * rather than in a second log nobody replays. The record's *shape* did not
+ * change — the same fields, the same constraints — so the migration is the
+ * version string and nothing else.
+ *
+ * That matters for two reasons:
+ *
+ * - a record labelled `1.0.0` carrying a kind that did not exist in
+ *   `1.0.0` would be a lie, and a lie in a version field is the one lie
+ *   the whole mechanism exists to prevent; and
+ * - a **widen-only** migration is trivially reversible in meaning: the
+ *   upgraded record means exactly what it meant before, so a certificate
+ *   that binds a `1.0.0` record's content still verifies against it.
+ *
+ * **`1.2.0`** widened the event-kind vocabulary again, with the candidate
+ * lifecycle and the policy promotions.
+ *
+ * **`1.3.0`** added the execution contracts (M9): the shapes of a deadline,
+ * an environment, a working directory and what a run produced. The
+ * existing record shapes are untouched, so this is a **widening**: a
+ * certificate that binds a `1.2.0` record still verifies against it.
+ *
+ * The version lives here rather than in `contracts/index.ts` because the
+ * execution contracts need it, and `index.ts` imports them — a version
+ * constant that the file that re-exports it must also import is a cycle
+ * waiting to happen.
+ */
+export const CONTRACT_VERSION = "1.3.0";
+
 export const ID_PREFIXES = {
   workContract: "WC",
   workerState: "WS",
@@ -56,6 +91,7 @@ export const ID_PREFIXES = {
   verification: "VER",
   certificate: "CERT",
   node: "ND",
+  execution: "EXE",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

@@ -10,6 +10,10 @@
  */
 import { z } from "zod";
 import {
+  ExecutionRequestSchema,
+  ExecutionResultSchema,
+} from "./execution.js";
+import {
   ActorSchema,
   ConfidenceSchema,
   ContentHashSchema,
@@ -32,8 +36,13 @@ import {
  * A record written under `1.0.0` is still readable: `migrateRecord()` in
  * `contracts/migration.ts` upgrades it on read, and an unknown **future**
  * version is refused rather than guessed at.
+ *
+ * **The version constant lives in `contracts/primitives.ts`**, because the
+ * execution contracts (M9) need it and this file imports them — a version
+ * constant that the file re-exporting it must also import is a cycle
+ * waiting to happen.
  */
-export const CONTRACT_VERSION = "1.2.0";
+import { CONTRACT_VERSION } from "./primitives.js";
 
 // ── 1. Work Contract ─────────────────────────────────────────────────────────
 
@@ -463,6 +472,9 @@ export const CONTRACTS = {
   InvalidationResult: InvalidationResultSchema,
   VerificationResult: VerificationResultSchema,
   Certificate: CertificateSchema,
+  ExecutionRequest: ExecutionRequestSchema,
+  ExecutionResult: ExecutionResultSchema,
 } as const;
 
 export * from "./primitives.js";
+export * from "./execution.js";

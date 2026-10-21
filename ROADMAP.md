@@ -15,8 +15,11 @@ record**, not a live status board. The remaining work is the SDK roadmap in
 > are implemented.** M3 (the Evidence Ledger), M4 (the Decision + Experience
 > Ledger) and M7 (the Verification Engine) were built after this paragraph
 > was first written, and this paragraph was corrected rather than left to
-> drift. **M7a, M8, M9, M10, M11 and M12 are not.** Their contracts exist and
-> are frozen; nothing yet produces or consumes them. The kernel's own
+> drift. **M7a, M8, M10, M11 and M12 are not.** Their contracts exist and
+> are frozen; nothing yet produces or consumes them. **M9 is IN PROGRESS:**
+> its contracts and its one backend are built, and the workspace half — the
+> part that makes it a sandbox rather than a process runner — is not. The
+> kernel's own
 > boundary guard makes the same point mechanically: the remaining unbound
 > contracts are the Work Contract and the Certificate, and each onee names the milestone that will
 > bind it (`packages/worker-runtime/src/contracts/orphan-contracts.test.ts`).
@@ -25,7 +28,7 @@ record**, not a live status board. The remaining work is the SDK roadmap in
 > not started. M0 is the next action", and stated that "`packages/` is not
 > currently a workspace location". Both were false by then: `pnpm-workspace.yaml`
 > declares `packages/*`, and the kernel under `packages/worker-runtime/` had
-> shipped ten frozen contracts, an append-only event log, a verification
+> shipped the frozen contracts, an append-only event log, a verification
 > engine, an invalidation engine, a delegation wrapper and a `doctor` command.
 > The status claims were correctable, so they were corrected; the document's
 > full rewrite into a live status board is a separate piece of work
@@ -343,7 +346,8 @@ Each milestone follows the same shape — **Goal / Non-goals / Truth constraint 
 | **M3** Evidence Ledger | **COMPLETE** | `packages/worker-runtime/src/log/evidence.ts` — the evidence projection. The record is immutable: invalidation appends an event and the *projection* flips, so the source, the hash and the authority are unchanged and only `validity` moves. `usableEvidence()` and `invalidatedEvidence()` are what the verification engine consults. `packages/worker-runtime/src/log/ledgers.test.ts` |
 | **M4** Decision + Experience | **COMPLETE** | `packages/worker-runtime/src/log/experience.ts` — the experience projection, and `planPromotion()`, which is the only thing in the kernel that can move a rung. The ladder is append-only: a promotion advances by **exactly one** rung, `VERIFIED_KNOWLEDGE` needs evidence, every promotion needs a justification, and **nothing promotes automatically**. `packages/worker-runtime/src/log/ledgers.test.ts` |
 | **M7** Verification Engine | **COMPLETE** | `packages/worker-runtime/src/verify/index.ts` — a pure verifier with three gates in order: the evidence must be **present**, then **usable**, and only then does the check run. Missing *or invalidated* evidence ⇒ `BLOCKED`, never `PASS`. Three initial verifiers ship: graph consistency, dependency consistency, and evidence integrity. `packages/worker-runtime/src/verify/verify.test.ts` |
-| **M7a**, **M8**, **M9**, **M10**, **M11**, **M12** | **NOT IMPLEMENTED** | Contracts exist and are frozen; nothing produces or consumes them. The boundary guard names the milestone that will bind each unbound contract — `packages/worker-runtime/src/contracts/orphan-contracts.test.ts` |
+| **M9** | **IN PROGRESS** | The contracts and the one backend are built: `packages/worker-runtime/src/execution/` — the `ExecutionBackend` abstraction and `LocalProcessBackend` (cwd confinement, an environment allowlist, a deadline, capped output, artifact capture). **The workspace half is not built** — the kernel document's `create` · `snapshot` · `read` · `write` · `diff` · `rollback` · `destroy` contract is what makes it a *sandbox* rather than a process runner. |
+| **M7a**, **M8**, **M10**, **M11**, **M12** | **NOT IMPLEMENTED** | Contracts exist and are frozen; nothing produces or consumes them. The boundary guard names the milestone that will bind each unbound contract — `packages/worker-runtime/src/contracts/orphan-contracts.test.ts` |
 
 **M5 and M6 needed no contract version bump.** Traversal is a pure function over the existing `GraphSnapshotSchema`, and `InvalidationResultSchema` was already frozen — it simply had no producer. The invalidation engine then used **event kinds that were already in the closed enum** (`DECISION_STALED`, `STATE_TRANSITION`, `EVIDENCE_SUPERSEDED`, `DECISION_RECORDED`), so the whole of M6 cost no contract migration. That is the cheapest high-value pair in the plan, and they are the only ones that land in this repository.
 

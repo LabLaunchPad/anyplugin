@@ -37,10 +37,10 @@
 import { CONTRACT_VERSION } from "./index.js";
 
 /** The contract versions this build can read. */
-export const READABLE_CONTRACT_VERSIONS = ["1.0.0", "1.1.0", CONTRACT_VERSION] as const;
+export const READABLE_CONTRACT_VERSIONS = ["1.0.0", "1.1.0", "1.2.0", CONTRACT_VERSION] as const;
 
 /** The versions this build can UPGRADE from. */
-const UPGRADABLE: readonly string[] = ["1.0.0", "1.1.0"];
+const UPGRADABLE: readonly string[] = ["1.0.0", "1.1.0", "1.2.0"];
 
 export type MigrationResult =
   | { readonly ok: true; readonly value: unknown }
