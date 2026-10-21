@@ -41,6 +41,6 @@
   },
   "dependencies": {
     "@lablaunchpad/core": "workspace:*",
-    "smol-toml": "^1.3.0"
+    "smol-toml": "^1.9.1"
   }
 }
