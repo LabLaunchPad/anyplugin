@@ -271,6 +271,7 @@ is worse than no guarantee.
 | Which adopted patterns the evidence supports, and which it does not? | `docs/PATTERNS.md` | — |
 | What procedures must a change follow? | `docs/ai-native/reusable-procedures.md` | — |
 | What did the external research audit find? | `docs/ai-native/harness-corpus-audit.md` | — |
+| Multi-perspective code review report | `docs/reviews/MULTI_PERSPECTIVE_CODE_REVIEW.md` | — |
 | What is the strategy, milestone by milestone? | **`ROADMAP.md`** | `ARCHITECTURE.md` (shape) |
 | What is true right now? | **`CURRENT_STATE.md`** | prose |
 | Which defects are open, fixed, or unmapped? | **`ENGINEERING_LEDGER.md`** | `docs/BACKLOG.md` (the classified backlog) |
