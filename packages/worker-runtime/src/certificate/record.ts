@@ -15,15 +15,13 @@
  * ── The id is DERIVED, and that is the point ────────────────────────────────
  *
  * The event's id comes from `eventIdOf`, which derives it from the event's
- * content. So recording the same certificate twice produces the same event
- * id — and the log's own guarantee G5 says re-appending a committed event
- * id does not commit it twice.
+ * content — the payload included. So the same certificate always produces
+ * the same event id, and two different certificates never collide.
  *
- * A derived id is what makes a duplicate DETECTABLE, and it is what
- * the log's own G5 guarantee keys on. But the production append path does
- * not enforce G5 yet — it writes what it is handed — so a retried recording
- * commits the same event id twice, and replay reports a duplicate id as the
- * contract's "broken writer" signal. That gap is recorded in
+ * A derived id is what makes a duplicate DETECTABLE, and it is what the
+ * log's own G5 guarantee keys on. But the production append path does not
+ * enforce G5 yet — it writes what it is handed — so a retried recording
+ * commits the same event id twice. That gap is recorded in
  * `docs/BACKLOG.md`, and it is not closed by this module.
  *
  * ── What goes in the payload ───────────────────────────────────────────────
