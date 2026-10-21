@@ -69,15 +69,15 @@ AP-020.
 including in a commit message, a pull-request body, a gate claim, or the ledger.
 
 **Why it exists.** This class has bitten this repository more than once, and twice it was the
-*verification machinery* rather than the runtime:
+*verification machinery* rather than the runtime. The findings are owned by
+[`ENGINEERING_LEDGER.md`](../../ENGINEERING_LEDGER.md) — read F16, F17 and the workspace boundary
+guard entry there for the narratives; what matters here is the shape they share:
 
-- **F16** — the F10 write harness carried no `sequence`. Its clean concurrency numbers proved *set
-  completeness* while being cited for *ordering*. Two different properties; only one was measured.
-  The harness could not have caught the defect it was cited against, because the defect lived in a
-  field the harness never wrote.
-- **F17** — two CLI suites' pass depended on the runner's speed and on scheduling luck. The suite
-  was green on a quiet machine and red on a loaded one, so the pass was a property of the
-  environment rather than of the code.
+- **F16** — a harness that could not have caught the defect it was cited against, because the
+  defect lived in a field the harness never wrote. Its clean numbers proved a *different* property
+  than the one claimed.
+- **F17** — a pass that was a property of the environment rather than of the code: green on a quiet
+  machine, red on a loaded one.
 - The workspace boundary guard enumerated forbidden packages individually and silently omitted
   `@lablaunchpad/core` — the single most important one to block. It could not fail for the case it
   existed to catch.
@@ -112,7 +112,7 @@ what makes this class recur silently.
 |---|---|
 | in-process replay | cross-process determinism |
 | a successful concurrent execution | durability |
-| no observed data loss | guaranteed atomicity (F10 — POSIX bounds `O_APPEND` at `PIPE_BUF`) |
+| no observed data loss | guaranteed atomicity (F10 — records above `PIPE_BUF` bytes were observed lossless on two platforms, and neither platform documents the guarantee) |
 | parser validity | integrity (plain append accepted a tampered, well-formed record) |
 | schema validity | engine correctness |
 | CI green | semantic correctness |

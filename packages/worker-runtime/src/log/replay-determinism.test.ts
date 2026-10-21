@@ -38,14 +38,12 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { type WorkerEvent } from "../contracts/index.js";
-import { CONTRACT_VERSION } from "../contracts/primitives.js";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { STORAGE_ROOT_DIRNAME } from "../storage.js";
-import { EventLog, LOG_FILENAME } from "./event-log.js";
+import { LOG_FILENAME } from "./event-log.js";
 import { replay, replayDigest } from "./replay.js";
-import { foldFromReplay, stateHash } from "./worker-state.js";
+import { foldFromReplay, stateHash, stateJson } from "./worker-state.js";
 
 /**
  * Spawn-heavy and filesystem-heavy, and it runs concurrently with the rest of
@@ -54,7 +52,11 @@ import { foldFromReplay, stateHash } from "./worker-state.js";
  */
 vi.setConfig({ testTimeout: 30_000 });
 
-const DIST_DIR = join(import.meta.dirname, "..", "..", "dist", "log");
+// `dirname(fileURLToPath(import.meta.url))`, NOT `import.meta.dirname`:
+// the latter landed in Node 20.11 and `engines` promises >=20, so it is
+// undefined on 20.0-20.10. BUG-04 in the ledger records that class as fixed
+// and eradicated, and the Node-20 CI job is the standing guardrail.
+const DIST_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "dist", "log");
 const distBuilt = existsSync(join(DIST_DIR, "replay.js"));
 
 const roots: string[] = [];
@@ -105,13 +107,50 @@ const EVENTLOG_URL = JSON.stringify(pathToFileURL(join(DIST_DIR, "event-log.js")
 // reads as "the kernel is non-deterministic" rather than as a typo.
 const CONTRACT_URL = JSON.stringify(pathToFileURL(join(DIST_DIR, "..", "contracts", "primitives.js")).href);
 
+/**
+ * The history, written ONCE and read by BOTH the writer child and the
+ * in-process path.
+ *
+ * It lives in a file rather than in either script's source so the two cannot
+ * drift: a writer child and an in-process writer that disagreed about the
+ * event sequence would make every comparison below a comparison of two
+ * different histories, and every one of them would still pass.
+ *
+ * The contract ids are `WC-I` and `WC-i` — differing only in CASE, and
+ * ordered differently by code units than by collation. That is the point: a
+ * locale-aware sort would order them the other way round, so the locale
+ * assertion below can actually fail. With ids that every collation agrees on
+ * (`WC-alpha`/`WC-beta`), the assertion could not fail for the reason it
+ * claims, which is the F16 class this file exists to catch.
+ */
+const HISTORY_FILE = join(CHILD_DIR, "history.json");
+writeFileSync(
+  HISTORY_FILE,
+  JSON.stringify([
+    { id: "EVT-0", to: "PLANNING", contract: "WC-I" },
+    { id: "EVT-1", to: "PLANNING", contract: "WC-i" },
+    { id: "EVT-2", to: "PLANNING", contract: "WC-i", kind: "EVIDENCE_ADDED" },
+    { id: "EVT-3", to: "EXECUTING", contract: "WC-i" },
+    { id: "EVT-4", to: "EXECUTING", contract: "WC-I" },
+    { id: "EVT-5", to: "VERIFYING", contract: "WC-i" },
+    { id: "EVT-6", to: "COMPLETED", contract: "WC-i" },
+  ]),
+  "utf8",
+);
+// The history file's PATH, quoted as a JS string literal for the child
+// script. It is a plain path, not a `file://` URL: `readFileSync` treats a
+// URL string as a relative path and would look for a file named "file:".
+const HISTORY_PATH = JSON.stringify(HISTORY_FILE);
+
 writeFileSync(
   CHILD_SCRIPT,
   `import { replay, replayDigest } from ${REPLAY_URL};
-import { foldFromReplay, stateHash } from ${STATE_URL};
+import { foldFromReplay, stateHash, stateJson } from ${STATE_URL};
 const report = replay(process.argv[2]);
+const folded = foldFromReplay(report);
 process.stdout.write(JSON.stringify({
-  stateHash: stateHash(foldFromReplay(report)),
+  stateJson: stateJson(folded),
+  stateHash: stateHash(folded),
   replayDigest: replayDigest(report),
   events: report.events.length,
   anomalies: report.anomalies.length,
@@ -129,26 +168,23 @@ process.stdout.write(JSON.stringify({
  */
 writeFileSync(
   WRITER_SCRIPT,
-  `import { EventLog } from ${EVENTLOG_URL};
+  `import { readFileSync } from "node:fs";
+import { EventLog } from ${EVENTLOG_URL};
 import { CONTRACT_VERSION } from ${CONTRACT_URL};
-const transition = (n, to, contract = "WC-alpha") => ({
-  id: "EVT-" + n,
-  contractVersion: CONTRACT_VERSION,
-  at: "2026-08-24T20:00:00Z",
-  actor: "worker-runtime/1.0.0",
-  kind: "STATE_TRANSITION",
-  subject: contract,
-  payload: { to },
-});
+const history = JSON.parse(readFileSync(${HISTORY_PATH}, "utf8"));
 const log = EventLog.open(process.argv[2]);
 try {
-  log.append(transition(0, "PLANNING", "WC-beta"));
-  log.append(transition(1, "PLANNING", "WC-alpha"));
-  log.append({ ...transition(2, "PLANNING", "WC-alpha"), kind: "EVIDENCE_ADDED" });
-  log.append(transition(3, "EXECUTING", "WC-alpha"));
-  log.append(transition(4, "EXECUTING", "WC-beta"));
-  log.append(transition(5, "VERIFYING", "WC-alpha"));
-  log.append(transition(6, "COMPLETED", "WC-alpha"));
+  for (const h of history) {
+    log.append({
+      id: h.id,
+      contractVersion: CONTRACT_VERSION,
+      at: "2026-08-24T20:00:00Z",
+      actor: "worker-runtime/1.0.0",
+      kind: h.kind ?? "STATE_TRANSITION",
+      subject: h.contract,
+      payload: { to: h.to },
+    });
+  }
 } finally {
   log.close();
 }
@@ -175,18 +211,6 @@ process.stdout.write(JSON.stringify({
   "utf8",
 );
 
-function transition(n: number, to: string, contract = "WC-alpha"): Omit<WorkerEvent, "sequence"> {
-  return {
-    id: `EVT-${n}`,
-    contractVersion: CONTRACT_VERSION,
-    at: "2026-08-24T20:00:00Z",
-    actor: "worker-runtime/1.0.0",
-    kind: "STATE_TRANSITION",
-    subject: contract,
-    payload: { to },
-  };
-}
-
 /**
  * An authoritative history worth comparing: two independent contracts,
  * interleaved, plus an event kind the fold does not interpret. Interleaving
@@ -205,6 +229,9 @@ function writeHistory(root: string): void {
 
 /** What both the in-process and the fresh-process paths report. */
 interface Digest {
+  /** Canonical folded-state BYTES. */
+  stateJson: string;
+  /** Content hash of the same state. */
   stateHash: string;
   replayDigest: string;
   events: number;
@@ -214,8 +241,10 @@ interface Digest {
 
 function digestInProcess(dir: string): Digest {
   const report = replay(dir);
+  const folded = foldFromReplay(report);
   return {
-    stateHash: stateHash(foldFromReplay(report)),
+    stateJson: stateJson(folded),
+    stateHash: stateHash(folded),
     replayDigest: replayDigest(report),
     events: report.events.length,
     anomalies: report.anomalies.length,
@@ -280,7 +309,12 @@ describe.skipIf(!distBuilt)("the event history is the source of truth", () => {
     // The in-process path reads the SOURCE and the fresh-process path reads the
     // BUILD. If this ever fails, the first thing to check is not the kernel —
     // it is whether the build is stale: `pnpm build`.
-    expect(there.stateHash, "a process sharing nothing with the writer must agree").toBe(here.stateHash);
+    //
+    // Canonical BYTES first, then the hash of them: two objects can be
+    // deepEqual and serialize differently, and it is the serialization that
+    // certificates bind.
+    expect(there.stateJson, "a process sharing nothing with the writer must agree").toBe(here.stateJson);
+    expect(there.stateHash).toBe(here.stateHash);
     expect(there.replayDigest).toBe(here.replayDigest);
     expect(here.events).toBe(7);
     expect(here.anomalies).toBe(0);
@@ -299,29 +333,57 @@ describe.skipIf(!distBuilt)("the event history is the source of truth", () => {
     const root = workspace();
     const elsewhere = workspace();
     writeHistory(root);
-    expect(digestInFreshProcess(logDirOf(root), { cwd: elsewhere }).stateHash).toBe(
-      digestInFreshProcess(logDirOf(root), { cwd: tmpdir() }).stateHash,
+    expect(digestInFreshProcess(logDirOf(root), { cwd: elsewhere }).stateJson).toBe(
+      digestInFreshProcess(logDirOf(root), { cwd: tmpdir() }).stateJson,
     );
   });
 
   it("is independent of timezone", () => {
-    // The events carry offset-bearing timestamps; if any of them were ever
-    // re-parsed through a local-time path, TZ would move the result.
+    // The events carry a UTC designator; if any of them were ever re-parsed
+    // through a local-time path, TZ would move the result.
     const root = workspace();
     writeHistory(root);
-    expect(digestInFreshProcess(logDirOf(root), { env: { TZ: "Asia/Kolkata" } }).stateHash).toBe(
-      digestInFreshProcess(logDirOf(root), { env: { TZ: "UTC" } }).stateHash,
+    expect(digestInFreshProcess(logDirOf(root), { env: { TZ: "Asia/Kolkata" } }).stateJson).toBe(
+      digestInFreshProcess(logDirOf(root), { env: { TZ: "UTC" } }).stateJson,
     );
   });
 
-  it("is independent of locale", () => {
-    // Key ordering in canonicalization and contract ordering in the fold both
-    // sort. A locale-aware sort would reorder under a different collation and
-    // change the canonical bytes.
+  it("orders contracts by code unit, not by collation", () => {
+    // THE locale-independence assertion, stated so it can FAIL.
+    //
+    // Comparing two children under different LANG settings does NOT establish
+    // this: on Windows the OS decides Node's default collation and LANG is
+    // ignored, so both children sort identically and the comparison is
+    // between two copies of the same thing. (It was measured: the digest
+    // stayed identical under a locale-aware sort, because both sides moved
+    // together.) That is the F16 class this file exists to catch, wearing a
+    // different hat.
+    //
+    // What IS observable on every platform is the ORDER itself. The contract
+    // ids are `WC-I` and `WC-i`, which differ only in case: code units order
+    // `WC-I` before `WC-i`, while every collation this runtime can be given
+    // (en-GB, de-DE, tr-TR) orders them the other way round. So the canonical
+    // bytes carry the answer, and asserting the order asserts the property.
+    //
+    // The digest is compared across the two locales as well — that part is
+    // corroboration, not the proof.
     const root = workspace();
     writeHistory(root);
+    const digest = digestInFreshProcess(logDirOf(root));
+
+    const upper = digest.stateJson.indexOf('"contractId":"WC-I"');
+    const lower = digest.stateJson.indexOf('"contractId":"WC-i"');
+    expect(upper, "both contract ids must be present in the canonical state").toBeGreaterThanOrEqual(0);
+    expect(lower, "both contract ids must be present in the canonical state").toBeGreaterThanOrEqual(0);
+    expect(
+      upper,
+      "contracts must be ordered by UTF-16 code unit; a collation-aware sort would put WC-i first",
+    ).toBeLessThan(lower);
+
+    // Corroboration: the same bytes under a different declared locale.
     const de = digestInFreshProcess(logDirOf(root), { env: { LANG: "de_DE.UTF-8", LC_ALL: "de_DE.UTF-8" } });
     const c = digestInFreshProcess(logDirOf(root), { env: { LANG: "C", LC_ALL: "C" } });
+    expect(de.stateJson).toBe(c.stateJson);
     expect(de.stateHash).toBe(c.stateHash);
   });
 
@@ -332,7 +394,7 @@ describe.skipIf(!distBuilt)("the event history is the source of truth", () => {
     const copy = workspace();
     writeHistory(origin);
     cpSync(logDirOf(origin), logDirOf(copy), { recursive: true });
-    expect(digestInFreshProcess(logDirOf(copy)).stateHash).toBe(digestInFreshProcess(logDirOf(origin)).stateHash);
+    expect(digestInFreshProcess(logDirOf(copy)).stateJson).toBe(digestInFreshProcess(logDirOf(origin)).stateJson);
   });
 
   it("is independent of the process that wrote the log", () => {
@@ -343,35 +405,38 @@ describe.skipIf(!distBuilt)("the event history is the source of truth", () => {
     const b = workspace();
     writeHistory(a);
     writeHistory(b);
-    expect(digestInFreshProcess(logDirOf(a)).stateHash).toBe(digestInFreshProcess(logDirOf(b)).stateHash);
+    expect(digestInFreshProcess(logDirOf(a)).stateJson).toBe(digestInFreshProcess(logDirOf(b)).stateJson);
   });
 
   /**
    * Step 8 of PROVE_REPLAY_DETERMINISM, executed rather than merely described.
    *
-   * A child that mixes a process-local value into its own digest must DISAGREE
-   * with a second fresh process. If it agreed, the cross-process comparison
-   * above would be comparing identical strings and proving nothing — the
-   * harness would be evidence of a property it does not observe, which is the
-   * exact class (F16/F17) the whole file exists to catch.
+   * Two POISONED children must DISAGREE, and the positive comparison the rest
+   * of this file uses must REJECT them. That is the exact shape of the
+   * property being claimed — "two independent fresh processes agree" — and it
+   * is what proves the harness can fail. Comparing a poisoned reader against a
+   * clean one would only show that the poison changed a value; it would never
+   * show that the cross-process EQUALITY can be broken.
    *
    * The poison is in the READER's digest, not in the log: the log is byte
    * identical between the two spawns, so any divergence is a property of the
    * reporting process and not of the history.
    */
-  it("the harness itself is negative-tested: a poisoned reader disagrees", () => {
+  it("the harness itself is negative-tested: poisoned readers cannot be equal", () => {
     const root = workspace();
     writeHistory(root);
 
-    const clean = digestInFreshProcess(logDirOf(root));
-    const poisoned = digestInPoisonedProcess(logDirOf(root));
+    const first = digestInPoisonedProcess(logDirOf(root));
+    const second = digestInPoisonedProcess(logDirOf(root));
 
-    // The log is untouched between the two reads, so the poisoned reader's
-    // replayDigest must still match the clean one. Only its stateHash carries
-    // the injected value — which is what makes this a test of the harness and
-    // not of the log.
-    expect(poisoned.replayDigest, "the log is untouched; only the reader is poisoned").toBe(clean.replayDigest);
-    expect(poisoned.stateHash, "a process-local value must show up as disagreement").not.toBe(clean.stateHash);
+    // The log is untouched between the two reads, so the replay digest — which
+    // covers the recovered events and the anomalies — must still match. Only
+    // the state hash carries the injected value.
+    expect(first.replayDigest, "the log is untouched; only the reader is poisoned").toBe(second.replayDigest);
+    expect(first.stateHash, "a process-local value must show up as disagreement").not.toBe(second.stateHash);
+
+    // And the comparison the positive test relies on must actually reject.
+    expect(() => expect(first).toEqual(second)).toThrow();
   });
 });
 
@@ -421,9 +486,18 @@ describe.skipIf(!distBuilt)("damage replays deterministically too", () => {
     // Deterministic across processes, and consistent with in-process replay.
     expect(first).toEqual(second);
     expect(first.replayDigest).toBe(local.replayDigest);
+    expect(first.stateJson).toBe(local.stateJson);
     expect(first.stateHash).toBe(local.stateHash);
 
     // And detectably different from an undamaged history.
+    //
+    // The REPLAY digest is the right thing to compare, not the state hash: a
+    // duplicated event is rejected as a broken writer and the surviving
+    // events are unchanged, so the folded STATE can be identical to the clean
+    // one. What differs is the classification of the damage, and the replay
+    // digest covers exactly that. Comparing state hashes here would fail on
+    // the duplicated-event case for a reason that has nothing to do with
+    // determinism.
     expect(
       first.replayDigest,
       "a mutation replay cannot distinguish from the original would be silent acceptance",
@@ -437,8 +511,8 @@ describe.skipIf(!distBuilt)("damage replays deterministically too", () => {
     // expected to survive intact.
     const root = workspace();
     writeHistory(root);
-    const before = digestInFreshProcess(logDirOf(root)).stateHash;
+    const before = digestInFreshProcess(logDirOf(root)).stateJson;
     writeFileSync(logFileOf(root), `${[...framesOf(root)].reverse().join("\n")}\n`);
-    expect(digestInFreshProcess(logDirOf(root)).stateHash).toBe(before);
+    expect(digestInFreshProcess(logDirOf(root)).stateJson).toBe(before);
   });
 });
