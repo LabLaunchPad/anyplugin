@@ -6,3 +6,11 @@ packages:
   - packages/*
 allowBuilds:
   esbuild: true
+overrides:
+  # Dev-only transitives of vitest. Both had open advisories and neither is
+  # reachable from a published package; the override is what actually moves
+  # them off the vulnerable versions, because bumping vitest alone does not.
+  # Caret ranges, not ">=": the fix is a PATCH, and a ">=" range would let a
+  # future resolve jump a major (vite 7 -> 8) with no review.
+  vite: "^7.3.7"
+  source-map-js: "^1.2.2"
