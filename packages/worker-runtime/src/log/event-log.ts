@@ -117,14 +117,21 @@ export class EventLog {
   #lockPath: string;
   #nextSequence: number;
   #durability: DurabilityLevel;
+  #committedEvents: Map<string, WorkerEvent>;
   #closed = false;
 
-  private constructor(dir: string, nextSequence: number, durability: DurabilityLevel) {
+  private constructor(
+    dir: string,
+    nextSequence: number,
+    durability: DurabilityLevel,
+    committedEvents: Map<string, WorkerEvent> = new Map(),
+  ) {
     this.#dir = dir;
     this.#logPath = join(dir, LOG_FILENAME);
     this.#lockPath = join(dir, WRITER_LOCK_FILENAME);
     this.#nextSequence = nextSequence;
     this.#durability = durability;
+    this.#committedEvents = committedEvents;
   }
 
   /**
@@ -171,8 +178,8 @@ export class EventLog {
 
     // Resume from the existing log rather than restarting the sequence, which
     // would produce duplicates — the contract's "broken writer" signal.
-    const resumeFrom = highestSequence(join(dir, LOG_FILENAME));
-    const log = new EventLog(dir, resumeFrom + 1, durability);
+    const { highestSequence: resumeFrom, committedEvents } = readCommittedEvents(join(dir, LOG_FILENAME));
+    const log = new EventLog(dir, resumeFrom + 1, durability, committedEvents);
     // The file ENTRY must be durable before any byte in it can be: a log file
     // that the directory does not know about cannot be recovered, however
     // durable its contents are.
@@ -222,6 +229,13 @@ export class EventLog {
    */
   append(event: Omit<WorkerEvent, "sequence">): WorkerEvent {
     if (this.#closed) throw new EventLogError("cannot append to a closed event log");
+
+    // G5 IDEMPOTENCE: If an event with this ID was already committed, return the existing event.
+    const existing = this.#committedEvents.get(event.id);
+    if (existing) {
+      return existing;
+    }
+
     const complete = EventSchema.parse({ ...event, sequence: this.#nextSequence });
     const frame = frameOf(complete);
     const fd = openSync(this.#logPath, "a");
@@ -237,6 +251,7 @@ export class EventLog {
     }
     // Incremented only after the write returns, so a throwing write does not
     // burn a sequence number and manufacture a gap.
+    this.#committedEvents.set(complete.id, complete);
     this.#nextSequence += 1;
     return complete;
   }
@@ -267,32 +282,37 @@ function describeHolder(lockPath: string): string {
 }
 
 /**
- * Highest sequence already committed, or -1 for an empty/absent log.
+ * Highest sequence already committed and all committed events map, or -1 / empty map for absent log.
  *
  * Reads only well-formed frames: a damaged tail must not raise the resume
  * point, because that would turn corruption into a permanent gap.
  */
-function highestSequence(logPath: string): number {
+function readCommittedEvents(logPath: string): { highestSequence: number; committedEvents: Map<string, WorkerEvent> } {
   let raw: string;
   try {
     raw = readFileSync(logPath, "utf8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return -1;
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return { highestSequence: -1, committedEvents: new Map() };
+    }
     throw err;
   }
   let highest = -1;
+  const committedEvents = new Map<string, WorkerEvent>();
   for (const line of raw.split("\n")) {
     if (line.length === 0) continue;
     const second = line.indexOf("\t", line.indexOf("\t") + 1);
     if (second < 0) continue;
     try {
-      const parsed = JSON.parse(line.slice(second + 1)) as { sequence?: unknown };
-      if (typeof parsed.sequence === "number" && Number.isSafeInteger(parsed.sequence)) {
-        if (parsed.sequence > highest) highest = parsed.sequence;
+      const parsed = JSON.parse(line.slice(second + 1));
+      const valid = EventSchema.safeParse(parsed);
+      if (valid.success) {
+        if (valid.data.sequence > highest) highest = valid.data.sequence;
+        committedEvents.set(valid.data.id, valid.data);
       }
     } catch {
       continue; // damaged frame; replay classifies it, resume ignores it
     }
   }
-  return highest;
+  return { highestSequence: highest, committedEvents };
 }
