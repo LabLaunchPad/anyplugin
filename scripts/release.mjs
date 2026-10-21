@@ -40,11 +40,10 @@
  *
  * Exit codes: 0 = fine, 1 = a check failed, 2 = the command was wrong.
  */
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve, isAbsolute, basename } from "node:path";
+import { dirname, join, resolve, isAbsolute, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -69,35 +68,7 @@ const RELEASE_SET = [
 
 /* ── the tools ───────────────────────────────────────────────────────────── */
 
-function npmCli() {
-  return join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
-}
-
-function globalRoot() {
-  return execFileSync(process.execPath, [npmCli(), "root", "-g"], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-}
-
-function pnpmCli() {
-  const candidates = [
-    join(globalRoot(), "pnpm", "bin", "pnpm.cjs"),
-    join(dirname(process.execPath), "node_modules", "pnpm", "bin", "pnpm.cjs"),
-  ];
-  for (const candidate of candidates) if (existsSync(candidate)) return candidate;
-  throw new Error("pnpm is not installed, or its CLI could not be located");
-}
-
-/** Run a tool with the same node that is running this script. No shell. */
-function run(node, cli, args, cwd) {
-  return execFileSync(process.execPath, [cli, ...args], {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 64 * 1024 * 1024,
-  });
-}
+const { runPnpm, runNpm } = await import("./tooling.mjs");
 
 /* ── a dependency-free tar reader ─────────────────────────────────────────── */
 
@@ -134,7 +105,7 @@ function inspect(dir) {
   const abs = resolve(REPO_ROOT, dir);
   const stage = mkdtempSync(join(tmpdir(), "anyplugin-release-"));
   try {
-    const out = run(process, pnpmCli(), ["pack", "--pack-destination", stage], abs);
+    const out = runPnpm(["pack", "--pack-destination", stage], abs);
     // pnpm prints the tarball's ABSOLUTE path as the last line. Joining it
     // onto the stage directory would produce nonsense, because `path.join`
     // treats an absolute second argument as a segment, not a root.
@@ -205,11 +176,7 @@ function tarballProblems(packed) {
 /** The versions of a package that already exist on the registry. */
 function publishedVersions(name) {
   try {
-    const out = execFileSync(process.execPath, [npmCli(), "view", name, "versions", "--json"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 60_000,
-    });
+    const out = runNpm(["view", name, "versions", "--json"], REPO_ROOT);
     const parsed = JSON.parse(out);
     if (Array.isArray(parsed)) return parsed.map(String);
     if (typeof parsed === "string") return [parsed];
@@ -307,7 +274,7 @@ function publishAll(tag) {
     const abs = resolve(REPO_ROOT, pkg.dir);
     const stage = mkdtempSync(join(tmpdir(), "anyplugin-publish-"));
     try {
-      const out = run(process, pnpmCli(), ["pack", "--pack-destination", stage], abs);
+      const out = runPnpm(["pack", "--pack-destination", stage], abs);
       const filename = out.trim().split("\n").filter(Boolean).pop();
       const tgz = isAbsolute(filename) ? filename : join(stage, filename);
       if (!existsSync(tgz)) throw new Error(`pnpm pack did not produce a tarball in ${stage}`);
@@ -318,7 +285,7 @@ function publishAll(tag) {
       if (process.env.CI && process.env.NPM_CONFIG_PROVENANCE !== "false") {
         publishArgs.push("--provenance");
       }
-      run(process, npmCli(), publishArgs, abs);
+      runNpm(publishArgs, abs);
     } finally {
       rmSync(stage, { recursive: true, force: true });
     }

@@ -5,62 +5,104 @@ import { dirname, join } from "node:path";
 /**
  * Resolve the npm and pnpm CLIs and run them WITHOUT a shell.
  *
- * `execFileSync("pnpm", ...)` fails on Windows: the shim is `pnpm.cmd`, and
- * Windows cannot execute a `.cmd` without a shell. The obvious workaround,
- * `shell: true`, hands an argv to a shell — and this repository's own rule
- * is that a spawn never goes through a shell.
+ * ── Why not `execFileSync("pnpm", ...)` ────────────────────────────────────
  *
- * So both tools are resolved to their JavaScript entry points and run with
- * the SAME node binary that is running the script. No shell, no PATH
- * lookup, and the pnpm that packs the tarball is the pnpm that ships
- * alongside the node under test.
+ * On Windows the shim is `pnpm.cmd`, and Windows cannot execute a `.cmd`
+ * without a shell. The obvious workaround, `shell: true`, hands an argv to
+ * a shell — and this repository's own rule is that a spawn never goes
+ * through a shell.
+ *
+ * On POSIX there is no shim: the tool is a plain executable on PATH, and
+ * running it DIRECTLY is both correct and faster.
+ *
+ * ── The two layouts that broke it ──────────────────────────────────────────
+ *
+ * The first version of this looked for npm in ONE place, and it was the
+ * Windows place. The GitHub runners use the POSIX layout, where npm sits
+ * one level up from the node binary rather than beside it, and the guard
+ * failed there — which is the good kind of failure, because it was caught
+ * by CI rather than by a consumer's install.
+ *
+ * And pnpm itself may have NO JavaScript entry point at all: the CI action
+ * installs it as a standalone binary. So the JavaScript route is a
+ * FALLBACK, and the direct route is the primary one.
  */
+const RUN_OPTIONS = {
+  encoding: "utf8",
+  stdio: ["ignore", "pipe", "pipe"],
+  maxBuffer: 64 * 1024 * 1024,
+  // A registry call that hangs must fail the release rather than hang it.
+  // npm versions are immutable: a half-published release is worse than no
+  // release, so the tool must never wait forever.
+  timeout: 300_000,
+};
+
+/** npm's JavaScript entry point, in either of its two layouts. */
 export function npmCli() {
-  return join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+  const candidates = [
+    join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+    join(dirname(process.execPath), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+  ];
+  for (const candidate of candidates) if (existsSync(candidate)) return candidate;
+  throw new Error(`npm's CLI could not be located near ${process.execPath}`);
 }
 
 /** The global npm root, resolved by npm itself. */
 export function globalRoot() {
-  return execFileSync(process.execPath, [npmCli(), "root", "-g"], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
+  return execFileSync(process.execPath, [npmCli(), "root", "-g"], RUN_OPTIONS).trim();
 }
 
-/** pnpm's JavaScript entry point, or undefined when pnpm is not installed. */
+/**
+ * pnpm's JavaScript entry point, when it has one.
+ *
+ * `npm_execpath` points at the CLI that launched the current process, which
+ * is pnpm when the script is run under pnpm. It is only usable when it is
+ * a JavaScript file: a standalone pnpm binary is not one.
+ */
 export function pnpmCli() {
-  const candidates = [
-    join(globalRoot(), "pnpm", "bin", "pnpm.cjs"),
-    join(dirname(process.execPath), "node_modules", "pnpm", "bin", "pnpm.cjs"),
-  ];
+  const candidates = [];
+  const execPath = process.env.npm_execpath;
+  if (execPath && /pnpm/i.test(execPath) && /\.(c|m)?js$/i.test(execPath)) {
+    candidates.push(execPath);
+  }
+  candidates.push(join(dirname(process.execPath), "node_modules", "pnpm", "bin", "pnpm.cjs"));
+  try {
+    candidates.push(join(globalRoot(), "pnpm", "bin", "pnpm.cjs"));
+  } catch {
+    // npm's CLI could not be found; the candidates above may still work.
+  }
   for (const candidate of candidates) if (existsSync(candidate)) return candidate;
   return undefined;
 }
 
 /**
- * Run pnpm in a directory and return its stdout.
+ * Run a tool, preferring its JavaScript entry point and falling back to the
+ * plain executable.
  *
- * stderr is captured separately: pnpm's lifecycle scripts (`prepack`) write
- * their own output there, and it must not be mistaken for the command's
- * result.
+ * The fallback is not a fallback for convenience: on POSIX the plain
+ * executable is the RIGHT way to run a standalone pnpm, and on Windows the
+ * JavaScript entry point is the only way to run pnpm at all without a
+ * shell.
  */
+function run(command, cli, args, cwd) {
+  if (!cli) return execFileSync(command, args, { ...RUN_OPTIONS, cwd });
+  try {
+    return execFileSync(process.execPath, [cli, ...args], { ...RUN_OPTIONS, cwd });
+  } catch (error) {
+    // ENOENT means the JavaScript route is not usable here — not that the
+    // tool failed. Any other error is the tool's own failure and is
+    // re-thrown.
+    if (error.code !== "ENOENT") throw error;
+    return execFileSync(command, args, { ...RUN_OPTIONS, cwd });
+  }
+}
+
+/** Run pnpm in a directory and return its stdout. */
 export function runPnpm(args, cwd) {
-  const cli = pnpmCli();
-  if (!cli) throw new Error("pnpm is not installed, or its CLI could not be located");
-  return execFileSync(process.execPath, [cli, ...args], {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  return run("pnpm", pnpmCli(), args, cwd);
 }
 
 /** Run npm in a directory and return its stdout. */
 export function runNpm(args, cwd) {
-  return execFileSync(process.execPath, [npmCli(), ...args], {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  return run("npm", npmCli(), args, cwd);
 }
