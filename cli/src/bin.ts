@@ -975,8 +975,16 @@ function requireDir(absPath: string, what: string): string {
  * `node_modules/@lablaunchpad/cli/` in an installed package.
  */
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-/** The repository root — two levels up from the package root. */
-const REPOSITORY_ROOT = resolve(PACKAGE_ROOT, "..", "..");
+/**
+ * The repository root — ONE level up from the package root.
+ *
+ * ONE, not two: the original code walked two directories up from `dist/`,
+ * which is one level up from the package root. Writing it as two levels up
+ * from the package root reached the repository root's PARENT, and the
+ * failure only appeared on CI, where the staged assets do not exist and
+ * the repository fallback is the only path that can work.
+ */
+const REPOSITORY_ROOT = resolve(PACKAGE_ROOT, "..");
 
 /** The first of these paths that exists. */
 function firstExisting(...candidates: readonly string[]): string | undefined {
