@@ -480,7 +480,22 @@ function publishAll({ tag, allowUnprovenanced }) {
       } catch (error) {
         failed.push(`${pkg.name}@${version}`);
         console.log(`  FAILED   ${pkg.name}@${version}`);
-        console.log(String(error.stderr ?? error.message ?? "").split("\n").slice(0, 6).join("\n"));
+        // The error, not the notices.
+        //
+        // npm prints a long block of "npm notice" lines — the tarball
+        // contents, the package metadata — and the actual failure comes
+        // AFTER them. Taking the first few lines of the output therefore
+        // shows the operator a tarball listing and hides the reason the
+        // publish was refused, which is the one thing they need to read.
+        // So the error lines are selected by what they say, and only if
+        // there are none does the tail of the output stand in.
+        const output = `${error.stdout ?? ""}\n${error.stderr ?? ""}`;
+        const lines = output.split("\n");
+        const errorLines = lines.filter((line) =>
+          /npm error|ERR!|code E\d|ENEEDAUTH|E401|E403|not logged in/i.test(line),
+        );
+        const shown = (errorLines.length > 0 ? errorLines : lines.slice(-8)).slice(0, 12);
+        console.log(shown.join("\n").trim());
         break;
       }
     }
