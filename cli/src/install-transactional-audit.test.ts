@@ -42,7 +42,10 @@ async function pathExists(p: string): Promise<boolean> {
 // crosses it and fails, so the verdict would depend on the machine rather
 // than on the code. The assertions are unchanged; only the budget is
 // stated. See `docs/BACKLOG.md` P2-28.
-describe.sequential("Transactional install - audit regression tests (Finding E)", { timeout: 60_000 }, () => {
+// The suite is SEQUENTIAL by default: vitest runs the tests in a file in
+// order unless they opt into concurrency. The explicit \describe.sequential\
+// modifier was removed in vitest 5, and the default it named is the default.
+describe("Transactional install - audit regression tests (Finding E)", { timeout: 60_000 }, () => {
   let testRoot: string;
   let home: string;
   let project: string;

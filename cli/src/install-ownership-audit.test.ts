@@ -9,7 +9,10 @@ async function pathExists(p: string): Promise<boolean> {
   try { await access(p); return true; } catch { return false; }
 }
 
-describe.sequential("Installer destination ownership — audit regression tests (Finding C)", () => {
+// The suite is SEQUENTIAL by default: vitest runs the tests in a file in
+// order unless they opt into concurrency. The explicit \describe.sequential\
+// modifier was removed in vitest 5, and the default it named is the default.
+describe("Installer destination ownership — audit regression tests (Finding C)", () => {
   let testRoot: string;
   let home: string;
   let project: string;
