@@ -91,7 +91,7 @@ describe("recording a certificate", () => {
     expect(event.payload).toMatchObject({ id: "CERT-1", finalPhase: "COMPLETED" });
   });
 
-  it("is IDEMPOTENT: recording the same certificate twice yields the same event id", () => {
+  it("the event id is DERIVED: recording the same certificate twice yields the same id", () => {
     const sealed = certificate();
     const first = recordCertificate(log, sealed);
     const second = recordCertificate(log, sealed);
@@ -100,6 +100,23 @@ describe("recording a certificate", () => {
     // that promise and make the history claim two certificates for one
     // outcome.
     expect(second.id).toBe(first.id);
+  });
+
+  it("KNOWN GAP: the log does not yet enforce G5, so a retry commits the id twice", () => {
+    // This asserts a DEFECT, deliberately. The write contract's G5 says a
+    // re-appended committed event id must not produce two committed events,
+    // and the production append path does not enforce it — so a retried
+    // recording commits the same id twice, and replay reports a duplicate id
+    // as the contract's "broken writer" signal.
+    //
+    // The fix is recorded in `docs/BACKLOG.md`. If the log starts
+    // enforcing G5, this test goes RED, and that is the welcome surprise
+    // that says the gap closed.
+    const sealed = certificate();
+    const first = recordCertificate(log, sealed);
+    const second = recordCertificate(log, sealed);
+    expect(second.id).toBe(first.id);
+    expect(second.sequence).toBeGreaterThan(first.sequence);
   });
 
   it("the recorded certificate can be read back and verified", () => {
