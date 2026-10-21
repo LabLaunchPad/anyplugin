@@ -19,8 +19,7 @@
  * the writer.
  *
  * This is the same class as F16 (a harness that could not observe the
- * property it was cited for) and F17 (a pass that was a property of the
- * runner rather than of the code). A static audit of the replay path found no
+ * property it was cited for). A static audit of the replay path found no
  * clock, no randomness, no locale comparison, no directory enumeration and no
  * module-level mutable state. That audit is useful and is not proof — it only
  * covers what someone thought to look for. These tests cover what nobody
@@ -86,11 +85,30 @@ const framesOf = (root: string) =>
  * publisher would ship — not the sources, and not a copy of the logic.
  */
 const CHILD_DIR = mkdtempSync(join(tmpdir(), "replay-child-"));
+/**
+ * The child scripts, written ONCE for the whole file.
+ *
+ * They import the BUILT kernel, so the children exercise the same code the
+ * publisher would ship — not the sources, and not a copy of the logic. The
+ * in-process half of every comparison below therefore runs the SOURCE while
+ * the fresh-process half runs the BUILD. If the two ever disagree, the first
+ * thing to check is whether the build is stale: `pnpm build`.
+ */
 const CHILD_SCRIPT = join(CHILD_DIR, "replay-child.mjs");
+const WRITER_SCRIPT = join(CHILD_DIR, "replay-writer-child.mjs");
+const POISON_SCRIPT = join(CHILD_DIR, "replay-poison-child.mjs");
+const REPLAY_URL = JSON.stringify(pathToFileURL(join(DIST_DIR, "replay.js")).href);
+const STATE_URL = JSON.stringify(pathToFileURL(join(DIST_DIR, "worker-state.js")).href);
+const EVENTLOG_URL = JSON.stringify(pathToFileURL(join(DIST_DIR, "event-log.js")).href);
+// contracts/ lives at dist/contracts, not dist/log/contracts — the writer child
+// imports the BUILT kernel, and a bad import path here is a test failure that
+// reads as "the kernel is non-deterministic" rather than as a typo.
+const CONTRACT_URL = JSON.stringify(pathToFileURL(join(DIST_DIR, "..", "contracts", "primitives.js")).href);
+
 writeFileSync(
   CHILD_SCRIPT,
-  `import { replay, replayDigest } from ${JSON.stringify(pathToFileURL(join(DIST_DIR, "replay.js")).href)};
-import { foldFromReplay, stateHash } from ${JSON.stringify(pathToFileURL(join(DIST_DIR, "worker-state.js")).href)};
+  `import { replay, replayDigest } from ${REPLAY_URL};
+import { foldFromReplay, stateHash } from ${STATE_URL};
 const report = replay(process.argv[2]);
 process.stdout.write(JSON.stringify({
   stateHash: stateHash(foldFromReplay(report)),
@@ -98,6 +116,60 @@ process.stdout.write(JSON.stringify({
   events: report.events.length,
   anomalies: report.anomalies.length,
   gaps: report.gaps,
+}));
+`,
+  "utf8",
+);
+
+/**
+ * The writer child. "Independent of the process that wrote the log" is only
+ * meaningful if a DIFFERENT process actually wrote it — two workspaces written
+ * by the same in-process call share this process's module state and prove
+ * nothing about the writer's identity leaking out of writer.lock.
+ */
+writeFileSync(
+  WRITER_SCRIPT,
+  `import { EventLog } from ${EVENTLOG_URL};
+import { CONTRACT_VERSION } from ${CONTRACT_URL};
+const transition = (n, to, contract = "WC-alpha") => ({
+  id: "EVT-" + n,
+  contractVersion: CONTRACT_VERSION,
+  at: "2026-08-24T20:00:00Z",
+  actor: "worker-runtime/1.0.0",
+  kind: "STATE_TRANSITION",
+  subject: contract,
+  payload: { to },
+});
+const log = EventLog.open(process.argv[2]);
+try {
+  log.append(transition(0, "PLANNING", "WC-beta"));
+  log.append(transition(1, "PLANNING", "WC-alpha"));
+  log.append({ ...transition(2, "PLANNING", "WC-alpha"), kind: "EVIDENCE_ADDED" });
+  log.append(transition(3, "EXECUTING", "WC-alpha"));
+  log.append(transition(4, "EXECUTING", "WC-beta"));
+  log.append(transition(5, "VERIFYING", "WC-alpha"));
+  log.append(transition(6, "COMPLETED", "WC-alpha"));
+} finally {
+  log.close();
+}
+`,
+  "utf8",
+);
+
+/**
+ * The poison child. Step 8 of PROVE_REPLAY_DETERMINISM, executed HERE rather
+ * than in a separate script: a child that mixes a process-local value into its
+ * digest must disagree with a second fresh process, or the cross-process
+ * comparison is comparing identical strings and proves nothing at all.
+ */
+writeFileSync(
+  POISON_SCRIPT,
+  `import { replay, replayDigest } from ${REPLAY_URL};
+import { foldFromReplay, stateHash } from ${STATE_URL};
+const report = replay(process.argv[2]);
+process.stdout.write(JSON.stringify({
+  stateHash: stateHash(foldFromReplay(report)) + "|pid=" + process.pid,
+  replayDigest: replayDigest(report),
 }));
 `,
   "utf8",
@@ -120,20 +192,15 @@ function transition(n: number, to: string, contract = "WC-alpha"): Omit<WorkerEv
  * interleaved, plus an event kind the fold does not interpret. Interleaving
  * matters — it is what makes insertion order into the state map depend on
  * traversal order rather than on the alphabet.
+ *
+ * Written by a CHILD PROCESS. "Independent of the process that wrote the log"
+ * is only meaningful if a different process actually wrote it; writing from
+ * in-process would share this process's module state and prove nothing about
+ * the writer's identity leaking out of writer.lock.
  */
 function writeHistory(root: string): void {
-  const log = EventLog.open(root);
-  try {
-    log.append(transition(0, "PLANNING", "WC-beta"));
-    log.append(transition(1, "PLANNING", "WC-alpha"));
-    log.append({ ...transition(2, "PLANNING", "WC-alpha"), kind: "EVIDENCE_ADDED" });
-    log.append(transition(3, "EXECUTING", "WC-alpha"));
-    log.append(transition(4, "EXECUTING", "WC-beta"));
-    log.append(transition(5, "VERIFYING", "WC-alpha"));
-    log.append(transition(6, "COMPLETED", "WC-alpha"));
-  } finally {
-    log.close();
-  }
+  const out = spawnSync(process.execPath, [WRITER_SCRIPT, root], { encoding: "utf8" });
+  expect(out.status, `writer child failed: ${out.stderr}`).toBe(0);
 }
 
 /** What both the in-process and the fresh-process paths report. */
@@ -177,12 +244,30 @@ function digestInFreshProcess(dir: string, opts: { env?: NodeJS.ProcessEnv; cwd?
   return JSON.parse(out.stdout) as Digest;
 }
 
+/**
+ * A child that mixes a process-local value into its own digest. Step 8 of
+ * PROVE_REPLAY_DETERMINISM, run HERE rather than in a separate script: the
+ * point is that a poisoned reader disagrees with a second fresh process, so
+ * the cross-process comparison is comparing two genuinely different strings.
+ * If it were comparing identical strings it would prove nothing at all.
+ */
+function digestInPoisonedProcess(dir: string): Digest {
+  const out = spawnSync(process.execPath, [POISON_SCRIPT, dir], { encoding: "utf8" });
+  expect(out.status, `poison child failed: ${out.stderr}`).toBe(0);
+  return JSON.parse(out.stdout) as Digest;
+}
+
 it("the process-boundary harness is not silently skipped in CI", () => {
   // A skipped process-boundary proof that reads as a pass is the exact
   // ARMED-as-PASSED failure these proofs exist to prevent.
   if (process.env["CI"]) expect(distBuilt, `built kernel missing at ${DIST_DIR}`).toBe(true);
   else expect(true).toBe(true);
 });
+
+// When the built kernel is absent the whole describe block is skipped, and a
+// skip that reads as a pass is the failure these proofs exist to prevent. Say
+// so out loud rather than leaving it to be inferred from the summary line.
+if (!distBuilt) console.log("[ARMED] replay-determinism proof: built kernel missing at %s — the process-boundary tests are skipped, not passed. Run `pnpm build`.", DIST_DIR);
 
 describe.skipIf(!distBuilt)("the event history is the source of truth", () => {
   it("a fresh process reconstructs byte-identical state", () => {
@@ -192,6 +277,9 @@ describe.skipIf(!distBuilt)("the event history is the source of truth", () => {
     const here = digestInProcess(logDirOf(root));
     const there = digestInFreshProcess(logDirOf(root));
 
+    // The in-process path reads the SOURCE and the fresh-process path reads the
+    // BUILD. If this ever fails, the first thing to check is not the kernel —
+    // it is whether the build is stale: `pnpm build`.
     expect(there.stateHash, "a process sharing nothing with the writer must agree").toBe(here.stateHash);
     expect(there.replayDigest).toBe(here.replayDigest);
     expect(here.events).toBe(7);
@@ -256,6 +344,34 @@ describe.skipIf(!distBuilt)("the event history is the source of truth", () => {
     writeHistory(a);
     writeHistory(b);
     expect(digestInFreshProcess(logDirOf(a)).stateHash).toBe(digestInFreshProcess(logDirOf(b)).stateHash);
+  });
+
+  /**
+   * Step 8 of PROVE_REPLAY_DETERMINISM, executed rather than merely described.
+   *
+   * A child that mixes a process-local value into its own digest must DISAGREE
+   * with a second fresh process. If it agreed, the cross-process comparison
+   * above would be comparing identical strings and proving nothing — the
+   * harness would be evidence of a property it does not observe, which is the
+   * exact class (F16/F17) the whole file exists to catch.
+   *
+   * The poison is in the READER's digest, not in the log: the log is byte
+   * identical between the two spawns, so any divergence is a property of the
+   * reporting process and not of the history.
+   */
+  it("the harness itself is negative-tested: a poisoned reader disagrees", () => {
+    const root = workspace();
+    writeHistory(root);
+
+    const clean = digestInFreshProcess(logDirOf(root));
+    const poisoned = digestInPoisonedProcess(logDirOf(root));
+
+    // The log is untouched between the two reads, so the poisoned reader's
+    // replayDigest must still match the clean one. Only its stateHash carries
+    // the injected value — which is what makes this a test of the harness and
+    // not of the log.
+    expect(poisoned.replayDigest, "the log is untouched; only the reader is poisoned").toBe(clean.replayDigest);
+    expect(poisoned.stateHash, "a process-local value must show up as disagreement").not.toBe(clean.stateHash);
   });
 });
 
