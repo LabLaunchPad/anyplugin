@@ -62,7 +62,9 @@ export function globalRoot() {
 export function pnpmCli() {
   const candidates = [];
   const execPath = process.env.npm_execpath;
-  if (execPath && /pnpm/i.test(execPath) && /\.(c|m)?js$/i.test(execPath)) {
+  // The BASENAME must be pnpm's entry point. A loose match on the whole
+  // path would treat `C:\projects\pnpm-tools\anything.js` as pnpm itself.
+  if (execPath && /(^|[\\/])pnpm(\.[cm]?js)?$/i.test(execPath)) {
     candidates.push(execPath);
   }
   candidates.push(join(dirname(process.execPath), "node_modules", "pnpm", "bin", "pnpm.cjs"));
@@ -93,6 +95,16 @@ function run(command, cli, args, cwd) {
     // tool failed. Any other error is the tool's own failure and is
     // re-thrown.
     if (error.code !== "ENOENT") throw error;
+    // The fallback runs the tool as a plain executable. On POSIX that is a
+    // real binary and no shell is involved. On Windows it would be a `.cmd`
+    // shim, which Windows can only run THROUGH cmd.exe — and this file
+    // exists to avoid exactly that. So on Windows the fallback is refused
+    // rather than taken.
+    if (process.platform === "win32") {
+      throw new Error(
+        `${command} could not be run through its JavaScript entry point, and on Windows the command shim would need a shell.`,
+      );
+    }
     return execFileSync(command, args, { ...RUN_OPTIONS, cwd });
   }
 }

@@ -1,6 +1,7 @@
 {
   "name": "@lablaunchpad/plugin-knowledge",
   "version": "0.1.1",
+  "private": true,
   "description": "First-party AnyPlugin plugin: OKF v0.2 knowledge layer (reader skill, capture hooks, MCP server, validator)",
   "type": "module",
   "main": "./dist/index.js",

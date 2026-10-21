@@ -28,10 +28,22 @@ name: Release
 #     → repository: anyplugin
 #     → workflow filename: release.yml
 #
-# Until it is configured for a package, that package's publish fails with
-# an E403 that says so. The first release therefore needs either the npm
-# side configured, or a temporary NPM_TOKEN secret — and the script uses
-# `NODE_AUTH_TOKEN` if one is present.
+# WHAT THE FAILURE ACTUALLY LOOKS LIKE. npm 11 catches the token-exchange
+# failure and reports it as `ENEEDAUTH` — "This command requires you to be
+# logged in" — NOT as an error that names the package. The real cause is
+# only visible at `--verbose`. So the failure to look for is:
+#
+#   npm error code ENEEDAUTH
+#
+# and the answer is: trusted publishing is not configured for THAT package
+# yet. Configure it and re-run; the release is RESUMABLE, so the packages
+# that already landed are skipped and only the missing ones are published.
+#
+# An `NPM_TOKEN` secret is the fallback for a package that is not
+# configured for trusted publishing. The empty string is deliberately NOT
+# passed when the secret is absent: npm treats an empty bearer token as an
+# invalid credential and reports E401, which looks like a bad token rather
+# than like a missing configuration.
 on:
   workflow_dispatch:
   push:
@@ -84,5 +96,8 @@ jobs:
         # provenance). Both halves matter; neither alone is enough.
         run: node scripts/release.mjs --publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Only set when the secret exists. An empty bearer token is an
+          # invalid credential, and npm reports that as E401 — which reads
+          # like a bad token rather than like a missing configuration.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN != '' && secrets.NPM_TOKEN || '' }}
           NPM_CONFIG_PROVENANCE: "true"

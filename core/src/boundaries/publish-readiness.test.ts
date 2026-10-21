@@ -269,18 +269,25 @@ describe("publish readiness", () => {
     }
   });
 
-  it("every workspace dependency is itself in the release set", () => {
-    // A package published before its dependencies would ship a package
-    // whose dependencies 404 on install.
-    const known = new Set<string>(packages.map((p) => p.name));
-    for (const pkg of packages) {
+  it("every workspace dependency comes EARLIER in the release set", () => {
+    // The order is load-bearing and it is ENFORCED by index, not by
+    // convention. A package published before its dependencies ships one
+    // whose dependencies 404 on install — and a reordering of the set is
+    // exactly one edit away, with nothing else in the suite noticing.
+    //
+    // So this test compares INDICES. Reorder the release set and this
+    // fails.
+    const order = new Map(packages.map((pkg, index) => [pkg.name, index]));
+    for (const [index, pkg] of packages.entries()) {
       const manifest = readManifest(pkg.dir);
       for (const [dep, spec] of Object.entries(manifest.dependencies ?? {})) {
         if (!String(spec).startsWith("workspace:")) continue;
+        const depIndex = order.get(dep);
+        expect(depIndex, `${pkg.name} depends on ${dep}, which is not in the release set`).toBeDefined();
         expect(
-          known.has(dep),
-          `${pkg.name} depends on ${dep}, which is not in the release set — it would 404 for a consumer`,
-        ).toBe(true);
+          depIndex!,
+          `${pkg.name} depends on ${dep}, which comes LATER in the release set — a package published before its dependencies ships one whose dependencies 404`,
+        ).toBeLessThan(index);
       }
     }
   });
@@ -311,6 +318,10 @@ describe("publish readiness", () => {
     walk(join(REPO_ROOT, "adapters"));
     walk(join(REPO_ROOT, "core"));
     walk(join(REPO_ROOT, "cli"));
+    // The plugins directory too: it holds a `@lablaunchpad/*` package that
+    // ships inside the CLI's emitted bundles rather than from npm, and a
+    // sweep that could not see it would let a package appear from nowhere.
+    walk(join(REPO_ROOT, "plugins"));
     const unhandled = found.filter((n) => !known.has(n));
     expect(unhandled, `unhandled publishable packages: ${unhandled.join(", ")}`).toEqual([]);
   });
