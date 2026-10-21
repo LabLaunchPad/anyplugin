@@ -220,8 +220,8 @@ The full taxonomy, and the correct behaviour per class, is in `docs/FAILURE-MODE
 
 | ID | Finding | Location | Status |
 |---|---|---|---|
-| **A** | Hook ID under-validated: schema allows leading `_`/`0-9`, unlimited length. Audit suggests `^[a-z][a-z0-9-]{0,63}$`, uniqueness per manifest, allowlisted event/handler. | `core/src/schema/index.ts:26` (current: `^[a-zA-Z0-9_-]+$`) | **PARTIAL** — regex exists but not strict enough |
-| **B** | Symlink escapes in source assets: `copyDir` rejects symlinks (F-02 fix ✅), but manifest path validation is lexical only. | `core/src/emit/index.ts:25-57`, `core/src/schema/index.ts:132-136` | **PARTIAL** — source copy protected, manifest paths not realpath-checked |
+| **A** | Hook ID under-validated: schema allowed leading `_`/`0-9`, unlimited length. | `core/src/schema/index.ts:26` | **FIXED** — the regex is `^[a-z][a-z0-9-]{0,63}$`. Test: `core/src/schema/hook-id-audit.test.ts` |
+| **B** | Symlink escapes in source assets: `copyDir` rejects symlinks (F-02 fix ✅), and manifest path validation was lexical only. | `core/src/schema/index.ts`, `core/src/emit/index.ts` | **FIXED** — manifest paths are realpath-checked at parse time. Tests: `core/src/schema/manifest-symlink-audit.test.ts`, `core/src/emit/copydir-containment.test.ts` |
 | **C** | Installer destination ownership: no pre-install classification of target (absent / same-install-ID / conflicting). Recursive delete on uninstall can remove unmanaged files. | `cli/src/index.ts` (`classifyDestination`, `executeInstall`, `executeUninstall`) | **FIXED** — ABSENT/OWNED/CONFLICTING classification, ULID installation-ID ownership proof, realpath containment, preflight before any mutation, safe uninstall removes only journal-tracked files. Tests: `cli/src/install-ownership-audit.test.ts` |
 | **D** | Journal not fully validated: `readJournal` casts JSON without shape/identity check; missing vs corrupt conflated to `null`. | `cli/src/journal.ts` (`migrateJournal`, `readJournal`, `readCurrentWithError`) | **FIXED** — strict Zod schema, `schemaVersion` field, `migrateJournal()` upgrades legacy journals, future versions fail closed, ENOENT vs EACCES/EPERM distinguished. Tests: `cli/src/journal-validation-audit.test.ts`, `cli/src/journal-migration-audit.test.ts` |
 
@@ -240,11 +240,19 @@ The full taxonomy, and the correct behaviour per class, is in `docs/FAILURE-MODE
 
 ### P2 — Specification quality and operational polish
 
-- `version` regex in schema not end-anchored: `/^\d+\.\d+\.\d+/` accepts trailing garbage.
-- MCP server schema allows inconsistent configs (HTTP without URL, stdio without command).
-- Path length checks use JS string `.length` (UTF-16 code units), not UTF-8 bytes.
-- Generated files/journals: direct write, not temp+flush+rename for atomicity.
-- State docs (`CURRENT_STATE.md`) must distinguish implemented/tested/designed/absent — several "engines" are only schemas.
+Three of the five items in this list were closed, and the list was still claiming they were open:
+
+| Item | Status |
+|---|---|
+| `version` regex in schema not end-anchored | **CLOSED** — the regex is `/^\d+\.\d+\.\d+$/` |
+| MCP server schema allows inconsistent configs (HTTP without URL, stdio without command) | **CLOSED** — the schema refuses both; `core/src/schema/mcp-server.test.ts` |
+| Path length checks use JS string `.length` (UTF-16 code units) rather than UTF-8 bytes | **CLOSED** — the limits are measured with `Buffer.byteLength(x, "utf8")` |
+| Generated files/journals: direct write, not temp+flush+rename for atomicity | **OPEN** — backlog P2-9 |
+| State docs must distinguish implemented/tested/designed/absent | **CLOSED** — `CURRENT_STATE.md` says in its own header that it is a pinned snapshot, and the open rows live in `docs/BACKLOG.md` |
+
+**The backlog owns what is open.** `docs/BACKLOG.md` is the classified record of every
+known issue. A row in this document that the backlog does not have is a second source of
+truth, and a second source of truth is a second thing to drift.
 
 ### Architecture boundaries to preserve (non-negotiable)
 
@@ -270,13 +278,5 @@ From `ROADMAP.md` and `CURRENT_STATE.md`:
 10. ~~Event log durability~~ — **DONE** (K): explicit `DurabilityLevel` per open.
 11. ~~Stale lock diagnostic~~ — **DONE** (L): `anyplugin doctor [--json] [--fix]`.
 
-**All P0 and P1 audit findings are now FIXED.** Remaining work is the P2 polish list below
-plus a re-audit of the whole surface.
-
-### P2 — remaining polish (from the audit)
-
-- `version` regex in schema not end-anchored: `/^\d+\.\d+\.\d+/` accepts trailing garbage.
-- MCP server schema allows inconsistent configs (HTTP without URL, stdio without command).
-- Path length checks use JS string `.length` (UTF-16 code units), not UTF-8 bytes.
-- Generated files/journals: direct write, not temp+flush+rename for atomicity.
-- State docs (`CURRENT_STATE.md`) must distinguish implemented/tested/designed/absent.
+**All P0 and P1 audit findings are now FIXED.** The remaining work from this audit is
+recorded in `docs/BACKLOG.md`, which owns it — see the P2 table above.
