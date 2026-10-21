@@ -33,6 +33,12 @@
 import { contentHash } from "../canonical.js";
 import {
   CertificateSchema,
+  DecisionSchema,
+  EvidenceSchema,
+  GraphSnapshotSchema,
+  VerificationResultSchema,
+  WorkContractSchema,
+  WorkerStateSchema,
   type Certificate,
   type Decision,
   type Evidence,
@@ -41,12 +47,14 @@ import {
   type WorkContract,
   type WorkerState,
 } from "../contracts/index.js";
-import type { ExecutionResult } from "../contracts/execution.js";
+import { ExecutionResultSchema, type ExecutionResult } from "../contracts/execution.js";
 
 /** Why a certificate did not verify. */
 export type CertificateFailureKind =
   /** The certificate does not satisfy its own schema. */
   | "MALFORMED_CERTIFICATE"
+  /** A bound artifact is not a record at all. */
+  | "MALFORMED_ARTIFACT"
   /** A bound artifact's content is not what was certified. */
   | "MODIFIED"
   /** The certificate names an artifact that was not supplied. */
@@ -126,6 +134,40 @@ function compareHashes(
 }
 
 /**
+ * The hash of an artifact, in its SEALED form.
+ *
+ * The sealed form is the PARSED form — the record as its own schema
+ * produces it. Six of the seven bound contracts have defaulted fields, so
+ * the raw input and the parsed record are different objects with
+ * different hashes, and the kernel's own ledgers store and return the
+ * PARSED one. Hashing the raw input would make the seal report an
+ * untouched artifact as tampered, in the one pipeline that matters.
+ *
+ * And it is TOTAL: an artifact that is not a record at all produces a
+ * verdict, not an exception. The verifier's contract says it never throws
+ * for a bad certificate, and an artifact it cannot even canonicalise is
+ * exactly such a case.
+ */
+function sealedHash(
+  schema: { parse: (value: unknown) => unknown },
+  value: unknown,
+  which: string,
+): { hash?: string; failure?: CertificateFailure } {
+  try {
+    return { hash: contentHash(schema.parse(value)) };
+  } catch (error) {
+    return {
+      failure: {
+        kind: "MALFORMED_ARTIFACT",
+        which,
+        expected: "a record that satisfies its schema",
+        actual: String((error as Error).message).slice(0, 200),
+      },
+    };
+  }
+}
+
+/**
  * Verify a certificate against the artifacts it claims to bind.
  *
  * Never throws for a bad certificate: a refusal is a verdict, not an
@@ -176,41 +218,75 @@ export function verifyCertificate(
     });
   }
 
+  // The artifacts must belong to EACH OTHER, not merely to the contract by
+  // hash. A state or a decision from a different contract is a different
+  // run's record, and a certificate that binds one while claiming the
+  // other asserts something it does not describe.
+  if (artifacts.state.contractId !== parsed.data.contractId) {
+    failures.push({
+      kind: "CONTRACT_MISMATCH",
+      which: "state",
+      expected: parsed.data.contractId,
+      actual: artifacts.state.contractId,
+    });
+  }
+  for (const decision of artifacts.decisions) {
+    if (decision.contractId !== parsed.data.contractId) {
+      failures.push({
+        kind: "CONTRACT_MISMATCH",
+        which: "decision",
+        expected: parsed.data.contractId,
+        actual: decision.contractId,
+      });
+    }
+  }
+
   // The three single-artifact bindings.
-  const singles: readonly [string, string, string][] = [
-    ["contract", parsed.data.contractHash, contentHash(artifacts.contract)],
-    ["state", parsed.data.stateHash, contentHash(artifacts.state)],
-    ["graph", parsed.data.graphSnapshotHash, contentHash(artifacts.graphSnapshot)],
+  const singles: readonly [string, string, unknown, { parse: (value: unknown) => unknown }][] = [
+    ["contract", parsed.data.contractHash, artifacts.contract, WorkContractSchema],
+    ["state", parsed.data.stateHash, artifacts.state, WorkerStateSchema],
+    ["graph", parsed.data.graphSnapshotHash, artifacts.graphSnapshot, GraphSnapshotSchema],
   ];
-  for (const [which, expected, actual] of singles) {
-    if (expected !== actual) {
-      failures.push({ kind: "MODIFIED", which, expected, actual });
+  for (const [which, expected, value, schema] of singles) {
+    const { hash, failure } = sealedHash(schema, value, which);
+    if (failure) {
+      failures.push(failure);
+      continue;
+    }
+    if (expected !== hash) {
+      failures.push({ kind: "MODIFIED", which, expected, actual: hash });
     }
   }
 
   // The list bindings.
-  failures.push(
-    ...compareHashes(
-      "evidence",
-      parsed.data.evidenceHashes,
-      artifacts.evidence.map((record) => contentHash(record)),
-    ),
-    ...compareHashes(
-      "decision",
-      parsed.data.decisionHashes,
-      artifacts.decisions.map((record) => contentHash(record)),
-    ),
-    ...compareHashes(
-      "verification",
-      parsed.data.verificationHashes,
-      artifacts.verifications.map((record) => contentHash(record)),
-    ),
-    ...compareHashes(
-      "execution",
-      parsed.data.executionHashes,
-      (artifacts.executions ?? []).map((record) => contentHash(record)),
-    ),
-  );
+  const lists: readonly [
+    string,
+    readonly string[],
+    readonly unknown[],
+    { parse: (value: unknown) => unknown },
+  ][] = [
+    ["evidence", parsed.data.evidenceHashes, artifacts.evidence, EvidenceSchema],
+    ["decision", parsed.data.decisionHashes, artifacts.decisions, DecisionSchema],
+    ["verification", parsed.data.verificationHashes, artifacts.verifications, VerificationResultSchema],
+    ["execution", parsed.data.executionHashes, artifacts.executions ?? [], ExecutionResultSchema],
+  ];
+  for (const [which, expected, values, schema] of lists) {
+    const hashes: string[] = [];
+    let malformed = false;
+    for (const value of values) {
+      const { hash, failure } = sealedHash(schema, value, which);
+      if (failure) {
+        failures.push(failure);
+        malformed = true;
+        continue;
+      }
+      hashes.push(hash!);
+    }
+    // A malformed record is the informative failure. The count comparison
+    // would only add a confusing "missing" on top of it.
+    if (malformed) continue;
+    failures.push(...compareHashes(which, expected, hashes));
+  }
 
   return { ok: failures.length === 0, failures };
 }

@@ -35,6 +35,7 @@ import {
   type VerificationResult,
   type WorkContract,
   type WorkerState,
+  WorkContractSchema,
 } from "../contracts/index.js";
 import type { ExecutionResult } from "../contracts/execution.js";
 
@@ -279,6 +280,60 @@ describe("the certificate", () => {
         provenance: { ...PROVENANCE },
       }),
     ).toThrow();
+  });
+
+  it("seals the PARSED form, so a raw record and its parsed form are the same artifact", () => {
+    // Six of the seven bound contracts have DEFAULTED fields, so the raw
+    // input and the parsed record are different objects with different
+    // hashes. The kernel's own ledgers store and return the PARSED one, so
+    // a seal that hashed the raw input would report an untouched artifact
+    // as tampered — in the one pipeline that matters.
+    const raw = { ...contract } as Partial<typeof contract>;
+    delete raw.constraints; // a defaulted field, absent in the raw form
+
+    const issued = issue({ contract: raw as typeof contract });
+
+    // Verified against the PARSED artifact: the form the ledgers hold.
+    const parsed = WorkContractSchema.parse(raw);
+    const verdict = verifyCertificate(issued, artifacts({ contract: parsed }));
+    expect(verdict.failures).toEqual([]);
+    expect(verdict.ok).toBe(true);
+  });
+
+  it("verifies a certificate against an artifact supplied in its RAW form", () => {
+    // The other direction: the caller may hand over the raw record, and
+    // the seal must still match, because the sealed form is the parsed one.
+    const raw = { ...contract } as Partial<typeof contract>;
+    delete raw.constraints;
+    const verdict = verifyCertificate(issue(), artifacts({ contract: raw as typeof contract }));
+    expect(verdict.failures).toEqual([]);
+    expect(verdict.ok).toBe(true);
+  });
+
+  it("reports a MALFORMED artifact as a verdict, and does not throw", () => {
+    // The verifier's contract says it never throws for a bad certificate.
+    // An artifact it cannot even canonicalise is exactly such a case, and
+    // a caller in a `doctor` command must be able to REPORT it.
+    const broken = { ...contract, goal: undefined } as unknown as typeof contract;
+    const verdict = verifyCertificate(issue(), artifacts({ contract: broken }));
+    expect(verdict.ok).toBe(false);
+    expect(verdict.failures.some((f) => f.kind === "MALFORMED_ARTIFACT")).toBe(true);
+  });
+
+  it("a state from a DIFFERENT contract fails verification", () => {
+    // A certificate that binds another run's state while claiming this
+    // run's contract asserts something it does not describe.
+    const foreign = { ...state, contractId: "WC-OTHER" } as typeof state;
+    const verdict = verifyCertificate(issue(), artifacts({ state: foreign }));
+    expect(verdict.ok).toBe(false);
+    expect(verdict.failures.some((f) => f.kind === "CONTRACT_MISMATCH" && f.which === "state")).toBe(true);
+  });
+
+  it("a decision from a DIFFERENT contract fails verification", () => {
+    const foreign = { ...decision, contractId: "WC-OTHER" } as typeof decision;
+    const verdict = verifyCertificate(issue(), artifacts({ decisions: [foreign] }));
+    expect(verdict.ok).toBe(false);
+    expect(verdict.failures.some((f) => f.kind === "CONTRACT_MISMATCH" && f.which === "decision")).toBe(true);
   });
 
   it("INDEPENDENCE: the verification path does not use the creation path", () => {

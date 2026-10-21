@@ -98,27 +98,36 @@ export function issueCertificate(inputs: CertificateInputs): Certificate {
   // is not a record, and the failure would be reported as "the artifact
   // was modified" — which is true and useless. So an illegal artifact is
   // refused HERE, where the reason is obvious.
-  WorkContractSchema.parse(inputs.contract);
-  WorkerStateSchema.parse(inputs.state);
-  GraphSnapshotSchema.parse(inputs.graphSnapshot);
-  for (const record of inputs.evidence) EvidenceSchema.parse(record);
-  for (const record of inputs.decisions) DecisionSchema.parse(record);
-  for (const record of inputs.verifications) VerificationResultSchema.parse(record);
-  for (const record of inputs.executions ?? []) ExecutionResultSchema.parse(record);
+  //
+  // And what is hashed is the PARSED form, not the raw input. Six of the
+  // seven bound contracts have defaulted fields, so the raw form and the
+  // parsed form are different objects with different hashes — and the
+  // kernel's own ledgers store and return the PARSED record. Hashing the
+  // raw input would make the seal report an untouched artifact as
+  // tampered, in the one pipeline that matters.
+  const sealed = {
+    contract: WorkContractSchema.parse(inputs.contract),
+    state: WorkerStateSchema.parse(inputs.state),
+    graphSnapshot: GraphSnapshotSchema.parse(inputs.graphSnapshot),
+    evidence: inputs.evidence.map((record) => EvidenceSchema.parse(record)),
+    decisions: inputs.decisions.map((record) => DecisionSchema.parse(record)),
+    verifications: inputs.verifications.map((record) => VerificationResultSchema.parse(record)),
+    executions: (inputs.executions ?? []).map((record) => ExecutionResultSchema.parse(record)),
+  };
 
   const certificate = {
     id: inputs.id,
     contractVersion: CONTRACT_VERSION,
     runtimeVersion: inputs.runtimeVersion,
-    contractId: inputs.contract.id,
-    finalPhase: inputs.state.phase,
-    contractHash: contentHash(inputs.contract),
-    stateHash: contentHash(inputs.state),
-    graphSnapshotHash: contentHash(inputs.graphSnapshot),
-    evidenceHashes: inputs.evidence.map((record) => contentHash(record)),
-    decisionHashes: inputs.decisions.map((record) => contentHash(record)),
-    verificationHashes: inputs.verifications.map((record) => contentHash(record)),
-    executionHashes: (inputs.executions ?? []).map((record) => contentHash(record)),
+    contractId: sealed.contract.id,
+    finalPhase: sealed.state.phase,
+    contractHash: contentHash(sealed.contract),
+    stateHash: contentHash(sealed.state),
+    graphSnapshotHash: contentHash(sealed.graphSnapshot),
+    evidenceHashes: sealed.evidence.map((record) => contentHash(record)),
+    decisionHashes: sealed.decisions.map((record) => contentHash(record)),
+    verificationHashes: sealed.verifications.map((record) => contentHash(record)),
+    executionHashes: sealed.executions.map((record) => contentHash(record)),
     issuedAt: inputs.issuedAt,
     provenance: inputs.provenance,
   };
