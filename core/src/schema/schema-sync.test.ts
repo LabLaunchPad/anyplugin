@@ -28,6 +28,47 @@ describe("anyplugin.plugin.schema.json sync", () => {
     expect(hookProps["properties"]["timeoutSec"]).toEqual({ type: "integer", minimum: 1, maximum: 600 });
   });
 
+  it("the matcher's length limit agrees between the mirror and the parser", async () => {
+    // The mirror and the Zod source must accept and refuse the SAME
+    // patterns, or an editor's validation disagrees with the manifest
+    // parser — and the user finds out at install time, not at save time.
+    //
+    // The length limit is the part JSON Schema can state exactly, and this
+    // asserts both sides state the SAME one.
+    const doc = JSON.parse(await readFile(schemaPath, "utf8"));
+    const mirror = doc["properties"]["hooks"]["items"]["properties"]["match"];
+    expect(mirror["maxLength"]).toBe(200);
+    expect(HookSchema.shape.match.safeParse("a".repeat(200)).success).toBe(true);
+    expect(HookSchema.shape.match.safeParse("a".repeat(201)).success).toBe(false);
+  });
+
+  it("the mirror's pattern rules agree with the parser on the patterns that matter", async () => {
+    // The mirror states the ambiguity rules as `not.pattern` — the shapes a
+    // JSON Schema CAN express. The parser's rule is broader (it understands
+    // nested groups, which a regex cannot), so this asserts the two AGREE on
+    // the cases the mirror claims, and that the parser refuses the shapes
+    // the mirror cannot express.
+    const doc = JSON.parse(await readFile(schemaPath, "utf8"));
+    const mirror = doc["properties"]["hooks"]["items"]["properties"]["match"];
+    const asRegex = new RegExp(mirror["not"]["pattern"]);
+
+    // A pattern the mirror forbids must be refused by the parser too.
+    for (const forbidden of ["(a+)+", "(a*)*", "(a{1,2})+", "(a+)+$"]) {
+      expect(asRegex.test(forbidden), `the mirror should forbid ${forbidden}`).toBe(true);
+      expect(
+        HookSchema.shape.match.safeParse(forbidden).success,
+        `the mirror forbids ${forbidden} but the parser accepts it`,
+      ).toBe(false);
+    }
+
+    // The parser refuses the nested-group shape the mirror cannot express.
+    expect(HookSchema.shape.match.safeParse("((a+))+$").success).toBe(false);
+    // And accepts the shapes that must keep working.
+    for (const ok of ["Bash", ".*", "^(Read|Write)$", "(Read|Write)+"]) {
+      expect(HookSchema.shape.match.safeParse(ok).success, ok).toBe(true);
+    }
+  });
+
   it("mcp server item properties match McpServerSchema", async () => {
     const doc = JSON.parse(await readFile(schemaPath, "utf8"));
     const serverProps = doc["properties"]["mcp"]["properties"]["servers"]["additionalProperties"]["properties"];

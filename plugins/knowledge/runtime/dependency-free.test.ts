@@ -157,7 +157,7 @@ describe("the runtime's inlined SafePath agrees with the core implementation", (
       for (const input of corpus) {
         // The runner is spawned with the SAME cwd the test process has, so
         // both implementations authorise against the same root.
-        const runnerCwd = await resolveViaRunner(join(sandbox, "runtime", "runner.js"), input);
+        const runner = await resolveViaRunner(join(sandbox, "runtime", "runner.js"), input);
         let coreCwd: string | null = null;
         try {
           coreCwd = await resolveAuthorizedPath(process.cwd(), input);
@@ -166,16 +166,16 @@ describe("the runtime's inlined SafePath agrees with the core implementation", (
         }
         if (coreCwd === null) {
           expect(
-            runnerCwd,
+            runner.cwd,
             `the runner must refuse ${JSON.stringify(input)} — core refuses it too`,
           ).toBe(process.cwd());
-        } else if (runnerCwd !== coreCwd) {
+        } else if (runner.cwd !== coreCwd) {
           // The runner may be STRICTER than core (it falls back to the
           // process's own directory for a whitespace-only path, say). Being
           // stricter is safe. Being LOOSER is not: the runner must never
           // resolve to a path core would have refused.
           expect(
-            runnerCwd,
+            runner.cwd,
             `the runner must not resolve ${JSON.stringify(input)} to a path core would refuse`,
           ).toBe(process.cwd());
         }
@@ -219,11 +219,14 @@ describe("the runtime's inlined SafePath agrees with the core implementation", (
             `the filesystem reports ENOENT rather than ENOTDIR for a file used as a directory.`,
         );
       } else {
-        const runnerCwd = await resolveViaRunner(join(sandbox, "runtime", "runner.js"), notADirectory, root);
+        const runner = await resolveViaRunner(join(sandbox, "runtime", "runner.js"), notADirectory, root);
         expect(
-          runnerCwd,
+          runner.cwd,
           `the runner must refuse ${JSON.stringify(notADirectory)} — core refuses it too`,
         ).toBe(root);
+        // And the runner must have REFUSED it, not crashed: a crash also
+        // produces no JSON, and a crash is a different failure.
+        expect(runner.crashed, "the runner must refuse the path, not crash").toBe(false);
       }
     } finally {
       await rm(sandbox, { recursive: true, force: true });
@@ -261,33 +264,66 @@ describe("the runtime's inlined SafePath agrees with the core implementation", (
       // The ENOENT case must be handled EXPLICITLY, not by a blanket catch:
       // the shape is "catch (err) { if (err.code === "ENOENT") return X; ... }".
       expect(source, `${name} must name the ENOENT case`).toMatch(/code === ["']ENOENT["']/);
-      // And the two PATH HELPERS must not swallow every error. The pattern is
-      // scoped to a helper whose body is a filesystem call followed by a
-      // catch that returns the fallback and nothing else.
+
+      // The two PATH HELPERS must not swallow every error. The check looks
+      // at the CATCH BLOCK of each helper, not the whole file, and it must
+      // catch BOTH shapes of the swallow:
+      //
+      //   catch { return null; }                          a blanket catch
+      //   if (err.code !== "ENOENT") return null;        a conditional one
+      //
+      // The second is the shape a careless edit produces, and a check that
+      // only looked for the first would stay green while the behaviour came
+      // back. So the assertion is on the catch block's BODY: it must
+      // mention ENOENT and it must THROW for anything else.
       for (const helper of ["tryRealpath", "entryExists"]) {
-        // The helper may be `function` or `async function`, and its body ends
-        // at the first line that is exactly "}" at the helper's indent.
         const body = new RegExp(
           `(?:async\\s+)?function ${helper}\\([^)]*\\)[^{]*\\{[\\s\\S]*?\\n\\}`,
           "m",
         ).exec(source);
         expect(body, `${name} must define ${helper}`).not.toBeNull();
-        expect(body![0], `${name}'s ${helper} must not swallow every filesystem error`).not.toMatch(
+
+        // The catch block: everything from "catch" to the end of the helper.
+        const catchBlock = /catch\s*(?:\([^)]*\))?\s*\{[\s\S]*?\n\}/.exec(body![0]);
+        expect(catchBlock, `${name}'s ${helper} must have a catch block`).not.toBeNull();
+        const block = catchBlock![0];
+        // It must name the ENOENT case.
+        expect(block, `${name}'s ${helper} must handle ENOENT explicitly`).toMatch(/ENOENT/);
+        // And it must NOT return the fallback without checking the code.
+        expect(block, `${name}'s ${helper} must not swallow a non-ENOENT error`).not.toMatch(
           /catch\s*(?:\([^)]*\))?\s*\{\s*return (?:null|false);/,
+        );
+        expect(block, `${name}'s ${helper} must not swallow a non-ENOENT error`).not.toMatch(
+          /if\s*\([^)]*code[^)]*!==[^)]*\)\s*return (?:null|false);/,
         );
       }
     }
   });
 });
 
-/** Run the runner with a given cwd and report the cwd the handler saw. */
-async function resolveViaRunner(runner: string, cwd: string, root: string = process.cwd()): Promise<string> {
+/**
+ * Run the runner with a given cwd and report the cwd the handler saw.
+ *
+ * A runner that REFUSES a path exits non-zero and writes nothing, so the
+ * absence of JSON is the refusal signal — but a runner that CRASHES looks
+ * the same from here. The two are reported separately so a test can assert
+ * "refused" without also passing on "crashed".
+ */
+async function resolveViaRunner(
+  runner: string,
+  cwd: string,
+  root: string = process.cwd(),
+): Promise<{ cwd: string; refused: boolean; crashed: boolean }> {
   const result = await runNode([runner, "probe"], { cwd: root }, JSON.stringify({ cwd }));
   try {
     const parsed = JSON.parse(result.stdout) as { cwd: string };
-    return parsed.cwd;
+    return { cwd: parsed.cwd, refused: false, crashed: false };
   } catch {
-    return root;
+    // No JSON: the runner refused the path (it exits non-zero and writes a
+    // note) or it failed outright. The exit code tells them apart — a
+    // refusal is a deliberate non-zero exit, a crash is a signal.
+    const refused = result.code !== null && result.code !== 0 && !/Error|error/.test(result.stderr);
+    return { cwd: root, refused, crashed: !refused };
   }
 }
 
