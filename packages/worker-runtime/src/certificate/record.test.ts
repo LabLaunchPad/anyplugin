@@ -102,24 +102,12 @@ describe("recording a certificate", () => {
     expect(second.id).toBe(first.id);
   });
 
-  it("KNOWN GAP: the log does not yet enforce G5, so a retry commits the id twice", () => {
-    // This asserts a DEFECT, deliberately. The write contract's G5 says a
-    // re-appended committed event id must not produce two committed events,
-    // and the production append path does not enforce it — so a retried
-    // recording commits the same id twice.
-    //
-    // What replay does with that is NOT "report a broken writer": replay
-    // de-duplicates on the SEQUENCE, and there is no id-based check
-    // anywhere in the runtime. So the duplicate is committed and nothing
-    // complains. That is what makes the gap worth closing, and it is
-    // recorded in `docs/BACKLOG.md`. If the log starts enforcing G5,
-    // this test goes RED, and that is the welcome surprise that says the
-    // gap closed.
+  it("G5 ENFORCED: the log enforces G5 idempotency, returning the existing committed event on retry", () => {
     const sealed = certificate();
     const first = recordCertificate(log, sealed);
     const second = recordCertificate(log, sealed);
     expect(second.id).toBe(first.id);
-    expect(second.sequence).toBeGreaterThan(first.sequence);
+    expect(second.sequence).toBe(first.sequence);
   });
 
   it("the recorded certificate can be read back and verified", () => {

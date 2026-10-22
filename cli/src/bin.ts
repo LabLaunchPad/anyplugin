@@ -1027,6 +1027,7 @@ async function detectInstalledAgentsSafe(home: string): Promise<string[]> {
 }
 
 main().catch((err: Error) => {
-  process.stderr.write(`anyplugin: ${err.message}\n`);
+  process.stderr.write(`\n❌ Error: ${err.message}\n`);
+  process.stderr.write(`💡 Tip: Run 'anyplugin help' for command options or 'anyplugin doctor' to diagnose system issues.\n\n`);
   process.exitCode = 1;
 });

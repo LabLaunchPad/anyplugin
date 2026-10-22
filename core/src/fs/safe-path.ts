@@ -84,8 +84,9 @@ export function isContained(candidate: string, root: string): boolean {
 async function tryRealpath(p: string): Promise<string | null> {
   try {
     return await realpath(p);
-  } catch {
-    return null;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new SecurityError(`path escape/resolution error: cannot resolve realpath for ${p}: ${(err as Error).message}`);
   }
 }
 
@@ -94,8 +95,9 @@ async function entryExists(p: string): Promise<boolean> {
   try {
     await lstat(p);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw new SecurityError(`unsafe path: cannot stat entry ${p}: ${(err as Error).message}`);
   }
 }
 

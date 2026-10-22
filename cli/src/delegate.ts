@@ -386,7 +386,11 @@ export async function executeBackend(
       // documented way to take a tree down.
       try {
         if (process.platform === "win32") {
-          spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", shell: false });
+          if (child.pid !== undefined) {
+            spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", shell: false });
+          } else {
+            child.kill("SIGKILL");
+          }
         } else if (child.pid) {
           process.kill(-child.pid, "SIGKILL");
         } else {
