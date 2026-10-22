@@ -39,6 +39,7 @@ import { join } from "node:path";
 import { hostname } from "node:os";
 import { canonicalJson } from "../canonical.js";
 import { EventSchema, type WorkerEvent } from "../contracts/index.js";
+import { migrateRecord } from "../contracts/migration.js";
 import { assertWritable } from "../ownership.js";
 import { STORAGE_ROOT_DIRNAME } from "../storage.js";
 import { recordHash } from "./write-contract.js";
@@ -305,7 +306,17 @@ function readCommittedEvents(logPath: string): { highestSequence: number; commit
     if (second < 0) continue;
     try {
       const parsed = JSON.parse(line.slice(second + 1));
-      const valid = EventSchema.safeParse(parsed);
+      // MIGRATE BEFORE CHECKING, exactly as replay does.
+      //
+      // A record written under an earlier contract version is READABLE — the
+      // migration upgrades it on the way in. Checking it against the CURRENT
+      // schema without migrating first would reject it, and then its sequence
+      // would be ignored: the writer would resume at 0 and REUSE a sequence
+      // that is already on disk, which replay reports as "broken writer" and
+      // which manufactures gaps out of nothing.
+      const migrated = migrateRecord(parsed);
+      const candidate = migrated.ok ? migrated.value : parsed;
+      const valid = EventSchema.safeParse(candidate);
       if (valid.success) {
         if (valid.data.sequence > highest) highest = valid.data.sequence;
         committedEvents.set(valid.data.id, valid.data);
