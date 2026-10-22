@@ -16,14 +16,20 @@ import type { AgentId, EmittedBundle } from "@lablaunchpad/core";
  * vitest's default 5s bound is calibrated for unit tests, not for that. Two of
  * these crossed it on a loaded Windows runner while passing comfortably on a
  * quiet one, which makes the pass a property of runner speed rather than of the
- * code (F17). The bound is therefore stated explicitly, matching the 30s already
- * used by plugins/knowledge/src/e2e.runtime.test.ts for the same reason.
+ * code (F17). The bound is therefore stated explicitly.
+ *
+ * It is 120s rather than the 30s the lighter suites use, and the reason is
+ * measured: on a loaded machine one test here took 30.2s and failed on the
+ * timeout while the code was correct. These suites spawn a child process per
+ * agent, so they compete with every other process-spawning suite for the same
+ * cores. packages/worker-runtime/src/log/write-contract.test.ts already uses
+ * 120s for the same reason.
  *
  * This changes no assertion. A timeout is a liveness bound, not a correctness
  * claim: every behavioural check in this file is unchanged, and a genuine hang
  * still fails.
  */
-vi.setConfig({ testTimeout: 30_000 });
+vi.setConfig({ testTimeout: 120_000 });
 
 
 async function makePlugin(): Promise<{ root: string; home: string; project: string; bundles: Record<string, EmittedBundle>; opts: { home: string; projectDir: string; pluginName: string; version: string } }> {

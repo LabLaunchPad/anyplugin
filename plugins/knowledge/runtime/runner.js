@@ -71,8 +71,17 @@ function isContained(candidate, root) {
 function tryRealpath(p) {
   try {
     return realpathSync(p);
-  } catch {
-    return null;
+  } catch (err) {
+    // ENOENT is the normal case — the path does not exist yet, and the
+    // walk-up loop depends on it. Anything else (EACCES, ELOOP, a device
+    // error) means the path could not be RESOLVED, and treating that as
+    // "absent" would walk the probe past a directory it could not inspect.
+    // core/src/fs/safe-path.ts refuses in that case, and this copy must
+    // refuse the same way: the comment above claims the two are equivalent,
+    // and the differential test in dependency-free.test.ts is what keeps
+    // them that way.
+    if (err.code === "ENOENT") return null;
+    throw new Error(`path escape/resolution error: cannot resolve realpath for ${p}: ${err.message}`);
   }
 }
 
@@ -80,8 +89,9 @@ function entryExists(p) {
   try {
     lstatSync(p);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if (err.code === "ENOENT") return false;
+    throw new Error(`unsafe path: cannot stat entry ${p}: ${err.message}`);
   }
 }
 

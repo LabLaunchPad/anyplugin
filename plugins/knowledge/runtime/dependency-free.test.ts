@@ -180,20 +180,114 @@ describe("the runtime's inlined SafePath agrees with the core implementation", (
           ).toBe(process.cwd());
         }
       }
+
+      // The corpus above is entirely LEXICAL: every entry is refused by the
+      // path-shape check before any filesystem call happens. That means it
+      // never reaches the code where the two implementations can disagree —
+      // the handling of a realpath/stat failure that is NOT "does not exist".
+      //
+      // This case does reach it, on the platforms that can produce such a
+      // failure. `file.txt/child.json` has a FILE where a directory is
+      // needed, so the filesystem refuses to resolve it with ENOTDIR on
+      // POSIX. On Windows the same path reports ENOENT, which both
+      // implementations treat as "does not exist" and walk past — so there
+      // the case proves nothing, and the test says so rather than passing
+      // silently.
+      //
+      // The root is the SANDBOX, not the repository: the runner authorises
+      // against its own working directory, and core is given the same one,
+      // so the two compare like with like and nothing is written into the
+      // repository.
+      const root = join(sandbox, "root");
+      await mkdir(root, { recursive: true });
+      await writeFile(join(root, "file.txt"), "x");
+      const notADirectory = "file.txt/child.json";
+      let coreRefused = false;
+      try {
+        await resolveAuthorizedPath(root, notADirectory);
+      } catch {
+        coreRefused = true;
+      }
+      if (!coreRefused) {
+        // This platform's filesystem reports "does not exist" for a path
+        // whose component is a file, so both implementations walk past it
+        // and the divergent branch is not reached. The two copies are still
+        // aligned in the SOURCE (both refuse a non-ENOENT failure), and the
+        // POSIX leg of CI exercises that path for real.
+        console.warn(
+          `[ARMED] the SafePath differential case cannot reach the divergent branch on this platform: ` +
+            `the filesystem reports ENOENT rather than ENOTDIR for a file used as a directory.`,
+        );
+      } else {
+        const runnerCwd = await resolveViaRunner(join(sandbox, "runtime", "runner.js"), notADirectory, root);
+        expect(
+          runnerCwd,
+          `the runner must refuse ${JSON.stringify(notADirectory)} — core refuses it too`,
+        ).toBe(root);
+      }
     } finally {
       await rm(sandbox, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("the two copies make the same decision about an unresolvable path", () => {
+    // The differential case above can only REACH the divergent branch on a
+    // platform whose filesystem reports something other than ENOENT for a
+    // path it cannot resolve. Producing such a failure needs a directory the
+    // process cannot traverse (POSIX permission bits) or a symlink loop
+    // (POSIX symlinks) — and NEITHER is available on every platform this
+    // repository runs on: Windows enforces neither the same way, and the
+    // build machine may run with rights that defeat both.
+    //
+    // So the SOURCE is compared instead: the two copies must both
+    // DISTINGUISH "does not exist" from "could not be resolved", and both
+    // must REFUSE the second. A copy that swallowed every error would
+    // treat an unreadable directory as absent and walk the probe PAST it,
+    // which is how a containment check is defeated.
+    //
+    // This is a source comparison, not a behavioural one, and that is the
+    // honest trade: it holds on every platform, and it is what the two
+    // copies must agree about. The BEHAVIOURAL half is the case above,
+    // which exercises the divergent branch wherever the platform can
+    // produce it.
+    const core = readFileSync(resolve("core/src/fs/safe-path.ts"), "utf8");
+    const runner = readFileSync(join(RUNTIME_DIR, "runner.js"), "utf8");
+    // The CLI has a third copy of the same two helpers, for its own
+    // destination classification. It is not in the runtime, but it decides
+    // where an install writes, so it must make the same decision.
+    const cli = readFileSync(resolve("cli/src/index.ts"), "utf8");
+
+    for (const [name, source] of [["core", core], ["runner", runner], ["cli", cli]] as const) {
+      // The ENOENT case must be handled EXPLICITLY, not by a blanket catch:
+      // the shape is "catch (err) { if (err.code === "ENOENT") return X; ... }".
+      expect(source, `${name} must name the ENOENT case`).toMatch(/code === ["']ENOENT["']/);
+      // And the two PATH HELPERS must not swallow every error. The pattern is
+      // scoped to a helper whose body is a filesystem call followed by a
+      // catch that returns the fallback and nothing else.
+      for (const helper of ["tryRealpath", "entryExists"]) {
+        // The helper may be `function` or `async function`, and its body ends
+        // at the first line that is exactly "}" at the helper's indent.
+        const body = new RegExp(
+          `(?:async\\s+)?function ${helper}\\([^)]*\\)[^{]*\\{[\\s\\S]*?\\n\\}`,
+          "m",
+        ).exec(source);
+        expect(body, `${name} must define ${helper}`).not.toBeNull();
+        expect(body![0], `${name}'s ${helper} must not swallow every filesystem error`).not.toMatch(
+          /catch\s*(?:\([^)]*\))?\s*\{\s*return (?:null|false);/,
+        );
+      }
+    }
+  });
 });
 
 /** Run the runner with a given cwd and report the cwd the handler saw. */
-async function resolveViaRunner(runner: string, cwd: string): Promise<string> {
-  const result = await runNode([runner, "probe"], { cwd: process.cwd() }, JSON.stringify({ cwd }));
+async function resolveViaRunner(runner: string, cwd: string, root: string = process.cwd()): Promise<string> {
+  const result = await runNode([runner, "probe"], { cwd: root }, JSON.stringify({ cwd }));
   try {
     const parsed = JSON.parse(result.stdout) as { cwd: string };
     return parsed.cwd;
   } catch {
-    return process.cwd();
+    return root;
   }
 }
 

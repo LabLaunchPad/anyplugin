@@ -18,6 +18,7 @@ import {
   pathExists,
   assertSafeRelative,
   resolveAuthorizedPath,
+  isContained,
   type Capability,
   supports,
   rationale,
@@ -266,8 +267,14 @@ async function checkForUnresolvableLinks(path: string, authorizedRootReal: strin
 async function tryRealpath(p: string): Promise<string | null> {
   try {
     return await realpath(p);
-  } catch {
-    return null;
+  } catch (err) {
+    // ENOENT is the normal case: the path does not exist yet, and the
+    // walk-up loop depends on it. Anything else means the path could not be
+    // RESOLVED, and treating that as "absent" would walk the probe past a
+    // directory it could not inspect. core/src/fs/safe-path.ts refuses in
+    // that case; this copy must refuse the same way.
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new SecurityError(`path escape/resolution error: cannot resolve realpath for ${p}: ${(err as Error).message}`);
   }
 }
 
@@ -275,20 +282,13 @@ async function entryExists(p: string): Promise<boolean> {
   try {
     await lstat(p);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw new SecurityError(`unsafe path: cannot stat entry ${p}: ${(err as Error).message}`);
   }
 }
 
 const sep = process.platform === "win32" ? "\\" : "/";
-
-/** True iff `candidate` is `root` itself or lies strictly inside `root`. */
-function isContained(candidate: string, root: string): boolean {
-  const norm = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p);
-  if (norm(candidate) === norm(root)) return true;
-  const withSep = root.endsWith(sep) ? root : root + sep;
-  return norm(candidate).startsWith(norm(withSep));
-}
 
 /** Validate a destination path for merge operations: check containment and symlink escapes, but allow existing files. */
 async function validateDestinationPath(dest: string, authorizedRoot: string): Promise<DestinationClassification> {

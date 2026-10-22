@@ -18,16 +18,52 @@ export const CanonicalEvent = z.enum([
 export type CanonicalEvent = z.infer<typeof CanonicalEvent>;
 
 /**
- * A hook handler is ALWAYS executed as `node <runtime> <handler> <payload-json-on-stdin>`.
- * `handler` is a path (relative to plugin root) to a JS/MJS module exporting
- * `async function run(payload: HookPayload): Promise<HookResult>`.
+ * A hook `match` pattern must not be able to hang the agent.
+ *
+ * The pattern is compiled with `new RegExp(...)` and tested against a tool
+ * name. A NESTED QUANTIFIER — a quantifier applied to a group whose body
+ * also contains one, like `(a+)+` — backtracks exponentially: measured on
+ * this repository's own runtime, `(a+)+$` took 9 seconds against a 20-char
+ * input and did not finish at 24. The tool name is not under the plugin
+ * author's control (an MCP server can register any tool name), so a
+ * careless pattern plus a hostile tool name freezes the agent's hook
+ * process with no error and no timeout.
+ *
+ * The check is at MANIFEST PARSE time, not in the adapter, because the
+ * pattern reaches the agent's own regex engine in three of the four
+ * adapters — refusing it once, here, covers all of them.
+ *
+ * Deliberately narrow: it refuses NESTED quantifiers, the shape that was
+ * measured. It is not a general ReDoS analyser, and it does not try to be
+ * one — an alternation blowup like `(a|a)+` is a different class and is
+ * not covered here.
  */
+const NESTED_QUANTIFIER = /\([^()]*[+*][^()]*\)[+*{]/;
+/** A bounded quantifier — `{2}`, `{2,}`, `{2,5}` — is the same hazard. */
+const BOUNDED_QUANTIFIER = /\([^()]*\{\d+[^()]*\)[+*{]/;
+
+function hasNestedQuantifier(pattern: string): boolean {
+  return NESTED_QUANTIFIER.test(pattern) || BOUNDED_QUANTIFIER.test(pattern);
+}
+
+/** True iff the pattern is a plain tool name rather than a regex. */
+function looksLikePlainName(pattern: string): boolean {
+  return /^[A-Za-z0-9_.:-]+$/.test(pattern);
+}
+
 export const HookSchema = z.object({
   id: z.string().min(1).max(64).regex(/^[a-z][a-z0-9-]{0,63}$/, "hook ID must match ^[a-z][a-z0-9-]{0,63}$"),
   event: CanonicalEvent,
   handler: z.string().min(1),
   /** Tool-name matcher (regex or plain name); omitted = all tools. */
-  match: z.string().optional(),
+  match: z
+    .string()
+    .max(200, "hook match pattern must be at most 200 characters")
+    .refine((p) => looksLikePlainName(p) || !hasNestedQuantifier(p), {
+      message:
+        "hook match pattern must not contain a nested quantifier (e.g. \"(a+)+\"): it can freeze the agent on a long tool name",
+    })
+    .optional(),
   timeoutSec: z.number().int().positive().max(600).optional(),
   /** Failure policy: "blocking" — handler throws result in exit 2 (host denied);
    * "non-blocking" — handler throws result in exit 0 (host continues). Default: non-blocking. */

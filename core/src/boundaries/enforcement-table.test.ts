@@ -30,9 +30,24 @@
  * curation is what makes it sufficient. The guard stops the *gap*; the
  * humans keep the *precision*.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+
+/**
+ * This guard SCANS the repository: it reads every source file under the
+ * worker-runtime and the CLI to check that each rule's live consumer is
+ * touched by one of its named tests.
+ *
+ * The scan gets slower as the repository grows, and vitest's default 5s bound
+ * is calibrated for unit tests. Measured: two of these took 9.4s and 10.4s
+ * on a loaded machine and failed on the timeout while the code was correct —
+ * the same F17 class the other spawn-heavy suites carry an explicit bound
+ * for. The bound is stated rather than left to the default.
+ *
+ * This changes no assertion: a genuine gap in the table still fails.
+ */
+vi.setConfig({ testTimeout: 120_000 });
 
 const REPO_ROOT = resolve(import.meta.dirname, "..", "..", "..");
 const TABLE_DOC = join(REPO_ROOT, "docs", "FAILURE-MODES.md");

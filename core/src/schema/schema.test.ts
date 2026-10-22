@@ -61,4 +61,35 @@ describe("parsePluginManifest", () => {
       }, mockRoot),
     ).rejects.toThrow(/manifest/);
   });
+
+  it("refuses a hook matcher that could freeze the agent", async () => {
+    await mkdir(join(mockRoot, "hooks"), { recursive: true });
+    await writeFile(join(mockRoot, "hooks", "guard.js"), "export async function run() { return {}; }");
+
+    const withMatch = (match: string) =>
+      parsePluginManifest({
+        name: "p",
+        version: "0.0.1",
+        description: "d",
+        hooks: [{ id: "h1", event: "before-tool-use", handler: "./hooks/guard.js", match }],
+      }, mockRoot);
+
+    // A nested quantifier backtracks exponentially: `(a+)+$` took 9 seconds
+    // against a 20-char input and did not finish at 24. The tool name is not
+    // the plugin author's to choose, so this has to be refused at parse time.
+    for (const evil of ["(a+)+$", "(a*)*", "(a+)*", "^(x+)+$", "(a{1,2})+"]) {
+      await expect(withMatch(evil), evil).rejects.toThrow(/nested quantifier/);
+    }
+
+    // A plain tool name is not a regex and must still work.
+    await expect(withMatch("Bash")).resolves.toBeDefined();
+    // A simple regex must still work — the starter template ships `.*`.
+    await expect(withMatch(".*")).resolves.toBeDefined();
+    await expect(withMatch("^(Read|Write)$")).resolves.toBeDefined();
+    await expect(withMatch("^Bash")).resolves.toBeDefined();
+
+    // A very long pattern is refused too: it is a cheap way to make an
+    // agent's regex engine work.
+    await expect(withMatch("a".repeat(201))).rejects.toThrow(/200 characters/);
+  });
 });
