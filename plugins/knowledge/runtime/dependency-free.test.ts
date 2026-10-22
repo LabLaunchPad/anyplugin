@@ -157,7 +157,7 @@ describe("the runtime's inlined SafePath agrees with the core implementation", (
       for (const input of corpus) {
         // The runner is spawned with the SAME cwd the test process has, so
         // both implementations authorise against the same root.
-        const runnerCwd = await resolveViaRunner(join(sandbox, "runtime", "runner.js"), input);
+        const runner = await resolveViaRunner(join(sandbox, "runtime", "runner.js"), input);
         let coreCwd: string | null = null;
         try {
           coreCwd = await resolveAuthorizedPath(process.cwd(), input);
@@ -166,34 +166,164 @@ describe("the runtime's inlined SafePath agrees with the core implementation", (
         }
         if (coreCwd === null) {
           expect(
-            runnerCwd,
+            runner.cwd,
             `the runner must refuse ${JSON.stringify(input)} — core refuses it too`,
           ).toBe(process.cwd());
-        } else if (runnerCwd !== coreCwd) {
+        } else if (runner.cwd !== coreCwd) {
           // The runner may be STRICTER than core (it falls back to the
           // process's own directory for a whitespace-only path, say). Being
           // stricter is safe. Being LOOSER is not: the runner must never
           // resolve to a path core would have refused.
           expect(
-            runnerCwd,
+            runner.cwd,
             `the runner must not resolve ${JSON.stringify(input)} to a path core would refuse`,
           ).toBe(process.cwd());
         }
+      }
+
+      // The corpus above is entirely LEXICAL: every entry is refused by the
+      // path-shape check before any filesystem call happens. That means it
+      // never reaches the code where the two implementations can disagree —
+      // the handling of a realpath/stat failure that is NOT "does not exist".
+      //
+      // This case does reach it, on the platforms that can produce such a
+      // failure. `file.txt/child.json` has a FILE where a directory is
+      // needed, so the filesystem refuses to resolve it with ENOTDIR on
+      // POSIX. On Windows the same path reports ENOENT, which both
+      // implementations treat as "does not exist" and walk past — so there
+      // the case proves nothing, and the test says so rather than passing
+      // silently.
+      //
+      // The root is the SANDBOX, not the repository: the runner authorises
+      // against its own working directory, and core is given the same one,
+      // so the two compare like with like and nothing is written into the
+      // repository.
+      const root = join(sandbox, "root");
+      await mkdir(root, { recursive: true });
+      await writeFile(join(root, "file.txt"), "x");
+      const notADirectory = "file.txt/child.json";
+      let coreRefused = false;
+      try {
+        await resolveAuthorizedPath(root, notADirectory);
+      } catch {
+        coreRefused = true;
+      }
+      if (!coreRefused) {
+        // This platform's filesystem reports "does not exist" for a path
+        // whose component is a file, so both implementations walk past it
+        // and the divergent branch is not reached. The two copies are still
+        // aligned in the SOURCE (both refuse a non-ENOENT failure), and the
+        // POSIX leg of CI exercises that path for real.
+        console.warn(
+          `[ARMED] the SafePath differential case cannot reach the divergent branch on this platform: ` +
+            `the filesystem reports ENOENT rather than ENOTDIR for a file used as a directory.`,
+        );
+      } else {
+        const runner = await resolveViaRunner(join(sandbox, "runtime", "runner.js"), notADirectory, root);
+        expect(
+          runner.cwd,
+          `the runner must refuse ${JSON.stringify(notADirectory)} — core refuses it too`,
+        ).toBe(root);
+        // And the runner must have REFUSED it, not crashed: a crash also
+        // produces no JSON, and a crash is a different failure.
+        expect(runner.crashed, "the runner must refuse the path, not crash").toBe(false);
       }
     } finally {
       await rm(sandbox, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("the two copies make the same decision about an unresolvable path", () => {
+    // The differential case above can only REACH the divergent branch on a
+    // platform whose filesystem reports something other than ENOENT for a
+    // path it cannot resolve. Producing such a failure needs a directory the
+    // process cannot traverse (POSIX permission bits) or a symlink loop
+    // (POSIX symlinks) — and NEITHER is available on every platform this
+    // repository runs on: Windows enforces neither the same way, and the
+    // build machine may run with rights that defeat both.
+    //
+    // So the SOURCE is compared instead: the two copies must both
+    // DISTINGUISH "does not exist" from "could not be resolved", and both
+    // must REFUSE the second. A copy that swallowed every error would
+    // treat an unreadable directory as absent and walk the probe PAST it,
+    // which is how a containment check is defeated.
+    //
+    // This is a source comparison, not a behavioural one, and that is the
+    // honest trade: it holds on every platform, and it is what the two
+    // copies must agree about. The BEHAVIOURAL half is the case above,
+    // which exercises the divergent branch wherever the platform can
+    // produce it.
+    const core = readFileSync(resolve("core/src/fs/safe-path.ts"), "utf8");
+    const runner = readFileSync(join(RUNTIME_DIR, "runner.js"), "utf8");
+    // The CLI has a third copy of the same two helpers, for its own
+    // destination classification. It is not in the runtime, but it decides
+    // where an install writes, so it must make the same decision.
+    const cli = readFileSync(resolve("cli/src/index.ts"), "utf8");
+
+    for (const [name, source] of [["core", core], ["runner", runner], ["cli", cli]] as const) {
+      // The ENOENT case must be handled EXPLICITLY, not by a blanket catch:
+      // the shape is "catch (err) { if (err.code === "ENOENT") return X; ... }".
+      expect(source, `${name} must name the ENOENT case`).toMatch(/code === ["']ENOENT["']/);
+
+      // The two PATH HELPERS must not swallow every error. The check looks
+      // at the CATCH BLOCK of each helper, not the whole file, and it must
+      // catch BOTH shapes of the swallow:
+      //
+      //   catch { return null; }                          a blanket catch
+      //   if (err.code !== "ENOENT") return null;        a conditional one
+      //
+      // The second is the shape a careless edit produces, and a check that
+      // only looked for the first would stay green while the behaviour came
+      // back. So the assertion is on the catch block's BODY: it must
+      // mention ENOENT and it must THROW for anything else.
+      for (const helper of ["tryRealpath", "entryExists"]) {
+        const body = new RegExp(
+          `(?:async\\s+)?function ${helper}\\([^)]*\\)[^{]*\\{[\\s\\S]*?\\n\\}`,
+          "m",
+        ).exec(source);
+        expect(body, `${name} must define ${helper}`).not.toBeNull();
+
+        // The catch block: everything from "catch" to the end of the helper.
+        const catchBlock = /catch\s*(?:\([^)]*\))?\s*\{[\s\S]*?\n\}/.exec(body![0]);
+        expect(catchBlock, `${name}'s ${helper} must have a catch block`).not.toBeNull();
+        const block = catchBlock![0];
+        // It must name the ENOENT case.
+        expect(block, `${name}'s ${helper} must handle ENOENT explicitly`).toMatch(/ENOENT/);
+        // And it must NOT return the fallback without checking the code.
+        expect(block, `${name}'s ${helper} must not swallow a non-ENOENT error`).not.toMatch(
+          /catch\s*(?:\([^)]*\))?\s*\{\s*return (?:null|false);/,
+        );
+        expect(block, `${name}'s ${helper} must not swallow a non-ENOENT error`).not.toMatch(
+          /if\s*\([^)]*code[^)]*!==[^)]*\)\s*return (?:null|false);/,
+        );
+      }
+    }
+  });
 });
 
-/** Run the runner with a given cwd and report the cwd the handler saw. */
-async function resolveViaRunner(runner: string, cwd: string): Promise<string> {
-  const result = await runNode([runner, "probe"], { cwd: process.cwd() }, JSON.stringify({ cwd }));
+/**
+ * Run the runner with a given cwd and report the cwd the handler saw.
+ *
+ * A runner that REFUSES a path exits non-zero and writes nothing, so the
+ * absence of JSON is the refusal signal — but a runner that CRASHES looks
+ * the same from here. The two are reported separately so a test can assert
+ * "refused" without also passing on "crashed".
+ */
+async function resolveViaRunner(
+  runner: string,
+  cwd: string,
+  root: string = process.cwd(),
+): Promise<{ cwd: string; refused: boolean; crashed: boolean }> {
+  const result = await runNode([runner, "probe"], { cwd: root }, JSON.stringify({ cwd }));
   try {
     const parsed = JSON.parse(result.stdout) as { cwd: string };
-    return parsed.cwd;
+    return { cwd: parsed.cwd, refused: false, crashed: false };
   } catch {
-    return process.cwd();
+    // No JSON: the runner refused the path (it exits non-zero and writes a
+    // note) or it failed outright. The exit code tells them apart — a
+    // refusal is a deliberate non-zero exit, a crash is a signal.
+    const refused = result.code !== null && result.code !== 0 && !/Error|error/.test(result.stderr);
+    return { cwd: root, refused, crashed: !refused };
   }
 }
 

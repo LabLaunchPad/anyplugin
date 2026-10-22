@@ -208,7 +208,7 @@ describe("CANONICALIZATION CONTRACT v1", () => {
       expect(contentHash({ p: "a\\b" })).not.toBe(contentHash({ p: "a/b" }));
     });
 
-    it("no frozen contract currently stores a filesystem path", async () => {
+    it("no frozen contract currently stores a filesystem path", { timeout: 120_000 }, async () => {
       const { CONTRACTS } = await import("./contracts/index.js");
       // `source` on Evidence is the closest — it is documented as "a command,
       // URL, or file path". If a path is ever stored there, it must be

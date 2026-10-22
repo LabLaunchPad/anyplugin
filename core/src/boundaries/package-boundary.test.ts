@@ -50,8 +50,14 @@ const FORBIDDEN_SCOPE = "@lablaunchpad/";
 
 function isForbiddenSpecifier(spec: string): boolean {
   if (spec.startsWith(FORBIDDEN_SCOPE)) return true;
-  // relative escape out of the package into a sibling workspace package
-  return spec.startsWith(".") && /(^|\/)(cli|adapters|core|plugins)\//.test(spec);
+  // Relative escape out of the package into a sibling workspace package.
+  //
+  // The package name must match as a whole PATH SEGMENT, with nothing after
+  // it but a separator or the end of the specifier. Requiring a trailing
+  // slash was a one-character hole: "../../../core" names the real core
+  // package and is not a subpath of it, so it slipped through while
+  // "../../../core/src/index.js" was caught.
+  return spec.startsWith(".") && /(^|\/)(cli|adapters|core|plugins)(\/|$)/.test(spec);
 }
 
 function readPackageJson(dir: string): { name?: string; dependencies?: Record<string, string> } | null {
@@ -219,6 +225,32 @@ export function evaluateBoundaryGuards(): GuardResult[] {
 
 describe("workspace package boundaries", () => {
   const results = evaluateBoundaryGuards();
+
+  it("flags every shape of relative escape into a forbidden package", () => {
+    // The guard is the ONLY thing standing between the kernel and the
+    // agent-specific packages, so its own rule is tested directly.
+    //
+    // "../../../core" is the shape that got through: it names the real core
+    // package, and the old rule required a trailing slash, so a specifier
+    // with nothing after the package name was not flagged.
+    for (const spec of [
+      "../../../core",
+      "../../../core/src/index.js",
+      "../../../core/src/index.ts",
+      "../../../cli",
+      "../../../adapters/claude/src/index.js",
+      "../../../plugins/knowledge/plugin",
+      "@lablaunchpad/core",
+      "@lablaunchpad/cli",
+    ]) {
+      expect(isForbiddenSpecifier(spec), spec).toBe(true);
+    }
+
+    // And the shapes that must NOT be flagged, or the guard would be noise.
+    for (const spec of ["./local", "../sibling", "./core-utils", "./packages/worker-runtime"]) {
+      expect(isForbiddenSpecifier(spec), spec).toBe(false);
+    }
+  });
 
   it("reports every guard's state without conflating ARMED with PASSED", () => {
     // Rendered on every run so an ARMED guard can never be mistaken for a

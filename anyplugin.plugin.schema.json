@@ -64,7 +64,12 @@
             "enum": ["session-start", "before-tool-use", "after-tool-use", "prompt-submit", "turn-stop", "session-end", "permission-request"]
           },
           "handler": { "type": "string", "minLength": 1, "description": "Path (relative to plugin root) to a JS/MJS module exporting async run(payload)." },
-          "match": { "type": "string", "description": "Tool-name matcher (regex or plain name); omitted = all tools." },
+          "match": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Tool-name matcher (regex or plain name); omitted = all tools. Refused if it contains a quantified group that can match its own text more than one way — a nested quantifier such as (a+)+ or an overlapping alternation such as (a|a)+ — because those can freeze the agent on a long tool name.",
+            "not": { "pattern": "(\\([^()]*[+*][^()]*\\)[+*{]|\\([^()]*\\{\\d+[^()]*\\)[+*{])" }
+          },
           "timeoutSec": { "type": "integer", "minimum": 1, "maximum": 600 },
           "failurePolicy": { "type": "string", "enum": ["blocking", "non-blocking"], "default": "non-blocking" }
         }

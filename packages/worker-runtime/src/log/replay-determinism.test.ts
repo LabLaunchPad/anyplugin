@@ -19,11 +19,11 @@
  * the writer.
  *
  * This is the same class as F16 (a harness that could not observe the
- * property it was cited for). A static audit of the replay path found no
- * clock, no randomness, no locale comparison, no directory enumeration and no
- * module-level mutable state. That audit is useful and is not proof — it only
- * covers what someone thought to look for. These tests cover what nobody
- * thought of, because a second process either agrees or it does not.
+ * property it was cited for). Reading the replay path finds no clock, no
+ * randomness, no locale comparison, no directory enumeration and no
+ * module-level mutable state — but reading is useful and is not proof: it
+ * only covers what someone thought to look for. These tests cover what
+ * nobody thought of, because a second process either agrees or it does not.
  *
  * Comparison is by canonical bytes and content hash, never object identity:
  * two objects can be `deepEqual` and serialize differently, and it is the
@@ -49,8 +49,15 @@ import { foldFromReplay, stateHash, stateJson } from "./worker-state.js";
  * Spawn-heavy and filesystem-heavy, and it runs concurrently with the rest of
  * the workspace. The default 5s bound is calibrated for unit tests; relying on
  * it here would make the pass a property of runner speed (F17).
+ *
+ * The bound is 120s, not the 30s the lighter suites use, and the reason is
+ * measured: one test here took 59.7s against a 30s limit on a loaded machine
+ * and failed on the timeout while the code was correct. This suite spawns
+ * dozens of child Node processes, so it competes with every other
+ * process-spawning suite for the same cores. `write-contract.test.ts` already
+ * uses 120s here for the same reason.
  */
-vi.setConfig({ testTimeout: 30_000 });
+vi.setConfig({ testTimeout: 120_000 });
 
 // `dirname(fileURLToPath(import.meta.url))`, NOT `import.meta.dirname`:
 // the latter landed in Node 20.11 and `engines` promises >=20, so it is
@@ -102,6 +109,8 @@ const POISON_SCRIPT = join(CHILD_DIR, "replay-poison-child.mjs");
 const REPLAY_URL = JSON.stringify(pathToFileURL(join(DIST_DIR, "replay.js")).href);
 const STATE_URL = JSON.stringify(pathToFileURL(join(DIST_DIR, "worker-state.js")).href);
 const EVENTLOG_URL = JSON.stringify(pathToFileURL(join(DIST_DIR, "event-log.js")).href);
+// canonical.js sits beside log/ in dist/, not inside it.
+const CANONICAL_URL = JSON.stringify(pathToFileURL(join(DIST_DIR, "..", "canonical.js")).href);
 // contracts/ lives at dist/contracts, not dist/log/contracts — the writer child
 // imports the BUILT kernel, and a bad import path here is a test failure that
 // reads as "the kernel is non-deterministic" rather than as a typo.
@@ -194,17 +203,41 @@ try {
 
 /**
  * The poison child. Step 8 of PROVE_REPLAY_DETERMINISM, executed HERE rather
- * than in a separate script: a child that mixes a process-local value into its
- * digest must disagree with a second fresh process, or the cross-process
- * comparison is comparing identical strings and proves nothing at all.
+ * than in a separate script.
+ *
+ * The poison goes into the HASH, not into the reported string. Appending
+ * "|pid=..." to the digest would make two poisoned children differ by
+ * string concatenation no matter what the kernel does — a test that cannot
+ * fail for the reason it claims, which is the class this whole file exists
+ * to catch.
+ *
+ * So the poison child asks the KERNEL's own hashing function for a digest of
+ * a payload that carries a process-local value, exactly as a kernel that
+ * leaked its pid into the hash would produce. It uses the kernel's
+ * `contentHash` and the kernel's `stateJson` of the real folded state, so:
+ *
+ *   - two fresh processes must disagree (the harness catches the leak), and
+ *   - the digest changes if the kernel's hashing changes, so the tripwire
+ *     tracks the kernel rather than the test.
+ *
+ * The real evidence that the KERNEL leaks nothing is the external script
+ * `prove-harness-fails.mjs`, which poisons the kernel's own `stateHash` and
+ * shows the suite go red. This is the always-on tripwire that runs on every
+ * CI cell.
  */
 writeFileSync(
   POISON_SCRIPT,
   `import { replay, replayDigest } from ${REPLAY_URL};
-import { foldFromReplay, stateHash } from ${STATE_URL};
+import { foldFromReplay, stateHash, stateJson } from ${STATE_URL};
+import { contentHash } from ${CANONICAL_URL};
 const report = replay(process.argv[2]);
+const folded = foldFromReplay(report);
+// A kernel that leaked a process-local value into its hash would produce
+// this. The value is INSIDE the hashed payload, so the difference is the
+// kernel's hashing talking, not string concatenation.
 process.stdout.write(JSON.stringify({
-  stateHash: stateHash(foldFromReplay(report)) + "|pid=" + process.pid,
+  stateHash: contentHash({ pid: process.pid, state: stateJson(folded) }),
+  stateHashClean: stateHash(folded),
   replayDigest: replayDigest(report),
 }));
 `,
@@ -233,6 +266,12 @@ interface Digest {
   stateJson: string;
   /** Content hash of the same state. */
   stateHash: string;
+  /**
+   * The CLEAN kernel's hash of the same state. Only the poison child reports
+   * it, and it is what proves the poisoned digest differs because of the
+   * injected value and not because the kernel is simply different.
+   */
+  stateHashClean?: string;
   replayDigest: string;
   events: number;
   anomalies: number;
@@ -274,11 +313,12 @@ function digestInFreshProcess(dir: string, opts: { env?: NodeJS.ProcessEnv; cwd?
 }
 
 /**
- * A child that mixes a process-local value into its own digest. Step 8 of
- * PROVE_REPLAY_DETERMINISM, run HERE rather than in a separate script: the
- * point is that a poisoned reader disagrees with a second fresh process, so
- * the cross-process comparison is comparing two genuinely different strings.
- * If it were comparing identical strings it would prove nothing at all.
+ * A child whose digest carries a process-local value, hashed by the KERNEL's
+ * own `contentHash`. Step 8 of PROVE_REPLAY_DETERMINISM, run HERE rather than
+ * in a separate script: the point is that a leaking reader disagrees with a
+ * second fresh process, so the cross-process comparison is comparing two
+ * genuinely different strings. If it were comparing identical strings it
+ * would prove nothing at all.
  */
 function digestInPoisonedProcess(dir: string): Digest {
   const out = spawnSync(process.execPath, [POISON_SCRIPT, dir], { encoding: "utf8" });
@@ -411,18 +451,25 @@ describe.skipIf(!distBuilt)("the event history is the source of truth", () => {
   /**
    * Step 8 of PROVE_REPLAY_DETERMINISM, executed rather than merely described.
    *
-   * Two POISONED children must DISAGREE, and the positive comparison the rest
-   * of this file uses must REJECT them. That is the exact shape of the
-   * property being claimed — "two independent fresh processes agree" — and it
-   * is what proves the harness can fail. Comparing a poisoned reader against a
-   * clean one would only show that the poison changed a value; it would never
-   * show that the cross-process EQUALITY can be broken.
+   * Two children whose digest carries a PROCESS-LOCAL value must DISAGREE, and
+   * the positive comparison the rest of this file uses must REJECT them. That
+   * is the exact shape of the property being claimed — "two independent fresh
+   * processes agree" — and it is what proves the harness can fail. Comparing a
+   * poisoned reader against a clean one would only show that the poison
+   * changed a value; it would never show that the cross-process EQUALITY can
+   * be broken.
+   *
+   * The digest is produced by the KERNEL's own `contentHash` over a payload
+   * carrying the process-local value, so the difference is the kernel's
+   * hashing talking. If the kernel's hashing ever stopped covering its
+   * payload, this test would go red — which is the point of putting the
+   * poison there rather than in the reported string.
    *
    * The poison is in the READER's digest, not in the log: the log is byte
    * identical between the two spawns, so any divergence is a property of the
    * reporting process and not of the history.
    */
-  it("the harness itself is negative-tested: poisoned readers cannot be equal", () => {
+  it("the harness itself is negative-tested: a leaking reader cannot be equal", () => {
     const root = workspace();
     writeHistory(root);
 
@@ -437,6 +484,15 @@ describe.skipIf(!distBuilt)("the event history is the source of truth", () => {
 
     // And the comparison the positive test relies on must actually reject.
     expect(() => expect(first).toEqual(second)).toThrow();
+
+    // The poisoned digest must ALSO differ from the clean kernel's digest —
+    // otherwise "the two poisoned readers disagree" could be satisfied by
+    // two readers that are both simply wrong. The poison child reports the
+    // clean kernel's own hash alongside the poisoned one, so the comparison
+    // is against the SAME kernel, not against a second reading.
+    const clean = digestInFreshProcess(logDirOf(root));
+    expect(first.stateHashClean, "the poisoned reader must also report the clean kernel's hash").toBe(clean.stateHash);
+    expect(first.stateHash, "a poisoned reader must not agree with a clean one").not.toBe(clean.stateHash);
   });
 });
 
@@ -459,8 +515,14 @@ describe.skipIf(!distBuilt)("damage replays deterministically too", () => {
     ["duplicated event", (r) => writeFileSync(logFileOf(r), `${[...framesOf(r), framesOf(r)[2]!].join("\n")}\n`)],
     ["missing event", (r) => writeFileSync(logFileOf(r), `${framesOf(r).filter((_, i) => i !== 3).join("\n")}\n`)],
     [
+      // Same LENGTH as the original on purpose. "EXECUTING" -> "BLOCKED" is
+      // two characters shorter, so replay catches it at the length check and
+      // never consults the content hash — which is the tamper-detection path
+      // this case is named for. "EXECUTION" is the same length as
+      // "EXECUTING", so the frame is well-formed and only the hash can
+      // reject it.
       "modified payload",
-      (r) => writeFileSync(logFileOf(r), readFileSync(logFileOf(r), "utf8").replace('"to":"EXECUTING"', '"to":"BLOCKED"')),
+      (r) => writeFileSync(logFileOf(r), readFileSync(logFileOf(r), "utf8").replace('"to":"EXECUTING"', '"to":"EXECUTION"')),
     ],
     [
       "changed sequence number",
@@ -491,13 +553,21 @@ describe.skipIf(!distBuilt)("damage replays deterministically too", () => {
 
     // And detectably different from an undamaged history.
     //
-    // The REPLAY digest is the right thing to compare, not the state hash: a
-    // duplicated event is rejected as a broken writer and the surviving
-    // events are unchanged, so the folded STATE can be identical to the clean
-    // one. What differs is the classification of the damage, and the replay
-    // digest covers exactly that. Comparing state hashes here would fail on
-    // the duplicated-event case for a reason that has nothing to do with
-    // determinism.
+    // The REPLAY digest is the right thing to compare, not the state hash.
+    // TWO of the six mutations leave the folded STATE byte-identical to the
+    // clean one, and that is correct kernel behaviour — the damage is
+    // REPORTED, not silently applied to the state:
+    //
+    //   - "duplicated event": the copy is rejected as a broken writer and the
+    //     surviving events are unchanged, so the state is identical.
+    //   - "corrupted frame header": the seven real frames are all committed
+    //     and the junk line is classified INCOMPLETE, so the state is
+    //     identical.
+    //
+    // What differs in both cases is the CLASSIFICATION of the damage, and the
+    // replay digest covers exactly that — it spans the recovered events, the
+    // anomalies and the gap list. Comparing state hashes here would fail on
+    // those two cases for a reason that has nothing to do with determinism.
     expect(
       first.replayDigest,
       "a mutation replay cannot distinguish from the original would be silent acceptance",

@@ -11,6 +11,9 @@ VERIFY → FIX → ERADICATE THE CLASS protocol belong to
 [`ENGINEERING_LEDGER.md`](../../ENGINEERING_LEDGER.md); milestones and constraints belong to
 [`ROADMAP.md`](../../ROADMAP.md); current subsystem state belongs to
 [`CURRENT_STATE.md`](../../CURRENT_STATE.md). Entries here reference those; they never restate them.
+**One caveat on that last pointer:** `CURRENT_STATE.md` describes itself as a pinned snapshot, so it
+is a starting point rather than ground truth. Backlog row **P2-2** owns the question of what does;
+until it is closed, establish current state from the ledger, the source, and CI at the exact HEAD.
 
 A procedure earns a place here only when it is **executable** — a checklist a future session can run and
 get a pass/fail from. Advice belongs in prose; this file is for steps.
