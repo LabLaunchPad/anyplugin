@@ -63,6 +63,72 @@ AP-020.
 
 ---
 
+## PROCEDURE: ANTI_VACUITY_ANALYSIS
+
+**Trigger.** Before citing ANY test, benchmark, audit, or measurement as evidence for a property —
+including in a commit message, a pull-request body, a gate claim, or the ledger.
+
+**Why it exists.** This class has bitten this repository more than once, and twice it was the
+*verification machinery* rather than the runtime. The findings are owned by
+[`ENGINEERING_LEDGER.md`](../../ENGINEERING_LEDGER.md) — read F16, F17 and the workspace boundary
+guard entry there for the narratives; what matters here is the shape they share:
+
+- **F16** — a harness that could not have caught the defect it was cited against, because the
+  defect lived in a field the harness never wrote. Its clean numbers proved a *different* property
+  than the one claimed.
+- **F17** — a pass that was a property of the environment rather than of the code: green on a quiet
+  machine, red on a loaded one.
+- The workspace boundary guard enumerated forbidden packages individually and silently omitted
+  `@lablaunchpad/core` — the single most important one to block. It could not fail for the case it
+  existed to catch.
+
+The through-line: **a harness whose construction excludes the very failure it is cited as evidence
+against.** A non-discriminating test is indistinguishable from a passing one by inspection, which is
+what makes this class recur silently.
+
+**Steps.**
+
+1. **PROPERTY.** State the exact property claimed, in one sentence. If it takes two, they are probably
+   two properties and only one is being tested.
+2. **FALSE IMPLEMENTATION.** Construct the *smallest* change that makes that property false while
+   leaving the code plausible. Not a broken build — a working implementation that lacks the property.
+3. **DISCRIMINATION.** Run the test against it. **It must fail, and it must fail for the RIGHT
+   REASON** — the failure must name the offending thing, not merely report a mismatch. A test that
+   only checks "it threw" still passes when the check it targets is deleted and a neighbouring check
+   catches the input by accident. If it passes, the test is non-discriminating and may not be
+   promoted to evidence for that property, whatever else it proves.
+4. **OBSERVATION BOUNDARY.** Record what the test can actually observe: same process · fresh process
+   · concurrent processes · filesystem · machine/OS · crash boundary · network · clock · external
+   state.
+5. **PROMOTION RULE.** Promote it as evidence *only* for the property it discriminates, *only* within
+   the boundary it observes. Never infer a stronger guarantee from a weaker boundary.
+6. **STATUS.** A guard is `PASSED` only when it has been seen to fail for the right reason. A guard
+   that was never made to fail is **`ARMED`**, not `PASSED` — it might be armed and pointed at
+   nothing. Absent the failure cycle, the claim is `UNKNOWN`.
+
+**Inferences that are not valid**, each of which has a real counterexample in this repository:
+
+| this | does not establish |
+|---|---|
+| in-process replay | cross-process determinism |
+| a successful concurrent execution | durability |
+| no observed data loss | guaranteed atomicity (F10 — records above `PIPE_BUF` bytes were observed lossless on two platforms, and neither platform documents the guarantee) |
+| parser validity | integrity (plain append accepted a tampered, well-formed record) |
+| schema validity | engine correctness |
+| CI green | semantic correctness |
+| a green run on an earlier SHA | the current head (F17) |
+| test coverage | proof of the covered property |
+
+**Acceptance.** A recorded false-implementation cycle showing the test failing **for the right
+reason**, plus a stated observation boundary. Absent either, the claim is `UNKNOWN` — not `PASS`.
+
+**Relationship to the procedure below.** `PROVE_A_GUARD_CAN_FAIL` is this procedure's narrowest
+special case: it covers step 3 for a single guard. This one additionally forces steps 1, 4 and 5 —
+which is where F16 and F17 actually went wrong. Both harnesses *could* fail; they simply could not
+fail for the property being claimed.
+
+---
+
 ## PROCEDURE: PROVE_A_GUARD_CAN_FAIL
 
 **Trigger.** Before claiming any guard, invariant test, or boundary check `PASSED`.
@@ -156,3 +222,42 @@ code.
 absolute, and traversing input, each by its own named reason.
 
 **Evidence.** `ownership.ts` · `ownership.test.ts` · `log/event-log.ts` · AP-018.
+
+---
+
+## PROCEDURE: PROVE_REPLAY_DETERMINISM
+
+**Trigger.** Any change to replay, state folding, canonicalization, or the event frame — and before
+citing any determinism claim as gate evidence.
+
+**Why it exists.** Replaying twice in one process is not proof. It shares module state,
+lazily-initialized schema objects, warmed caches, and every import-time environment read. The
+class is F16's class: a harness that cannot observe the property it is cited for. In-process
+repetition would agree with itself forever and never reveal a per-process input.
+
+**Steps.**
+
+1. Write an authoritative history with **interleaved contracts**, so map insertion order depends on
+   traversal rather than on the alphabet, plus one event kind the fold ignores.
+2. Compare by **canonical bytes and content hash**, never object identity — two objects can be
+   deep-equal and serialize differently, and serialization is what certificates bind.
+3. Replay in a process that shares nothing with the writer. Assert it matches in-process.
+4. Replay in **two independent fresh processes**. Assert they match each other.
+5. Vary what a process cannot inherit: **cwd, `TZ`, locale**, the log's location on disk, and the
+   identity of the writing process. Each must not move the hash.
+6. Assert damage replays deterministically too — a corrupted log must give the *same* wrong answer
+   everywhere, or two operators recovering it reach different conclusions about what survived.
+7. Assert each mutation **differs from the clean digest**. One replay cannot distinguish from the
+   original is a silent-acceptance defect.
+8. **Negative-test the harness itself**: inject a process-local value into the hash and confirm the
+   fresh-process tests fail. If they do not, the harness is not evidence.
+
+**Acceptance.** Identical canonical state across process boundaries and environments, on every CI
+cell. Damage classified identically everywhere.
+
+**Explicitly not established.** Durability. These steps prove state rebuilds from a log that
+*survived*; they say nothing about whether it survives a crash or power loss. Nor tamper-resistance
+against a deliberate rewriter: the log has no hash chain, so a rewrite that produces a
+self-consistent log is indistinguishable from an honest one (backlog P2-37).
+
+**Evidence.** `log/replay-determinism.test.ts` · F16.
