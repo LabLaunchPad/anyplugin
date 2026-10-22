@@ -21,29 +21,107 @@ export type CanonicalEvent = z.infer<typeof CanonicalEvent>;
  * A hook `match` pattern must not be able to hang the agent.
  *
  * The pattern is compiled with `new RegExp(...)` and tested against a tool
- * name. A NESTED QUANTIFIER — a quantifier applied to a group whose body
- * also contains one, like `(a+)+` — backtracks exponentially: measured on
- * this repository's own runtime, `(a+)+$` took 9 seconds against a 20-char
- * input and did not finish at 24. The tool name is not under the plugin
- * author's control (an MCP server can register any tool name), so a
+ * name. A group that can match its own text in MORE THAN ONE WAY, under a
+ * quantifier, backtracks exponentially. The tool name is not under the
+ * plugin author's control (an MCP server can register any tool name), so a
  * careless pattern plus a hostile tool name freezes the agent's hook
  * process with no error and no timeout.
+ *
+ * Measured on this repository's own runtime, against a 24-character input:
+ * `(a+)+$` and `(a|a)+$` both ran past a 5-second cap.
+ *
+ * There are two shapes of the same hazard, and the check has to catch BOTH:
+ *
+ *   - a nested quantifier — `(a+)+` — the body matches "aaa" many ways;
+ *   - overlapping alternation — `(a|a)+`, `(a|a?)+`, `(a|ab)+` — the
+ *     branches are not mutually exclusive, so the same text splits many ways.
+ *
+ * A regex cannot tell the second case from the safe one: `^(Read|Write)$`
+ * has an alternation too, and it is fine because the group is not
+ * QUANTIFIED. So the check walks the pattern and looks at quantified groups
+ * only.
  *
  * The check is at MANIFEST PARSE time, not in the adapter, because the
  * pattern reaches the agent's own regex engine in three of the four
  * adapters — refusing it once, here, covers all of them.
  *
- * Deliberately narrow: it refuses NESTED quantifiers, the shape that was
- * measured. It is not a general ReDoS analyser, and it does not try to be
- * one — an alternation blowup like `(a|a)+` is a different class and is
- * not covered here.
+ * Deliberately narrow: it refuses the two shapes above and nothing else. It
+ * is not a general ReDoS analyser, and it does not try to be one.
  */
-const NESTED_QUANTIFIER = /\([^()]*[+*][^()]*\)[+*{]/;
-/** A bounded quantifier — `{2}`, `{2,}`, `{2,5}` — is the same hazard. */
-const BOUNDED_QUANTIFIER = /\([^()]*\{\d+[^()]*\)[+*{]/;
 
-function hasNestedQuantifier(pattern: string): boolean {
-  return NESTED_QUANTIFIER.test(pattern) || BOUNDED_QUANTIFIER.test(pattern);
+/** The bodies of every top-level QUANTIFIED group in the pattern. */
+function quantifiedGroupBodies(pattern: string): string[] {
+  const bodies: string[] = [];
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i] !== "(") continue;
+    let depth = 0;
+    let inClass = false;
+    let close = -1;
+    for (let j = i; j < pattern.length; j++) {
+      const c = pattern[j];
+      if (c === "\\") { j++; continue; }
+      if (inClass) { if (c === "]") inClass = false; continue; }
+      if (c === "[") { inClass = true; continue; }
+      if (c === "(") depth++;
+      else if (c === ")") { depth--; if (depth === 0) { close = j; break; } }
+    }
+    if (close < 0) break;
+    const after = pattern[close + 1];
+    if (after === "*" || after === "+" || after === "{") bodies.push(pattern.slice(i + 1, close));
+    i = close;
+  }
+  return bodies;
+}
+
+/** Split a group body on its top-level "|" only. */
+function alternationBranches(body: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let inClass = false;
+  let current = "";
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === "\\") { current += c + (body[++i] ?? ""); continue; }
+    if (inClass) { current += c; if (c === "]") inClass = false; continue; }
+    if (c === "[") { inClass = true; current += c; continue; }
+    if (c === "(") depth++;
+    if (c === ")") depth--;
+    if (c === "|" && depth === 0) { parts.push(current); current = ""; continue; }
+    current += c;
+  }
+  parts.push(current);
+  return parts;
+}
+
+/**
+ * Can these two branch texts match the same string? "a" and "ab" can (on
+ * "a"), "a" and "a?" can (on the empty string), "Read" and "Write" cannot.
+ */
+function branchesOverlap(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.startsWith(b) || b.startsWith(a)) return true;
+  const withoutOptional = (s: string) => s.replace(/\?$/, "");
+  if (withoutOptional(a) === withoutOptional(b)) return true;
+  if (a === "" || b === "") return true;
+  return false;
+}
+
+/** True iff the pattern contains a quantified group that can match its own text more than one way. */
+export function isAmbiguousMatcher(pattern: string): boolean {
+  for (const body of quantifiedGroupBodies(pattern)) {
+    // A quantifier anywhere in the body — including inside a nested group.
+    if (/[+*]|\{\d+/.test(body)) return true;
+    // Branches that are not mutually exclusive.
+    const branches = alternationBranches(body);
+    for (let i = 0; i < branches.length; i++) {
+      for (let j = i + 1; j < branches.length; j++) {
+        const a = branches[i];
+        const b = branches[j];
+        if (a !== undefined && b !== undefined && branchesOverlap(a, b)) return true;
+      }
+    }
+  }
+  return false;
 }
 
 /** True iff the pattern is a plain tool name rather than a regex. */
@@ -59,9 +137,9 @@ export const HookSchema = z.object({
   match: z
     .string()
     .max(200, "hook match pattern must be at most 200 characters")
-    .refine((p) => looksLikePlainName(p) || !hasNestedQuantifier(p), {
+    .refine((p) => looksLikePlainName(p) || !isAmbiguousMatcher(p), {
       message:
-        "hook match pattern must not contain a nested quantifier (e.g. \"(a+)+\"): it can freeze the agent on a long tool name",
+        'hook match pattern must not contain an ambiguous quantified group (e.g. "(a+)+" or "(a|a)+"): it can freeze the agent on a long tool name',
     })
     .optional(),
   timeoutSec: z.number().int().positive().max(600).optional(),

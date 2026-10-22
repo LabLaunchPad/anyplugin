@@ -74,11 +74,19 @@ describe("parsePluginManifest", () => {
         hooks: [{ id: "h1", event: "before-tool-use", handler: "./hooks/guard.js", match }],
       }, mockRoot);
 
-    // A nested quantifier backtracks exponentially: `(a+)+$` took 9 seconds
-    // against a 20-char input and did not finish at 24. The tool name is not
-    // the plugin author's to choose, so this has to be refused at parse time.
-    for (const evil of ["(a+)+$", "(a*)*", "(a+)*", "^(x+)+$", "(a{1,2})+"]) {
-      await expect(withMatch(evil), evil).rejects.toThrow(/nested quantifier/);
+    // A group that can match its own text more than one way, under a
+    // quantifier, backtracks exponentially. Measured on this repository's
+    // own runtime, `(a+)+$` and `(a|a)+$` both ran past a 5-second cap
+    // against a 24-character input. The tool name is not the plugin author's
+    // to choose, so this has to be refused at parse time.
+    for (const evil of [
+      // the nested-quantifier shape
+      "(a+)+$", "(a*)*", "(a+)*", "^(x+)+$", "(a{1,2})+", "((a+)+)+", "([a-z]+)+",
+      // the overlapping-alternation shape — a DIFFERENT hazard with the
+      // same effect, and the one a quantifier-only check would miss
+      "(a|a)+$", "(a|a?)+$", "(a|ab)+$", "(aa|a)+$", "(x+x+)+y",
+    ]) {
+      await expect(withMatch(evil), evil).rejects.toThrow(/ambiguous quantified group/);
     }
 
     // A plain tool name is not a regex and must still work.
@@ -87,6 +95,11 @@ describe("parsePluginManifest", () => {
     await expect(withMatch(".*")).resolves.toBeDefined();
     await expect(withMatch("^(Read|Write)$")).resolves.toBeDefined();
     await expect(withMatch("^Bash")).resolves.toBeDefined();
+    // An alternation of DISTINCT branches is fine, even when quantified:
+    // the branches cannot match the same text, so there is only one way to
+    // split it.
+    await expect(withMatch("(Read|Write)+")).resolves.toBeDefined();
+    await expect(withMatch("(?:foo)+")).resolves.toBeDefined();
 
     // A very long pattern is refused too: it is a cheap way to make an
     // agent's regex engine work.
